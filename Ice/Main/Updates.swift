@@ -121,7 +121,7 @@ extension UpdatesManager: @preconcurrency SPUStandardUserDriverDelegate {
             return
         }
         if handleShowingUpdate {
-                appState.activate(withPolicy: .regular)
+            appState.activate(withPolicy: .regular)
         } else if !state.userInitiated {
             appState.userNotificationManager.addRequest(
                 with: .updateCheck,
