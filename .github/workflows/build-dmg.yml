@@ -8,7 +8,8 @@ on:
 jobs:
   build:
     runs-on: macos-latest
-    
+    permissions:
+      contents: write  # softprops/action-gh-release needs this to publish a Release on tag push
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
