@@ -1,3 +1,6 @@
 .DS_Store
 build/
 xcuserdata/
+
+# CodeGraph local symbol index
+.codegraph/
