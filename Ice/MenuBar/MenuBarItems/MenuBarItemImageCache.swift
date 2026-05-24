@@ -264,13 +264,7 @@ final class MenuBarItemImageCache: ObservableObject {
             newImages.merge(sectionImages) { (_, new) in new }
         }
 
-        // Get the set of valid item infos from all sections to clean up stale entries
-        let allValidInfos = await Set(appState.itemManager.itemCache.allItems.map(\.info))
-
-        await MainActor.run { [newImages, allValidInfos] in
-            // Remove images for items that no longer exist in the item cache
-            images = images.filter { allValidInfos.contains($0.key) }
-            // Merge in the new images
+        await MainActor.run { [newImages] in
             images.merge(newImages) { (_, new) in new }
         }
     }
