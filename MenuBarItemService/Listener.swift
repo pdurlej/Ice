@@ -4,7 +4,6 @@
 //
 
 import OSLog
-import Security
 import XPC
 
 /// A wrapper around an XPC listener object.
@@ -23,38 +22,6 @@ final class Listener {
 
     deinit {
         cancel()
-    }
-
-    /// Returns the Team Identifier of the currently running process, or
-    /// `nil` if the binary is unsigned, ad-hoc signed, or the team
-    /// identifier cannot be read.
-    ///
-    /// We need this because `.isFromSameTeam()` (used on macOS 26+ to
-    /// constrain XPC peers) silently rejects every connection when the
-    /// service binary has no team identifier — which is the case for any
-    /// ad-hoc-signed build, including community forks that ship without
-    /// an Apple Developer Program account. Without this check the XPC
-    /// service rejects its own parent app with "Bogus check-in attempt",
-    /// and the Menu Bar Layout pane spins forever on
-    /// "Loading menu bar items…".
-    private static func ownTeamIdentifier() -> String? {
-        var staticCode: SecStaticCode?
-        guard
-            SecStaticCodeCreateWithPath(Bundle.main.bundleURL as CFURL, [], &staticCode) == errSecSuccess,
-            let code = staticCode
-        else {
-            return nil
-        }
-        var info: CFDictionary?
-        guard
-            SecCodeCopySigningInformation(code, SecCSFlags(rawValue: 0), &info) == errSecSuccess,
-            let dict = info as? [String: Any],
-            let teamID = dict[kSecCodeInfoTeamIdentifier as String] as? String,
-            !teamID.isEmpty
-        else {
-            return nil
-        }
-        return teamID
     }
 
     /// Handles a received message.
@@ -111,8 +78,11 @@ final class Listener {
             // identifier to compare against. Ad-hoc-signed builds (every
             // community fork without an Apple Developer Program account)
             // have no team identifier and would reject every connection
-            // — including their own parent app — silently.
-            if #available(macOS 26.0, *), Self.ownTeamIdentifier() != nil {
+            // — including their own parent app — silently. The shared
+            // helper lives on MenuBarItemService so the matching guard
+            // in MenuBarItemServiceConnection (the client side) uses
+            // exactly the same predicate.
+            if #available(macOS 26.0, *), MenuBarItemService.ownTeamIdentifier() != nil {
                 try uncheckedActivateWithSameTeamRequirement()
             } else {
                 try uncheckedActivate()
