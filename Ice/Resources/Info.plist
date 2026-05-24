@@ -3,20 +3,23 @@
 <plist version="1.0">
 <dict>
 	<!--
-	  Sparkle is intentionally NOT configured for the Fire fork yet.
-	  Setting SUFeedURL or SUPublicEDKey here would point at the upstream
-	  jordanbaird/ice-releases appcast (the values that were here before)
-	  or at a not-yet-existent fork appcast. Both routes risk Sparkle
-	  proposing an "update" that silently moves users back to an upstream
-	  build, undoing every fork-specific fix. Until a custom appcast is
-	  hosted at pdurlej.github.io/fire-releases (ROADMAP Phase 0.3 follow-up,
-	  blocked on generating a Sparkle EdDSA keypair via `brew install --cask
-	  sparkle && sparkle/bin/generate_keys`), Sparkle stays disabled.
+	  Sparkle update feed for the Fire maintained fork of Ice.
 
-	  Users update by downloading a new DMG from
-	  https://github.com/pdurlej/Ice/releases manually. The in-app
-	  "Check for Updates" button will no-op (Sparkle returns an error
-	  when SUFeedURL is missing).
+	  Feed XML is served from a separate dedicated repository
+	  (pdurlej/fire-releases) via GitHub Pages so that the source
+	  repository (pdurlej/Ice) does not need to host static XML on a
+	  branch. Each tagged release on this repository is signed with the
+	  matching EdDSA private key — kept exclusively in the maintainer's
+	  Keychain and in the SPARKLE_PRIVATE_KEY GitHub Actions secret —
+	  and an <item> entry is appended to the feed.
+
+	  Replacing either of these values silently routes users to the
+	  wrong update feed or breaks signature verification on every
+	  install. Treat as load-bearing.
 	-->
+	<key>SUFeedURL</key>
+	<string>https://pdurlej.github.io/fire-releases/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>JQ+doXtLQyWmGDao7dTzF4dNgnkSmAWmN66Ee/lw9Yc=</string>
 </dict>
 </plist>
