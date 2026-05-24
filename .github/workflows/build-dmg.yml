@@ -3,13 +3,17 @@ name: Build macOS and Create DMG
 on:
   push:
     tags: ['v*']
-  workflow_dispatch: # Allow manual trigger for testing
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-latest
     permissions:
       contents: write  # softprops/action-gh-release needs this to publish a Release on tag push
+    env:
+      # Identity strings constructed below from APPLE_TEAM_ID + the cert's CN.
+      # Notarization auth comes from the four APPLE_* / APP_SPECIFIC_PASSWORD secrets.
+      CODE_SIGN_IDENTITY: "Developer ID Application"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -19,70 +23,151 @@ jobs:
         with:
           xcode-version: latest-stable
 
+      - name: Import Code-Signing Certificate
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Create a fresh, ephemeral keychain so we don't pollute the runner's
+          # default and so we can isolate codesign lookups to exactly our cert.
+          KEYCHAIN_PATH="$RUNNER_TEMP/fire-build.keychain-db"
+          CERTIFICATE_PATH="$RUNNER_TEMP/build_certificate.p12"
+
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERTIFICATE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain  -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          security import "$CERTIFICATE_PATH" \
+              -P "$P12_PASSWORD" \
+              -A -t cert -f pkcs12 \
+              -k "$KEYCHAIN_PATH"
+
+          # Allow codesign to use the imported identity without an interactive prompt.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+              -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Make our keychain the first in the search list (does not remove others).
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+          # Sanity-check that the signing identity is actually findable.
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+          # Shred the on-disk .p12 — the cert now lives only in the ephemeral keychain.
+          rm -f "$CERTIFICATE_PATH"
+
       - name: Create build directory
         run: mkdir -p build
 
-      - name: Build archive
+      - name: Build archive (unsigned — we sign manually after)
         run: |
           xcodebuild -scheme Ice \
             -project Ice.xcodeproj \
             -configuration Release \
-            -archivePath $PWD/build/Ice.xcarchive \
+            -archivePath "$PWD/build/Ice.xcarchive" \
             archive \
             CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO
 
-      - name: Export .app from archive (ad-hoc signed)
+      - name: Codesign the .app with Developer ID (hardened runtime + secure timestamp)
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          # We skip xcodebuild -exportArchive because the upstream
-          # ExportOptions.plist uses signingStyle=automatic with an empty
-          # teamID; on GitHub-hosted runners with no Apple Developer
-          # Program credentials that step fails. Instead, copy the
-          # unsigned .app out of the archive bundle directly and ad-hoc
-          # sign it (codesign --sign -). Gatekeeper will still warn on
-          # first launch — the user needs to right-click → Open once, or
-          # run `xattr -dr com.apple.quarantine /Applications/Ice.app`.
           cp -R "build/Ice.xcarchive/Products/Applications/Ice.app" build/Ice.app
-          codesign --force --deep --sign - "build/Ice.app"
-          codesign --verify --verbose=2 "build/Ice.app"
+
+          # Resolve the full signing identity string from the imported cert by Team ID.
+          # The CN of a Developer ID Application cert is exactly:
+          #   "Developer ID Application: <Common Name> (<TEAMID>)"
+          IDENTITY=$(security find-identity -v -p codesigning "$RUNNER_TEMP/fire-build.keychain-db" \
+                      | grep "Developer ID Application" \
+                      | grep -o '"[^"]*"' | head -1 | tr -d '"')
+          if [ -z "$IDENTITY" ]; then
+            echo "ERROR: no 'Developer ID Application' identity in the ephemeral keychain." >&2
+            security find-identity -v -p codesigning "$RUNNER_TEMP/fire-build.keychain-db" >&2
+            exit 1
+          fi
+          echo "Using identity: $IDENTITY"
+
+          # --options runtime  → enable the hardened runtime (required by notarization)
+          # --timestamp        → embed a secure Apple timestamp (also required)
+          # --deep             → recurse into nested bundles (Sparkle.framework + its XPCs)
+          # --force            → re-sign anything already signed (e.g. dependency frameworks)
+          # --preserve-metadata=entitlements
+          #                    → keep any embedded entitlements (.entitlements file if present)
+          codesign --force --deep --options runtime --timestamp \
+                   --sign "$IDENTITY" \
+                   "build/Ice.app"
+
+          # Verify thoroughly.
+          codesign --verify --strict --verbose=2 "build/Ice.app"
+          codesign -dv --verbose=4 "build/Ice.app" 2>&1 | grep -E "Signature|TeamIdentifier|Identifier|CDHash|Authority"
+          spctl -avv --type execute "build/Ice.app" || true   # often says "rejected" pre-notarization
+
           du -sh build/Ice.app
 
       - name: Extract version from tag
         id: version
         run: |
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            # Extract version from tag (e.g., refs/tags/v1.0.0 -> v1.0.0)
             VERSION=${GITHUB_REF#refs/tags/}
           else
-            # For non-tag builds, use commit SHA
             VERSION="build-${GITHUB_SHA:0:7}"
           fi
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create DMG
         run: |
-          # Verify the .app exists
           if [ ! -d "build/Ice.app" ]; then
-            echo "Error: Ice.app not found in build directory"
+            echo "Error: Ice.app not found in build directory" >&2
             ls -la build/
             exit 1
           fi
-          
-          # Create a temporary directory for DMG contents
+
           mkdir -p dmg-contents
           cp -R "build/Ice.app" dmg-contents/
-          
-          # Create a symbolic link to Applications folder
           ln -s /Applications dmg-contents/Applications
-          
-          # Create the DMG using hdiutil
+
           hdiutil create -volname "Ice ${{ steps.version.outputs.VERSION }}" \
             -srcfolder dmg-contents \
             -ov -format UDZO \
             "build/Ice-${{ steps.version.outputs.VERSION }}.dmg"
-          
-          # Clean up temporary directory
+
           rm -rf dmg-contents
+
+      - name: Codesign the DMG
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          IDENTITY=$(security find-identity -v -p codesigning "$RUNNER_TEMP/fire-build.keychain-db" \
+                      | grep "Developer ID Application" \
+                      | grep -o '"[^"]*"' | head -1 | tr -d '"')
+          codesign --force --timestamp --sign "$IDENTITY" \
+                   "build/Ice-${{ steps.version.outputs.VERSION }}.dmg"
+          codesign --verify --verbose=2 "build/Ice-${{ steps.version.outputs.VERSION }}.dmg"
+
+      - name: Notarize the DMG with Apple
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APP_SPECIFIC_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # --wait blocks until Apple's notary service finishes (~3-10 min typical).
+          # If it fails, `xcrun notarytool log <id>` pulls the rejection details.
+          xcrun notarytool submit \
+              "build/Ice-${{ steps.version.outputs.VERSION }}.dmg" \
+              --apple-id "$APPLE_ID" \
+              --password "$APP_SPECIFIC_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait
+
+      - name: Staple the notarization ticket to the DMG
+        run: |
+          # Stapling embeds the notarization ticket inside the DMG so Gatekeeper can
+          # verify offline. Without this, every install needs an internet round-trip.
+          xcrun stapler staple "build/Ice-${{ steps.version.outputs.VERSION }}.dmg"
+          xcrun stapler validate "build/Ice-${{ steps.version.outputs.VERSION }}.dmg"
 
       - name: Upload DMG as artifact
         uses: actions/upload-artifact@v4
@@ -100,3 +185,8 @@ jobs:
           prerelease: false
           generate_release_notes: true
           token: ${{ github.token }}
+
+      - name: Tear down the ephemeral keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/fire-build.keychain-db" || true
