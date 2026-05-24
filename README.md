@@ -3,6 +3,9 @@
     <h1>Ice</h1>
 </div>
 
+> [!IMPORTANT]
+> **This is a maintained fork of [jordanbaird/Ice](https://github.com/jordanbaird/Ice).** Upstream has not received code commits since June 2025 and the last stable release predates macOS Sequoia and Tahoe. This fork is rebased on upstream's `macos-26` branch (Tahoe-ready) plus community PRs. See [FORK.md](FORK.md) for the plan, branch genealogy, and conventions.
+
 Ice is a powerful menu bar management tool. While its primary function is hiding and showing menu bar items, it aims to cover a wide variety of additional features to make it one of the most versatile menu bar tools available.
 
 ![Banner](https://github.com/user-attachments/assets/4423085c-4e4b-4f3d-ad0f-90a217c03470)
