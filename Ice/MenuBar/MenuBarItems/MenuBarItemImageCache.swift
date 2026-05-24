@@ -264,7 +264,13 @@ final class MenuBarItemImageCache: ObservableObject {
             newImages.merge(sectionImages) { (_, new) in new }
         }
 
-        await MainActor.run { [newImages] in
+        // Adapted from upstream PR #804 by Marc A. Runkel (#530) — original used ItemCache.allItems; replaced with the macos-26 enumeration.
+        let allValidTags = await Set(appState.itemManager.itemCache.managedItems.map(\.tag))
+
+        await MainActor.run { [newImages, allValidTags] in
+            // Drop entries whose key no longer matches any currently-cached menu bar item.
+            images = images.filter { allValidTags.contains($0.key) }
+            // Merge in the freshly captured images.
             images.merge(newImages) { (_, new) in new }
         }
     }
