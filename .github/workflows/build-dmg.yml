@@ -16,7 +16,7 @@ jobs:
       CODE_SIGN_IDENTITY: "Developer ID Application"
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Xcode
         uses: maxim-lobanov/setup-xcode@v1
@@ -94,9 +94,15 @@ jobs:
           # --timestamp        → embed a secure Apple timestamp (also required)
           # --deep             → recurse into nested bundles (Sparkle.framework + its XPCs)
           # --force            → re-sign anything already signed (e.g. dependency frameworks)
-          # --preserve-metadata=entitlements
-          #                    → keep any embedded entitlements (.entitlements file if present)
+          # --preserve-metadata=entitlements,identifier,flags
+          #                    → keep any embedded entitlements (.entitlements file if present),
+          #                      the bundle's signed identifier, and the existing hardened-runtime
+          #                      flags. Without this, re-signing strips entitlements from the
+          #                      xcarchive output and we silently lose them. Ice currently has
+          #                      no .entitlements file in source — but upstream may add one any
+          #                      day and we don't want a subtle regression.
           codesign --force --deep --options runtime --timestamp \
+                   --preserve-metadata=entitlements,identifier,flags \
                    --sign "$IDENTITY" \
                    "build/Ice.app"
 
