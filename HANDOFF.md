@@ -3,97 +3,90 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
-## ⚡ MOST URGENT (compression at this exact moment, 2026-05-25 22:18)
+## ✅ SHIPPED — fire.4 signed + notarized (2026-05-25 23:15)
 
-**Apple Developer Program approved.** Team ID = `R47JTHX25P`, Developer ID
-Application cert created and imported to login Keychain (verified via
-`security find-identity -v -p codesigning` showing both legacy
-"Apple Development" + new "Developer ID Application").
+First fully Developer-ID-signed + Apple-notarized + stapled Fire build is
+live. Download URL:
+`https://github.com/pdurlej/Ice/releases/download/v0.11.13-fire.4/Ice-v0.11.13-fire.4.dmg`
+(4.28 MB, SHA256 `231cbd038fb41242d7a298cdb7d46ac5f0f7c8a05ccef633668a13147a4b0e09`).
 
-All six GH secrets are set on `pdurlej/Ice`:
-`BUILD_CERTIFICATE_BASE64`, `P12_PASSWORD`, `APPLE_ID` (p@durlej.me),
-`APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` (R47JTHX25P), `KEYCHAIN_PASSWORD`
-(uuid).
+Owner installed it (over fire.3) and after `tccutil reset` + re-grant of
+Accessibility the menu bar items load correctly.
 
-Cert exported to `/Users/pd/Documents/Certyfikaty.p12` then base64-encoded
-to the secret.
+### Three CI fails before the win — capture so we never repeat them
 
-`feature/signed-builds-prep` merged into `fire/main` (commit `8d3aee5`).
-Version bumped to `0.11.13-fire.4` (build 1126). Tag `v0.11.13-fire.4`
-pushed. CI run `26418015934` triggered.
+The fire.4 build needed three iterations on the same tag (`gh run rerun`,
+no fire.5/.6/.7 churn). Each fail had a different cause:
 
-**CI FAILED after 2m37s** on the "Codesign the .app with Developer ID"
-step. Earlier steps all green: Checkout, Set up Xcode, Import
-Code-Signing Certificate, Build archive. The codesign step prints:
+1. **Wrong cert in the `.p12`.** Owner first exported `Apple Development:
+   piotr@durlej.me (57JQP6CCJZ)` — the *legacy* personal-team cert —
+   instead of `Developer ID Application: Piotr Durlej (R47JTHX25P)`.
+   Both certs lived in the local Keychain; the right one was in
+   `System` keychain (not `login`), and its private key was in `login`
+   — Keychain Access didn't show the cert with a ▶ expander until the
+   user navigated to **Moje certyfikaty → Logowanie**. The fix was a
+   fresh export specifically of the Developer ID Application identity
+   to `/Users/pd/Documents/Certyfikaty1.p12`. Verified before pushing
+   the secret with:
+   ```
+   openssl pkcs12 -legacy -in <path>.p12 -nokeys -info | grep -E "friendlyName|subject="
+   ```
+   `-legacy` is mandatory — OpenSSL 3.x dropped RC2-40 which Keychain
+   Access uses for .p12 export.
+2. **Notarytool 401 "account does not exist".** `APPLE_ID` secret was
+   set to `p@durlej.me` but the owner's actual Apple ID (which holds
+   the Developer Program enrollment) is `piotr@durlej.me`. Confirmed
+   locally with:
+   ```
+   xcrun notarytool history --apple-id piotr@durlej.me --team-id R47JTHX25P --password <app-spec>
+   ```
+   Returns `No submission history.` (success) for `piotr@`; the same
+   401 for `p@`. Fixed by `gh secret set APPLE_ID` with the right
+   email.
+3. **TCC ghost grants on the running app.** After installing fire.4,
+   `AXHelpers.isProcessTrusted()` in MenuBarItemService kept returning
+   false even though System Settings showed Ice as "granted". Because
+   fire.3 was ad-hoc-signed (TCC anchored to CDHash) and fire.4 is
+   Developer ID (different anchor), the stale TCC record matches the
+   visible name but fails the cryptographic match silently. Standard
+   fix:
+   ```
+   tccutil reset All com.jordanbaird.Ice
+   tccutil reset All com.jordanbaird.Ice.MenuBarItemService
+   osascript -e 'tell application "Ice" to quit' && open /Applications/Ice.app
+   # then re-grant Accessibility (and Screen Recording if used) in Settings
+   ```
+   **All subsequent fire.5+ builds (same Team ID anchor) will NOT need
+   this** — TCC will key by Team ID + bundle ID and inherit cleanly.
 
-```
-1 valid identities found
-ERROR: no 'Developer ID Application' identity in the ephemeral keychain.
-```
+### Lesson for me
 
-The grep against `security find-identity -v -p codesigning "$RUNNER_TEMP/fire-build.keychain-db"`
-returns one identity but `grep "Developer ID Application"` against it
-returns empty.
+When debugging fire.4's TCC issue I went down a rabbit hole insisting
+the XPC was never spawning (because `ps` showed no MenuBarItemService
+process). That was a SYMPTOM — the XPC was spawning per-request, doing
+its AX check, failing it instantly, returning `.sourcePID(nil)`, and
+exiting. Owner just ran `tccutil reset` (my initial Plan A) and it
+worked. **For "permission shows granted but app behaves like denied" on
+macOS Tahoe → always try `tccutil reset <bundleid>` FIRST** before
+spelunking through XPC, codesign, hardened runtime, etc. Cheap, fast,
+non-destructive.
 
-### What I (this Claude) hypothesised and what the owner pushed back on
+### Outstanding low-priority issues on the workflow
 
-I guessed it was the wrong cert exported to the .p12 — that the owner
-might have selected the legacy "Apple Development: piotr@durlej.me
-(57JQP6CCJZ)" cert instead of "Developer ID Application: Piotr Durlej
-(R47JTHX25P)". **The owner said this hypothesis is probably wrong** and
-asked to compress before I pushed the wrong fix.
-
-So **do not assume the .p12 is wrong** without proof. Other live
-hypotheses that need to be checked first:
-
-1. **`security import -t cert -f pkcs12`** in `.github/workflows/build-dmg.yml`
-   line 45 might be the wrong flag for a PKCS#12 bundle. The
-   conventional flag is `-t agg` (aggregate, imports cert + key together)
-   when the input is a .p12 containing both. With `-t cert` it may
-   import the cert without binding the key, leaving an identity that
-   `find-identity` shows but `codesign` cannot use.
-2. **WWDR intermediate cert** may need to be present in the ephemeral
-   keychain too. The Developer ID Application cert is signed by
-   "Developer ID Certification Authority" → "Apple Worldwide Developer
-   Relations CA" → "Apple Root CA". Missing intermediates can make
-   identities show up under `find-identity` without being valid for
-   codesigning.
-3. **Diacritics in Common Name.** The cert's CN is literally "Piotr
-   Durlej" (no diacritics) per the screenshot — so probably not it, but
-   worth ruling out by dumping the full `find-identity` output.
-4. **The grep itself** —
-   `grep "Developer ID Application" | grep -o '"[^"]*"' | head -1 | tr -d '"'`
-   might fail in subtle ways depending on what `find-identity` prints
-   in the ephemeral keychain context (different escaping, missing
-   quotes, etc.).
-
-### Concrete next-debugging steps (do these before suggesting fixes)
-
-1. Read the **full** failed CI log, not just the part filtered for
-   "error": `gh run view 26418015934 --repo pdurlej/Ice --log-failed`.
-   The line `1 valid identities found` is preceded by lines showing
-   exactly what the identity looks like. Read those.
-2. Ask the owner to run `openssl pkcs12 -in /Users/pd/Documents/Certyfikaty.p12 -nokeys -info`
-   on his machine (interactive prompt asks for the P12 password) and
-   share back the `friendlyName` and `subject` lines. **This is the
-   fastest unambiguous verification of what's in the .p12** and the
-   owner offered to do it.
-3. Try `-t agg` (or no `-t` flag) in the workflow's `security import`
-   call. This is the most likely real bug — `-t cert` is conventionally
-   for single X.509 certs, not for .p12 bundles.
-4. If still failing, add a debug step in the workflow that dumps the
-   raw `security find-identity -v` and `security find-identity -v -p
-   codesigning` output before the grep, so the next CI run shows
-   exactly what's in the keychain.
-
-### What NOT to do
-
-- Do not push another tag (`v0.11.13-fire.5` etc.) until the cause is
-  understood. The owner can delete + re-tag fire.4 once a fix lands.
-- Do not ask the owner to re-export the .p12 until step 2 above
-  (openssl dump) confirms what's actually in the current .p12. The
-  current one might be perfectly fine.
-- Do not change the secrets unless step 2 proves they need it.
+- `.github/workflows/build-dmg.yml` line 99 has a comment about
+  `--preserve-metadata=entitlements` but the flag is **missing** from
+  the actual `codesign` call. The build works because Ice has no
+  custom entitlements in source anyway, but if upstream ever adds an
+  entitlements file the codesign step will silently strip it. Fix:
+  add `--preserve-metadata=entitlements,identifier,flags`.
+- `actions/checkout@v4` triggers a Node.js 20 deprecation warning on
+  every run (hard deadline 2026-09-16, current date is 2026-05-25 so
+  ~4 months runway). Latest is `@v6.0.2` — straight bump should work.
+- The "build mapping" in `/tmp/fire-publish-update.sh` was hardcoded up
+  to fire.1 — currently lives in `/tmp` (ephemeral). When publishing
+  fire.4 to appcast we bypassed the script (one-off manual XML edit).
+  If we revive the script, generalise: derive build number from
+  Info.plist instead of `case $TAG`.
 
 ## Who and where
 
@@ -120,23 +113,27 @@ hypotheses that need to be checked first:
 - Phase plan in `FORK.md` and `ROADMAP.md` at repo root. Rebrand plan (Ice → Fire) in `docs/REBRAND_PLAN.md`.
   Icon brief in `docs/ICON_BRIEF.md`.
 
-### 2. Fire — signed builds prep branch
+### 2. Fire — signed builds (SHIPPED at fire.4)
 
-- Branch: `feature/signed-builds-prep` on `pdurlej/Ice`. NOT merged to `fire/main`.
-- Contains: rewritten `.github/workflows/build-dmg.yml` for Developer ID signed + notarized flow,
-  plus `docs/signed-builds/{SETUP.md, HELPER.md, TROUBLESHOOTING.md}` (~600 lines).
-- Workflow needs six GitHub Actions secrets that don't exist yet:
-  `BUILD_CERTIFICATE_BASE64`, `P12_PASSWORD`, `APPLE_ID`, `APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, `KEYCHAIN_PASSWORD`.
-- Workflow correctly staples the `.app` BEFORE packing the DMG (Caught and fixed during draft —
-  the original "staple DMG only" was insufficient because the extracted `.app` ended up unstapled).
-- Owner has paid for Apple Developer Program (`p@durlej.me`) and uploaded passport scan via
-  `https://developer.apple.com/contact/file-upload/`. Apple ID name was updated to "Piotr Krzysztof Durlej" so it
-  matches the passport. Status: waiting for approval (typically 1–3 days for individual EU enrollments).
-- Passport expires 2026-12-15 — that's ~6.5 months from now, on the edge of Apple's "6-month minimum" rule.
-  If Apple rejects for expiry, fallback is the new (post-2015) Polish national ID card, which is bilingual.
-- When approval lands: owner runs through `docs/signed-builds/SETUP.md` step by step, gets a Developer ID
-  Application cert, exports to .p12, sets the six secrets, and tags `v0.11.13-fire.4`. CI auto-publishes
-  signed + notarized DMG.
+- `feature/signed-builds-prep` merged into `fire/main` at commit `8d3aee5`.
+- All six GH Actions secrets set on `pdurlej/Ice`: `BUILD_CERTIFICATE_BASE64`,
+  `P12_PASSWORD`, `APPLE_ID` (= `piotr@durlej.me` — NOT `p@durlej.me`),
+  `APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` (= `R47JTHX25P`), `KEYCHAIN_PASSWORD` (uuid).
+- Apple Developer Program approved (individual, Team `R47JTHX25P`, name `Piotr Krzysztof Durlej`).
+- Developer ID Application cert lives in System keychain on the owner's
+  Mac; private key in login keychain. Sound on local
+  `security find-identity -v -p codesigning` showing both legacy
+  "Apple Development" + Developer ID Application.
+- fire.4 DMG (tag `v0.11.13-fire.4`, build 1126) is live:
+  `https://github.com/pdurlej/Ice/releases/tag/v0.11.13-fire.4`. Notarized,
+  stapled, Gatekeeper-accepted, installed on owner's Mac.
+- Future tagged builds (`v0.11.13-fire.5`, etc.) will go through the same
+  workflow with zero secret/manual intervention. Just bump
+  `MARKETING_VERSION` + `CURRENT_PROJECT_VERSION` and `git push --tags`.
+- Sparkle appcast: when a new tagged build lands on GitHub Releases,
+  publish via `/tmp/fire-publish-update.sh <tag>` (or manual XML edit if
+  the script's build-number mapping is stale — see "Outstanding
+  low-priority issues" above for the planned fix).
 
 ### 3. Fire — community engagement (drafts not yet sent)
 
@@ -193,6 +190,19 @@ hypotheses that need to be checked first:
 - **macOS Tahoe 26.5 + ad-hoc signed apps** is a minefield: TCC keys permissions to CDHash absent a
   stable Developer ID, so every new build resets Accessibility / Screen Recording / etc. Workaround for now:
   `tccutil reset Accessibility com.bundle.id` + relaunch + re-grant. Permanent fix: Apple Developer Program.
+- **TCC ghost grants on the ad-hoc → Developer-ID upgrade boundary.** The
+  ONE-time `tccutil reset` is also needed when upgrading from an
+  ad-hoc-signed build to the first Developer-ID-signed build of the same
+  bundle (fire.3 → fire.4 hit this). System Settings shows the app as
+  granted but cryptographic match fails silently → app behaves as
+  denied. Reset for BOTH the main bundle and any XPC service that uses
+  TCC APIs:
+  ```
+  tccutil reset All com.jordanbaird.Ice
+  tccutil reset All com.jordanbaird.Ice.MenuBarItemService
+  ```
+  Subsequent Developer-ID → Developer-ID upgrades (fire.5+) do NOT need
+  this — TCC keys cleanly on Team ID + bundle ID.
 - **Ice's MenuBarItemService XPC** uses `.isFromSameTeam()` on both listener and client side, which silently
   rejects ad-hoc-signed builds (no team ID to compare against). Both sides patched via
   `MenuBarItemService.ownTeamIdentifier() != nil` guard. Signed builds will still use strict same-team
@@ -216,10 +226,14 @@ hypotheses that need to be checked first:
 ## Quick wins I can offer in a fresh session
 
 1. Status check: `gh pr view 197 --repo tddworks/ClaudeBar` and `gh issue view 1109 --repo steipete/CodexBar`.
-2. Apple Dev status: ask whether the enrollment got approved; if yes, walk through
-   `docs/signed-builds/SETUP.md` step by step.
-3. If owner wants to install AuditLM: that's a ~15-minute path with the commands in this handoff section 6.
-4. If owner wants to extend AuditLM with a Claude API adapter: that's a ~1-day side project,
+2. Fix the workflow's `actions/checkout@v4` → `@v6.0.2` (Node 20 deprecation), and add
+   `--preserve-metadata=entitlements,identifier,flags` to the codesign step. Two-line patch on `fire/main`.
+3. Post the six community comments (`/tmp/fire-community-comments.md`) on upstream Ice issues
+   `#823 #760 #744 #344 #891 #665` now that we have a signed DMG to point at.
+4. Open an upstream PR to `jordanbaird/Ice` with the `MenuBarItemService.ownTeamIdentifier()`
+   guard — fire.3 fix benefits every community ad-hoc build of Ice.
+5. If owner wants to install AuditLM: ~15-min path with the commands in handoff section 6.
+6. If owner wants to extend AuditLM with a Claude API adapter: ~1-day side project,
    write a `ClaudeProvider` mirroring its existing OpenAI provider in Rust.
 
 ## What NOT to do
