@@ -1,44 +1,89 @@
 <div align="center">
     <img src="Ice/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width=200 height=200>
-    <h1>Ice</h1>
+    <h1>Fire from Ice 🔥🧊</h1>
+    <p><em>Maintained continuation of <a href="https://github.com/jordanbaird/Ice">jordanbaird/Ice</a> with macOS 26 Tahoe support + signed/notarized DMGs</em></p>
 </div>
 
 > [!IMPORTANT]
-> **This is a maintained fork of [jordanbaird/Ice](https://github.com/jordanbaird/Ice).** Upstream has not received code commits since June 2025 and the last stable release predates macOS Sequoia and Tahoe. This fork is rebased on upstream's `macos-26` branch (Tahoe-ready) plus community PRs. See [FORK.md](FORK.md) for the plan, branch genealogy, and conventions.
+> Upstream Ice received its last code commit on **2025-06-06** and its last stable release (`0.11.12`) predates macOS Sequoia and Tahoe. Multiple Tahoe-only bugs are reported but unaddressed upstream — most visibly the **menu bar items not loading** regression (upstream issues [#744](https://github.com/jordanbaird/Ice/issues/744), [#891](https://github.com/jordanbaird/Ice/issues/891), [#913](https://github.com/jordanbaird/Ice/issues/913); ~80 reactions combined). This fork ships those fixes as proper signed, notarized DMG releases.
+>
+> If you're on macOS 26 Tahoe and upstream Ice's Menu Bar Layout pane is empty for you, this fork fixes it.
 
-Ice is a powerful menu bar management tool. While its primary function is hiding and showing menu bar items, it aims to cover a wide variety of additional features to make it one of the most versatile menu bar tools available.
+Ice is a powerful menu bar management tool for macOS. While its primary function is hiding and showing menu bar items, it covers many additional features that make it one of the most versatile menu bar tools available.
 
 ![Banner](https://github.com/user-attachments/assets/4423085c-4e4b-4f3d-ad0f-90a217c03470)
 
-[![Download](https://img.shields.io/badge/download-latest-brightgreen?style=flat-square)](https://github.com/jordanbaird/Ice/releases/latest)
-![Platform](https://img.shields.io/badge/platform-macOS-blue?style=flat-square)
-![Requirements](https://img.shields.io/badge/requirements-macOS%2014%2B-fa4e49?style=flat-square)
-[![Sponsor](https://img.shields.io/badge/Sponsor%20%E2%9D%A4%EF%B8%8F-8A2BE2?style=flat-square)](https://github.com/sponsors/jordanbaird)
-[![Website](https://img.shields.io/badge/Website-015FBA?style=flat-square)](https://icemenubar.app)
-[![License](https://img.shields.io/github/license/jordanbaird/Ice?style=flat-square)](LICENSE)
+[![Download](https://img.shields.io/github/v/release/pdurlej/Ice?label=Download%20latest%20DMG&style=flat-square&color=brightgreen)](https://github.com/pdurlej/Ice/releases/latest)
+![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue?style=flat-square)
+![Signed](https://img.shields.io/badge/Developer%20ID-signed%20%2B%20notarized-success?style=flat-square)
+[![License](https://img.shields.io/github/license/pdurlej/Ice?style=flat-square)](LICENSE)
 
-> [!NOTE]
-> Ice is currently in active development. Some features have not yet been implemented. Download the latest release [here](https://github.com/jordanbaird/Ice/releases/latest) and see the roadmap below for upcoming features.
+## What this fork fixes
 
-<a href="https://www.buymeacoffee.com/jordanbaird" target="_blank">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;">
-</a>
+| Symptom | Upstream issue | Fixed in |
+|---|---|---|
+| Menu Bar Layout pane shows empty rows on macOS 26 | [#744](https://github.com/jordanbaird/Ice/issues/744), [#891](https://github.com/jordanbaird/Ice/issues/891), [#913](https://github.com/jordanbaird/Ice/issues/913) | `fire.2` + `fire.3` — `MenuBarItemService` XPC peer-requirement guard |
+| TCC permissions reset on every new ad-hoc build | n/a (Apple Developer Program required) | `fire.4` — Developer ID signed + Apple-notarized DMG |
+| `Node.js 20` deprecation warnings in CI | n/a | `fire.4` workflow — bumped all actions to Node 24 majors |
 
 ## Install
 
-### Manual Installation
+### Download the signed DMG
 
-Download the "Ice.zip" file from the [latest release](https://github.com/jordanbaird/Ice/releases/latest) and move the unzipped app into your `Applications` folder.
+1. Grab the latest `Ice-v0.11.13-fire.X.dmg` from [Releases](https://github.com/pdurlej/Ice/releases/latest).
+2. Open the DMG. Drag **Ice.app** to your `Applications` folder.
+3. Launch from `/Applications`. On first run, macOS may prompt for **Accessibility** and **Screen Recording** — grant both.
 
-### Homebrew
+The DMG is **signed** with `Developer ID Application: Piotr Durlej (R47JTHX25P)` and **stapled** with an offline notarization ticket. First launch works without an internet round-trip; Gatekeeper accepts on macOS 14 (Sonoma) and later, including Tahoe 26.x.
 
-Install Ice using the following command:
+### Verify the download (optional)
 
 ```sh
-brew install --cask jordanbaird-ice
+shasum -a 256 Ice-v0.11.13-fire.4.dmg
+# expected: 231cbd038fb41242d7a298cdb7d46ac5f0f7c8a05ccef633668a13147a4b0e09
+
+spctl -avv --type install Ice-v0.11.13-fire.4.dmg
+# expected: accepted, source=Notarized Developer ID, origin=Developer ID Application: Piotr Durlej (R47JTHX25P)
 ```
 
-## Features/Roadmap
+### Upgrading from upstream Ice, or from any Fire ad-hoc build (fire.0/.1/.2/.3)
+
+**One-time** TCC reset is needed after the first install of a signed Fire build over any ad-hoc-signed predecessor — the cryptographic signature anchor changes, so existing TCC grants silently fail to match:
+
+```sh
+tccutil reset All com.jordanbaird.Ice
+tccutil reset All com.jordanbaird.Ice.MenuBarItemService
+osascript -e 'tell application "Ice" to quit'
+open /Applications/Ice.app
+# then re-grant Accessibility (and Screen Recording if used) in System Settings
+```
+
+All subsequent Fire updates (`fire.5+`, signed under the same Team ID) preserve permissions automatically — no further reset needed.
+
+## Auto-updates (Sparkle)
+
+Fire ships with **Sparkle 2.9.2** wired to a custom appcast at <https://pdurlej.github.io/fire-releases/appcast.xml>. After installing Ice, **Check for Updates** (Ice menu → Check for Updates) will auto-discover new Fire releases.
+
+The appcast is signed with **EdDSA** — the public key is embedded in the app's `Info.plist` (`SUPublicEDKey`), and the matching private key lives only in the maintainer's macOS Keychain. A network attacker who tampers with the GitHub Pages feed cannot inject a malicious update.
+
+## Bundle ID & upstream compatibility
+
+This fork keeps the upstream bundle ID `com.jordanbaird.Ice`, so it is a **drop-in replacement** for upstream Ice. Your existing Ice settings (`~/Library/Preferences/com.jordanbaird.Ice.plist`), hotkeys, and menu bar layout persist on upgrade.
+
+When Fire moves to Phase 4 of the [roadmap](FORK.md#phasing) (proper "Fire" rebrand with a new bundle ID and icon), a first-launch migration will copy your settings across so no state is lost.
+
+## Building from source
+
+```sh
+git clone https://github.com/pdurlej/Ice.git
+cd Ice
+xcodebuild -scheme Ice -configuration Release \
+    CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=NO
+```
+
+The resulting `Ice.app` is unsigned (`ad-hoc`) and will need `tccutil reset` on every rebuild on Tahoe. For signed local builds, the full sign + notarize + staple pipeline is in [`.github/workflows/build-dmg.yml`](.github/workflows/build-dmg.yml).
+
+## Features (inherited from upstream Ice)
 
 ### Menu bar item management
 
@@ -53,10 +98,6 @@ brew install --cask jordanbaird-ice
 - [x] Display hidden menu bar items in a separate bar (e.g. for MacBooks with the notch)
 - [x] Search menu bar items
 - [x] Menu bar item spacing (BETA)
-- [ ] Profiles for menu bar layout
-- [ ] Individual spacer items
-- [ ] Menu bar item groups
-- [ ] Show menu bar items when trigger conditions are met
 
 ### Menu bar appearance
 
@@ -64,9 +105,6 @@ brew install --cask jordanbaird-ice
 - [x] Menu bar shadow
 - [x] Menu bar border
 - [x] Custom menu bar shapes (rounded and/or split)
-- [ ] Remove background behind menu bar
-- [ ] Rounded screen corners
-- [ ] Different settings for light/dark mode
 
 ### Hotkeys
 
@@ -75,41 +113,21 @@ brew install --cask jordanbaird-ice
 - [x] Enable/disable the Ice Bar
 - [x] Show/hide section divider icons
 - [x] Toggle application menus
-- [ ] Enable/disable auto rehide
-- [ ] Temporarily show individual menu bar items
 
-### Other
+See [ROADMAP.md](ROADMAP.md) for fork-specific planned features (profiles, trigger conditions, layout import/export, sensible defaults for new-icon placement, per-display configuration).
 
-- [x] Launch at login
-- [x] Automatic updates
-- [ ] Menu bar widgets
+## Contributing
 
-## Why does Ice only support macOS 14 and later?
+- **Bugs specific to this fork** (not present in upstream Ice `0.11.12`): file in [this repo's Issues](https://github.com/pdurlej/Ice/issues).
+- **Bugs present in upstream too**: please file [upstream](https://github.com/jordanbaird/Ice/issues) first so they show in the canonical tracker. Cross-link from this repo if relevant.
+- **Pull requests**: open against `fire/main`. Both `lint.yml` (SwiftLint, runs on every push touching `**/*.swift`) and `build-dmg.yml` (full signed+notarized build, runs on tag push `v*`) must stay green.
 
-Ice uses a number of system APIs that are available starting in macOS 14. As such, there are no plans to support earlier versions of macOS.
+## Credits
 
-## Gallery
-
-#### Show hidden menu bar items below the menu bar
-
-![Ice Bar](https://github.com/user-attachments/assets/f1429589-6186-4e1b-8aef-592219d49b9b)
-
-#### Drag-and-drop interface to arrange menu bar items
-
-![Menu Bar Layout](https://github.com/user-attachments/assets/095442ba-f2d0-4bb4-9632-91e26ef8d45b)
-
-#### Customize the menu bar's appearance
-
-![Menu Bar Appearance](https://github.com/user-attachments/assets/8c22c185-c3d2-49bb-971e-e1fc17df04b3)
-
-#### Menu bar item search
-
-![Menu Bar Item Search](https://github.com/user-attachments/assets/d1a7df3a-4989-4077-a0b1-8e7d5a1ba5b8)
-
-#### Custom menu bar item spacing
-
-![Menu Bar Item Spacing](https://github.com/user-attachments/assets/b196aa7e-184a-4d4c-b040-502f4aae40a6)
+- **Original Ice** by [Jordan Baird](https://github.com/jordanbaird) — every line of upstream code remains his copyright under GPL-3.0.
+- **Fire fork** maintained by [Piotr Durlej](https://github.com/pdurlej). Fork-specific changes are also GPL-3.0.
+- The fork is **independent and unofficial** — please do not file fork-specific issues on the upstream tracker.
 
 ## License
 
-Ice is available under the [GPL-3.0 license](LICENSE).
+[GPL-3.0](LICENSE) — unchanged from upstream.
