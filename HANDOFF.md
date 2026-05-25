@@ -3,6 +3,98 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## ⚡ MOST URGENT (compression at this exact moment, 2026-05-25 22:18)
+
+**Apple Developer Program approved.** Team ID = `R47JTHX25P`, Developer ID
+Application cert created and imported to login Keychain (verified via
+`security find-identity -v -p codesigning` showing both legacy
+"Apple Development" + new "Developer ID Application").
+
+All six GH secrets are set on `pdurlej/Ice`:
+`BUILD_CERTIFICATE_BASE64`, `P12_PASSWORD`, `APPLE_ID` (p@durlej.me),
+`APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` (R47JTHX25P), `KEYCHAIN_PASSWORD`
+(uuid).
+
+Cert exported to `/Users/pd/Documents/Certyfikaty.p12` then base64-encoded
+to the secret.
+
+`feature/signed-builds-prep` merged into `fire/main` (commit `8d3aee5`).
+Version bumped to `0.11.13-fire.4` (build 1126). Tag `v0.11.13-fire.4`
+pushed. CI run `26418015934` triggered.
+
+**CI FAILED after 2m37s** on the "Codesign the .app with Developer ID"
+step. Earlier steps all green: Checkout, Set up Xcode, Import
+Code-Signing Certificate, Build archive. The codesign step prints:
+
+```
+1 valid identities found
+ERROR: no 'Developer ID Application' identity in the ephemeral keychain.
+```
+
+The grep against `security find-identity -v -p codesigning "$RUNNER_TEMP/fire-build.keychain-db"`
+returns one identity but `grep "Developer ID Application"` against it
+returns empty.
+
+### What I (this Claude) hypothesised and what the owner pushed back on
+
+I guessed it was the wrong cert exported to the .p12 — that the owner
+might have selected the legacy "Apple Development: piotr@durlej.me
+(57JQP6CCJZ)" cert instead of "Developer ID Application: Piotr Durlej
+(R47JTHX25P)". **The owner said this hypothesis is probably wrong** and
+asked to compress before I pushed the wrong fix.
+
+So **do not assume the .p12 is wrong** without proof. Other live
+hypotheses that need to be checked first:
+
+1. **`security import -t cert -f pkcs12`** in `.github/workflows/build-dmg.yml`
+   line 45 might be the wrong flag for a PKCS#12 bundle. The
+   conventional flag is `-t agg` (aggregate, imports cert + key together)
+   when the input is a .p12 containing both. With `-t cert` it may
+   import the cert without binding the key, leaving an identity that
+   `find-identity` shows but `codesign` cannot use.
+2. **WWDR intermediate cert** may need to be present in the ephemeral
+   keychain too. The Developer ID Application cert is signed by
+   "Developer ID Certification Authority" → "Apple Worldwide Developer
+   Relations CA" → "Apple Root CA". Missing intermediates can make
+   identities show up under `find-identity` without being valid for
+   codesigning.
+3. **Diacritics in Common Name.** The cert's CN is literally "Piotr
+   Durlej" (no diacritics) per the screenshot — so probably not it, but
+   worth ruling out by dumping the full `find-identity` output.
+4. **The grep itself** —
+   `grep "Developer ID Application" | grep -o '"[^"]*"' | head -1 | tr -d '"'`
+   might fail in subtle ways depending on what `find-identity` prints
+   in the ephemeral keychain context (different escaping, missing
+   quotes, etc.).
+
+### Concrete next-debugging steps (do these before suggesting fixes)
+
+1. Read the **full** failed CI log, not just the part filtered for
+   "error": `gh run view 26418015934 --repo pdurlej/Ice --log-failed`.
+   The line `1 valid identities found` is preceded by lines showing
+   exactly what the identity looks like. Read those.
+2. Ask the owner to run `openssl pkcs12 -in /Users/pd/Documents/Certyfikaty.p12 -nokeys -info`
+   on his machine (interactive prompt asks for the P12 password) and
+   share back the `friendlyName` and `subject` lines. **This is the
+   fastest unambiguous verification of what's in the .p12** and the
+   owner offered to do it.
+3. Try `-t agg` (or no `-t` flag) in the workflow's `security import`
+   call. This is the most likely real bug — `-t cert` is conventionally
+   for single X.509 certs, not for .p12 bundles.
+4. If still failing, add a debug step in the workflow that dumps the
+   raw `security find-identity -v` and `security find-identity -v -p
+   codesigning` output before the grep, so the next CI run shows
+   exactly what's in the keychain.
+
+### What NOT to do
+
+- Do not push another tag (`v0.11.13-fire.5` etc.) until the cause is
+  understood. The owner can delete + re-tag fire.4 once a fix lands.
+- Do not ask the owner to re-export the .p12 until step 2 above
+  (openssl dump) confirms what's actually in the current .p12. The
+  current one might be perfectly fine.
+- Do not change the secrets unless step 2 proves they need it.
+
 ## Who and where
 
 - Owner: pdurlej (Piotr Krzysztof Durlej). GitHub `pdurlej`, Forgejo also `pdurlej`.
