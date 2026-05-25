@@ -137,17 +137,22 @@ non-destructive.
 
 ### 3. Fire — community engagement (first comment posted, more pending)
 
-- ✅ **Posted on #913** (2026-05-25, comment id `4537464216`): technical
-  root cause, fix commits, DMG link, TCC reset gotcha, offer to open
-  upstream PR. The owner approved the draft text + sent it via
-  `gh issue comment 913 --repo jordanbaird/Ice --body-file`.
-  Template lives at `/tmp/fire-913-comment.md` — reusable for sibling
-  issues (#744, #891 are the same XPC bug class).
+- ✅ **XPC bug class trifecta posted on upstream Ice** (2026-05-25,
+  combined audience ~80 thumbs + subscribed users):
+  - `#913` → comment id [`4537464216`](https://github.com/jordanbaird/Ice/issues/913#issuecomment-4537464216),
+    full technical writeup. Template at `/tmp/fire-913-comment.md`.
+  - `#744` → comment id [`4537479624`](https://github.com/jordanbaird/Ice/issues/744#issuecomment-4537479624),
+    shorter, explicit "happy to open PR if @jordanbaird wants" offer.
+    Template at `/tmp/fire-744-comment.md`.
+  - `#891` → comment id [`4537479697`](https://github.com/jordanbaird/Ice/issues/891#issuecomment-4537479697),
+    shortest, just connects to siblings. Template at `/tmp/fire-891-comment.md`.
+  - All three cross-link each other — Triangle. Anyone hitting one
+    finds the others and the DMG.
 - Six original drafts at `/tmp/fire-community-comments.md` for `#823,
-  #760, #744, #344, #891, #665`. The #744/#891 ones should be adapted
-  to match the #913 template (which is sharper after iteration).
-  The remaining four (#823, #760, #344, #665) are different bug classes
-  — check those issues are still relevant before sending.
+  #760, #744, #344, #891, #665`. The #744 and #891 ones are now SUPERSEDED
+  by the live posts above. Remaining four (`#823, #760, #344, #665`)
+  are different bug classes — check those issues are still relevant
+  and write fresh comments before sending.
 - **Open upstream PR with the XPC fix.** Commits `f3ee848` + `b32181f`
   on `fire/main` cleanly cherry-pick onto `upstream/macos-26`. The
   posted comment on #913 already explicitly offers this — wait for
