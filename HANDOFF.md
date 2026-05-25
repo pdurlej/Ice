@@ -135,14 +135,23 @@ non-destructive.
   the script's build-number mapping is stale — see "Outstanding
   low-priority issues" above for the planned fix).
 
-### 3. Fire — community engagement (drafts not yet sent)
+### 3. Fire — community engagement (first comment posted, more pending)
 
-- Six drafts in `/tmp/fire-community-comments.md` for upstream issues `#823, #760, #744, #344, #891, #665`.
-  These should only be posted AFTER the first signed `fire.4` DMG is downloadable — the drafts invite testing,
-  and we don't want testers hitting the ad-hoc TCC reset problem.
-- The Ice's MenuBarItemService XPC fix (commits `f3ee848` + `b32181f`) is genuinely upstream-bound: it fixes
-  upstream issues #744 + #891 (combined ~76 reactions). Worth opening a PR to `jordanbaird/Ice` once we have
-  a signed build to point at.
+- ✅ **Posted on #913** (2026-05-25, comment id `4537464216`): technical
+  root cause, fix commits, DMG link, TCC reset gotcha, offer to open
+  upstream PR. The owner approved the draft text + sent it via
+  `gh issue comment 913 --repo jordanbaird/Ice --body-file`.
+  Template lives at `/tmp/fire-913-comment.md` — reusable for sibling
+  issues (#744, #891 are the same XPC bug class).
+- Six original drafts at `/tmp/fire-community-comments.md` for `#823,
+  #760, #744, #344, #891, #665`. The #744/#891 ones should be adapted
+  to match the #913 template (which is sharper after iteration).
+  The remaining four (#823, #760, #344, #665) are different bug classes
+  — check those issues are still relevant before sending.
+- **Open upstream PR with the XPC fix.** Commits `f3ee848` + `b32181f`
+  on `fire/main` cleanly cherry-pick onto `upstream/macos-26`. The
+  posted comment on #913 already explicitly offers this — wait for
+  @jordanbaird's reply before pushing the branch.
 
 ### 4. CodexBar — invisible menu bar bug
 
