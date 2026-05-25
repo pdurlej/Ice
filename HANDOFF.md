@@ -3,6 +3,35 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## ✅ SHIPPED — fire.5 (Sentry opt-in) + MCP scaffold (2026-05-26 01:30)
+
+**fire.5** is live with opt-in Sentry crash reporting. DMG SHA256
+`ca3bc7a84270cf53df430ae365f1301ab8ceb4227b3a21e56225eae90fbc081c`,
+5.88 MB (bigger than fire.4 4.28 MB due to Sentry SDK).
+
+- Strict opt-in toggle in Advanced Settings → Privacy & Diagnostics
+  (DEFAULT OFF). Sentry SDK never initializes unless user explicitly
+  flips. Existing fire.4 → fire.5 upgraders see zero behavior change
+  unless they opt in.
+- DSN embedded in `AppDelegate.swift` (public-readable write-only by
+  design — safe to embed).
+- Sentry CLI authenticated locally (`p@durlej.me`, token ~4 weeks).
+- Sentry project: `pdurlej/fire` (apple-macos, project ID 4511453022388304).
+- Sentry MCP added to Claude Code config (`~/.claude.json`) — works
+  after Claude Code restart picks up the new MCP server.
+- Sparkle appcast updated — fire.4 users get auto-update prompt to fire.5.
+
+**MCP Phase 4.5 scaffold prepared** (Issue #1 has progress comment):
+
+- `modelcontextprotocol/swift-sdk` Swift Package dep added project-level.
+- Transitive deps resolved: swift-log, swift-nio, swift-system,
+  swift-atomics, swift-collections, EventSource.
+- `MCPBridge/README.md` placeholder describing next-session file layout.
+- All 9 architecture open questions ALREADY resolved in
+  `docs/mcp/ARCHITECTURE.md` §10 — no more design work.
+- Next session: create `IceMCPBridge` Xcode target + implement 6 tools +
+  auth flow + onboarding UI. ~14h focused work.
+
 ## ✅ SHIPPED — fire.4 + landing page + community evangelism (2026-05-26)
 
 First fully Developer-ID-signed + Apple-notarized + stapled Fire build
