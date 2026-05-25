@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="Ice/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width=200 height=200>
+    <img src="Resources/Icon.png" width=200 height=200 alt="Ice cube app icon">
     <h1>Fire from Ice 🔥🧊</h1>
     <p><em>Maintained continuation of <a href="https://github.com/jordanbaird/Ice">jordanbaird/Ice</a> with macOS 26 Tahoe support + signed/notarized DMGs</em></p>
 </div>
