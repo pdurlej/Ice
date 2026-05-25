@@ -567,3 +567,84 @@ Fire's Advanced settings pane will render these snippets with a copy button, aut
 6. **Concurrent client handling:** Can multiple LLM clients connect simultaneously? The current XPC `sendSync` model serializes requests. Should IceMCPBridge queue concurrent tool calls, or should the XPC layer support async responses?
 
 7. **Undo support:** Should `move_item` / `hide_item` / `show_item` return an undo token that lets the LLM reverse the operation? This would make destructive tools safer but adds state tracking complexity.
+
+---
+
+## 10. Resolved Decisions (2026-05-26, operator review)
+
+Each open question now has a binding decision plus rationale. Where the decision was based on new research (e.g., discovering an existing SDK), the finding is captured here so future maintainers can re-evaluate if the landscape shifts.
+
+### Q1 → Use official `modelcontextprotocol/swift-sdk` as Swift Package dependency
+
+**Decision:** Import the [official Swift SDK](https://github.com/modelcontextprotocol/swift-sdk) (1392⭐, Anthropic-sanctioned) via Swift Package Manager. Do NOT write our own MCP protocol layer.
+
+**Rationale:** The official SDK already exists, is actively maintained, and is the canonical Swift implementation of the spec. Wrapping Node.js was a fallback if no good Swift option existed — it does. Building from scratch would duplicate work and create a long tail of spec-compliance bugs.
+
+**Alternative SDKs evaluated:** `Cocoanetics/SwiftMCP` (155⭐, community), `Compiler-Inc/SwiftMCP` (49⭐), `DePasqualeOrg/swift-mcp` (23⭐). The official SDK has the biggest community + Anthropic backing, so it's the safe default.
+
+### Q2 → Store layouts in the existing Ice plist
+
+**Decision:** Saved layouts go in `~/Library/Preferences/com.jordanbaird.Ice.plist` (post-rebrand: `com.jordanbaird.Fire.plist`) alongside other Ice settings. No separate JSON file.
+
+**Rationale:** Single source of truth. Sync problems from a separate JSON would be more painful than the indirection cost of going through XPC for layout reads. The XPC overhead is already in our budget.
+
+### Q3 → Read-vs-write consent granularity for MVP
+
+**Decision:** Two consent levels: `read-only` (auto-grant after first run) and `write` (explicit notification approval per client). No per-tool granularity in MVP.
+
+**Rationale:** Simpler UX, faster MVP ship. Per-tool gating adds significant UI complexity for marginal security gain. Can be added as a Phase 5+ "Advanced privacy" setting if users ask for it.
+
+### Q4 → Client-managed lifecycle (standard MCP stdio model)
+
+**Decision:** LLM clients launch IceMCPBridge on demand via stdio. Fire does NOT auto-start it as a launch agent.
+
+**Rationale:** This is the standard MCP transport model — every other MCP server works this way. Auto-launching from Fire would create zombie processes when LLM clients exit. Client-managed lifecycle keeps process count predictable.
+
+### Q5 → YES: include `.v1` version marker in XPC service name — with caution
+
+**Decision:** XPC service name is `com.jordanbaird.Fire.MenuBarItemService.v1` (post-rebrand). All MCP-extended Request/Response cases live behind this version.
+
+**Caveat:** Existing layout UI XPC calls (the `sourcePID` path) must NOT break when we add `.v1`. Keep the existing service name running alongside `.v1`, OR migrate both atomically. Pre-rebrand testing must confirm fire.X builds still resolve menu bar items after the rename.
+
+**Rationale:** Future protocol changes (e.g., extending Response with new fields) would silently corrupt old IceMCPBridge binaries without versioning. The cost of adding `.v1` now is one extra string — the cost of skipping it is breaking-change pain later.
+
+### Q6 → Serialize concurrent client requests for MVP — accept conflict as edge case
+
+**Decision:** XPC `sendSync` model stays. If two LLM clients connect at the same time, requests queue. We ignore the rare race condition where two clients try to move the same item simultaneously.
+
+**Rationale:** Edge case. Realistically one user is using one LLM client at a time. Building async XPC + queue management would triple the implementation work for a scenario almost no one hits. Document the limitation, move on.
+
+### Q7 → YES: undo tokens, with auto-expiration (e.g., 1 hour)
+
+**Decision:** Destructive tools (`move_item`, `hide_item`, `show_item`, `apply_layout`) return an `undo_token` field in their response. A separate `undo(token)` tool reverts the operation. **Tokens expire automatically after 1 hour and the undo log is rotated to keep storage bounded** — no infinite scroll of every action ever taken.
+
+**Rationale:** One of the strongest safety nets against LLM mistakes. Cheap to implement (a small ring buffer of last N operations with timestamps). Auto-expiration keeps the storage tiny and avoids the "1GB log of every move I've ever made" problem.
+
+### Q8 → Ignore Mac App Store / sandbox concerns for now
+
+**Decision:** Phase 4.5 ships outside the App Sandbox, same as Fire today. No re-architecture for MAS compatibility.
+
+**Rationale:** Accessibility API access is required for Fire's core value proposition (reading + manipulating menu bar items). App Sandbox blocks Accessibility outside narrowly-defined entitlements that don't cover our use case. MAS distribution is not viable without giving up the core value, so designing around it would be premature optimization.
+
+### Q9 → Full strict tool annotations (`readOnly`, `destructive`, `idempotent`)
+
+**Decision:** Every MCP tool gets complete, accurate annotations. `list_items` → `readOnly`. `move_item` → `destructive` + `idempotent` (moving to same position is no-op). `hide_item`/`show_item` → `destructive` + `idempotent`. `apply_layout` → `destructive`. `save_layout` → `readOnly` from menu bar state, `destructive` to layout storage.
+
+**Rationale:** Annotations are NOT about defensive safety — they're about giving the LLM richer context to reason about side effects. A model that knows `move_item` is idempotent can retry safely; a model that knows `apply_layout` is destructive can ask for confirmation. Ten extra minutes of annotation work pays back every time an LLM makes a smarter call.
+
+---
+
+## 11. Effort Estimate — Revised After Decisions
+
+| Component | Estimate | Notes |
+|---|---|---|
+| Add `modelcontextprotocol/swift-sdk` as Swift Package dependency, IceMCPBridge Xcode target scaffold | **1 hour** (was 3 — SDK does the protocol) | |
+| XPC extension (6 new Request/Response cases + handlers) | 2 hours | |
+| 6 tool implementations | 3 hours | |
+| Undo token mechanism (ring buffer, 1h auto-expire, undo tool) | **+1.5 hours** (new, was 0) | |
+| Tool annotations (readOnly/destructive/idempotent per tool) | **+0.5 hours** | |
+| Auth/consent flow (read-only auto-grant + write notification) | 2 hours (was 3 — simpler granularity) | |
+| Onboarding UI (Advanced settings pane) | 2 hours | |
+| Docs + config snippets | 1 hour | |
+| `.v1` service name migration testing | **+1 hour** (new) | |
+| **Total** | **~14 hours (1.5–2 dev days)** | Net same — Q1 savings absorbed by Q7+Q9 additions |
