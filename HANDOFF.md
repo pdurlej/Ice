@@ -3,15 +3,46 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
-## ✅ SHIPPED — fire.4 signed + notarized (2026-05-25 23:15)
+## ✅ SHIPPED — fire.4 + landing page + community evangelism (2026-05-26)
 
-First fully Developer-ID-signed + Apple-notarized + stapled Fire build is
-live. Download URL:
-`https://github.com/pdurlej/Ice/releases/download/v0.11.13-fire.4/Ice-v0.11.13-fire.4.dmg`
-(4.28 MB, SHA256 `231cbd038fb41242d7a298cdb7d46ac5f0f7c8a05ccef633668a13147a4b0e09`).
+First fully Developer-ID-signed + Apple-notarized + stapled Fire build
+is live: `v0.11.13-fire.4`, SHA256
+`231cbd038fb41242d7a298cdb7d46ac5f0f7c8a05ccef633668a13147a4b0e09`.
 
-Owner installed it (over fire.3) and after `tccutil reset` + re-grant of
-Accessibility the menu bar items load correctly.
+After fire.4 landed, the session continued through several follow-up
+deliverables:
+
+- **README rewrite** as "Fire from Ice" landing page (commit `f58942d`)
+  with all-new branding, removed upstream-pointing links (sponsor, license,
+  download badges), tabela of what-this-fork-fixes (XPC bug + TCC + Node),
+  install/upgrade flow with one-time `tccutil reset`, Sparkle/EdDSA
+  security explanation, bundle ID compat note, Credits & GPL-3.0.
+- **Hero banner image** added (commit `4386279`) — `Resources/Banner.png`
+  generated via DALL-E 3 from a Swarmheart-drafted prompt (ice cube with
+  inner flame, blue-to-ember gradient, 1659x948, 1.6 MB).
+- **Repo metadata** updated via `gh repo edit`: description, homepage URL
+  (now points at our releases/latest, not upstream), issues enabled
+  (was disabled).
+- **Workflow Node deprecation cleanup** (commits `4a1e812` + `3f33c00`):
+  `actions/checkout@v4 → @v6`, `actions/upload-artifact@v4 → @v7`,
+  `softprops/action-gh-release@v1 → @v3`, `--preserve-metadata=
+  entitlements,identifier,flags` added to codesign step. All future
+  CI runs free of Node 20 deprecation warnings.
+- **Sparkle appcast** published (commit `2dd30cc` on `fire-releases`).
+  fire.4 item with EdDSA signature live at
+  `https://pdurlej.github.io/fire-releases/appcast.xml`. Sparkle
+  auto-update path verified.
+- **Upstream Ice community evangelism — 10 comments total** spanning the
+  XPC bug class + the project-abandoned megatreads (see section 3 below).
+  Cumulative audience ~210 thumbs subscribers + everyone who finds these
+  issues via Google.
+- **MCP Phase 4.5 design doc + tracking issue** — `docs/mcp/
+  ARCHITECTURE.md` (commit `86945db`, 569 lines, 9 sections), and
+  [Issue #1](https://github.com/pdurlej/Ice/issues/1) as milestone
+  tracker.
+
+Owner installed fire.4 over fire.3 and confirmed Menu Bar Layout pane
+displays all three sections correctly after one-time `tccutil reset`.
 
 ### Three CI fails before the win — capture so we never repeat them
 
@@ -135,24 +166,41 @@ non-destructive.
   the script's build-number mapping is stale — see "Outstanding
   low-priority issues" above for the planned fix).
 
-### 3. Fire — community engagement (first comment posted, more pending)
+### 3. Fire — community engagement (10 comments live, ~210 thumbs reach)
 
-- ✅ **XPC bug class trifecta posted on upstream Ice** (2026-05-25,
-  combined audience ~80 thumbs + subscribed users):
-  - `#913` → comment id [`4537464216`](https://github.com/jordanbaird/Ice/issues/913#issuecomment-4537464216),
-    full technical writeup. Template at `/tmp/fire-913-comment.md`.
-  - `#744` → comment id [`4537479624`](https://github.com/jordanbaird/Ice/issues/744#issuecomment-4537479624),
-    shorter, explicit "happy to open PR if @jordanbaird wants" offer.
-    Template at `/tmp/fire-744-comment.md`.
-  - `#891` → comment id [`4537479697`](https://github.com/jordanbaird/Ice/issues/891#issuecomment-4537479697),
-    shortest, just connects to siblings. Template at `/tmp/fire-891-comment.md`.
-  - All three cross-link each other — Triangle. Anyone hitting one
-    finds the others and the DMG.
-- Six original drafts at `/tmp/fire-community-comments.md` for `#823,
-  #760, #744, #344, #891, #665`. The #744 and #891 ones are now SUPERSEDED
-  by the live posts above. Remaining four (`#823, #760, #344, #665`)
-  are different bug classes — check those issues are still relevant
-  and write fresh comments before sending.
+**Round 1 — manual hand-crafted (3 comments):**
+- `#913` → [`4537464216`](https://github.com/jordanbaird/Ice/issues/913#issuecomment-4537464216),
+  full technical writeup. Template at `/tmp/fire-913-comment.md`.
+- `#744` → [`4537479624`](https://github.com/jordanbaird/Ice/issues/744#issuecomment-4537479624),
+  shorter + explicit "happy to open PR" offer.
+- `#891` → [`4537479697`](https://github.com/jordanbaird/Ice/issues/891#issuecomment-4537479697),
+  shortest sibling pointer.
+
+**Round 2 — Swarmheart-drafted via document-worker / minimax (7 comments):**
+
+Group A — XPC duplicates (technical, follow Round 1 template):
+- `#846` → [`4537661456`](https://github.com/jordanbaird/Ice/issues/846#issuecomment-4537661456) (27 thumbs)
+- `#818` → [`4537661537`](https://github.com/jordanbaird/Ice/issues/818#issuecomment-4537661537) (7 thumbs)
+- `#832` → [`4537661628`](https://github.com/jordanbaird/Ice/issues/832#issuecomment-4537661628) (5 thumbs)
+- `#872` → [`4537661719`](https://github.com/jordanbaird/Ice/issues/872#issuecomment-4537661719) (8 thumbs, also flagged "broader instability may exist")
+
+Group B — "project abandoned" megatreads (Fire-as-continuation, I-voice):
+- `#823` → [`4537661813`](https://github.com/jordanbaird/Ice/issues/823#issuecomment-4537661813) (**69 thumbs — TOP REACH**), edited from we-voice
+- `#939` → [`4537661900`](https://github.com/jordanbaird/Ice/issues/939#issuecomment-4537661900) (10 thumbs), edited from we-voice
+- `#877` → [`4537661970`](https://github.com/jordanbaird/Ice/issues/877#issuecomment-4537661970) (8 thumbs), edited from we-voice
+
+All comment bodies preserved at `/tmp/fire-comments-final/{ISSUE}.md`.
+GH shows "edited" badge on Group B (3 PATCH operations to flip
+we-voice → I-voice after a Write-must-Read-first race condition
+posted the wrong version first; recovered via `gh api -X PATCH`).
+
+**4 remaining drafts at `/tmp/fire-community-comments.md`** for `#760,
+#344, #665` — different bug classes than the XPC trifecta. Check those
+issues are still relevant + write fresh comments before sending.
+
+**Upstream PR with the XPC fix.** All three Round 1 comments offered to
+open one. No reply from @jordanbaird yet. If silence continues, push
+the branch + open the PR proactively after a respectful wait (~1–2 weeks).
 - **Open upstream PR with the XPC fix.** Commits `f3ee848` + `b32181f`
   on `fire/main` cleanly cherry-pick onto `upstream/macos-26`. The
   posted comment on #913 already explicitly offers this — wait for
@@ -186,6 +234,35 @@ non-destructive.
 - Build cmd that works: `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild build -workspace
   ClaudeBar.xcworkspace -scheme Domain -destination 'platform=macOS' -configuration Debug CODE_SIGNING_ALLOWED=NO`.
   Tuist generate also needs the same `DEVELOPER_DIR` override.
+
+### 7. MCP-friendly Fire — Phase 4.5 flagship (designed, not built)
+
+- **Vision:** Fire exposes a local Model Context Protocol server so AI
+  agents (Claude Code, Codex, Cursor, Continue) can introspect and
+  manage the menu bar programmatically. Positions Fire as the **first
+  AI-native menu bar manager** — no competitor has this.
+- **Architecture doc:** [`docs/mcp/ARCHITECTURE.md`](./docs/mcp/ARCHITECTURE.md)
+  (569 lines, 9 sections — vision, ASCII component diagram, 6 MVP
+  tools with JSON schemas, auth/consent flow, discovery configs,
+  FORK.md roadmap integration, risks, effort estimate, 9 open
+  questions). Drafted via Swarmheart `structural-planner` lane (kimi
+  primary, fell back to glm-5.1).
+- **Tracking issue:** [pdurlej/Ice#1](https://github.com/pdurlej/Ice/issues/1)
+  — first issue on our repo, milestone tracker.
+- **MVP scope:** 6 tools (`list_items`, `move_item`, `hide_item`,
+  `show_item`, `apply_layout`, `save_layout`), separate `IceMCPBridge`
+  Xcode target talking to existing `MenuBarItemService` XPC, Keychain-
+  scoped per-client-binary consent with SHA-256 anti-impersonation.
+  ~14 hours / 1.5–2 dev days.
+- **Phase 4.5 positioning:** must come after rebrand (Phase 4) because
+  the MCP socket path embeds bundle ID; must come before original
+  features (Phase 5) so profile/trigger features can be exposed as MCP
+  tools rather than requiring a separate API surface.
+- **9 open questions** in the architecture doc need operator decisions
+  before MVP implementation starts: MCP SDK choice (native Swift vs
+  Node wrap), layout storage format, consent granularity, lifecycle,
+  bundle ID version markers, concurrent client handling, undo tokens,
+  sandbox compat, tool annotation strictness.
 
 ### 6. AuditLM — Forgejo AI code review (decided, not installed yet)
 
@@ -225,6 +302,26 @@ non-destructive.
   `DEVELOPER_DIR` override on this machine.
 - Owner's session ran from ~21:00 May 24 to ~08:30 May 25 (≈11.5h marathon) before this handoff. If they
   ping in a fresh session they may be tired or jumping back in mid-thought.
+- **Swarmheart routing for drafting tasks** (lessons learned 2026-05-26):
+  - `structural-planner` lane defaults to **kimi-k2.6:cloud** which is a
+    *reasoning model*. With `--max-output-tokens` below ~12000, Kimi
+    spends its budget on chain-of-thought and truncates the actual answer.
+    Pass `--allow-reasoning-budget-cap` AND raise tokens to 12000+ if you
+    really want Kimi.
+  - For multi-section drafting tasks (many comments, many doc sections),
+    the **`document-worker` lane (minimax-m2.7:cloud)** is dramatically
+    more efficient — non-reasoning, hits the structure directly, ~3x less
+    token usage. Used it successfully for the 7-comment batch with only
+    2577 eval_count tokens.
+  - The dispatcher's `--output-file` writes the **full JSON wrapper**,
+    not the model's response. Extract with
+    `jq -r '.spawn_result.response'` to get the clean output.
+  - Sub-bug found in our editing flow: `Write` tool requires `Read`
+    first. If you build files via Python subprocess and then try to
+    `Write` over them, the Write will fail silently AFTER any
+    downstream consumer already used the original file. Posted 3
+    comments with the wrong voice once because of this; recovered via
+    `gh api -X PATCH repos/.../issues/comments/{id} --field body=...`.
 
 ## Style preferences I've observed
 
