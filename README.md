@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="Resources/Icon.png" width=200 height=200 alt="Ice cube app icon">
+    <img src="Resources/Banner.png" alt="Fire from Ice — ice cube with inner flame on a blue-to-ember gradient">
     <h1>Fire from Ice 🔥🧊</h1>
     <p><em>Maintained continuation of <a href="https://github.com/jordanbaird/Ice">jordanbaird/Ice</a> with macOS 26 Tahoe support + signed/notarized DMGs</em></p>
 </div>
