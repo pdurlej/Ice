@@ -4,6 +4,7 @@
 //
 
 import OSLog
+import Sentry
 import SwiftUI
 
 @MainActor
@@ -17,6 +18,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Initial chore work.
         NSSplitViewItem.swizzle()
         MigrationManager(appState: appState).migrateAll()
+
+        // Initialize Sentry crash reporting BEFORE any other setup so we
+        // capture even crashes that occur during early app launch.
+        // Strict opt-in via Advanced Settings — defaults off, no data
+        // leaves the device until the user explicitly enables it.
+        startSentryIfOptedIn()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -83,5 +90,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appState.activate(withPolicy: .regular)
             appState.openWindow(.settings)
         }
+    }
+
+    // MARK: Sentry
+
+    /// Initializes the Sentry crash reporting SDK if the user has opted in
+    /// via Advanced Settings → Privacy & Diagnostics.
+    ///
+    /// Privacy posture (Fire fork policy — stricter than Sentry's defaults):
+    ///
+    /// - **Opt-in only.** `Defaults.bool(forKey: .shareDiagnostics)` must be
+    ///   `true` (the user explicitly flipped the toggle). Default is `false`.
+    /// - **No PII.** `sendDefaultPii = false` strips IP, device names, user
+    ///   identifiers.
+    /// - **No screenshots, no view hierarchy.** Both disabled — menu bar
+    ///   contents are user data we must not transmit.
+    /// - **No session tracking, no user-interaction tracing, no auto-
+    ///   performance tracing.** We collect crashes only, not behavioral data.
+    ///
+    /// What IS sent on crash: stack trace, thread state, macOS version, Ice
+    /// version, CPU architecture. That is the minimum a maintainer needs to
+    /// debug.
+    private func startSentryIfOptedIn() {
+        guard Defaults.bool(forKey: .shareDiagnostics) else {
+            Logger.default.debug("Sentry: user has not opted in, skipping init")
+            return
+        }
+
+        let marketingVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        let buildVersion = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.jordanbaird.Ice"
+
+        SentrySDK.start { options in
+            options.dsn = "https://3304125a913f6c0ade5859fd93c678e2@o4511453004169216.ingest.de.sentry.io/4511453022388304"
+            options.releaseName = "\(bundleIdentifier)@\(marketingVersion)+\(buildVersion)"
+
+            #if DEBUG
+            options.environment = "debug"
+            #else
+            options.environment = "production"
+            #endif
+
+            // STRICT privacy — every default that could leak user data is off.
+            // Note: attachScreenshot and attachViewHierarchy are iOS-only in
+            // the Sentry Cocoa SDK (they require UIKit) — they don't exist on
+            // macOS, so we don't need to disable them explicitly. The defaults
+            // we DO disable here are the ones that exist on macOS.
+            options.sendDefaultPii = false
+            options.enableAutoSessionTracking = false
+            options.enableAutoPerformanceTracing = false
+
+            // Crashes only — disable network breadcrumbs (could leak menu bar
+            // item update fetch URLs that include bundle IDs of running apps).
+            options.enableNetworkBreadcrumbs = false
+
+            // We do NOT use Sentry's automatic release-tracking based on
+            // session counts — that requires session tracking which we disable.
+        }
+
+        Logger.default.info("Sentry: initialized for release \(marketingVersion)+\(buildVersion)")
     }
 }

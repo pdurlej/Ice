@@ -144,6 +144,7 @@
 				17F71BB42B880B4500905CBA /* CompactSlider */,
 				7127A9FE2C4886D100D99DEF /* IfritStatic */,
 				71A065082E680C620087DB38 /* Semaphore */,
+				108CD334ED0A4341B1D2AC87 /* Sentry */,
 			);
 			productName = Ice;
 			productReference = 7166832A2A767E6A006ABF84 /* Ice.app */;
@@ -207,6 +208,7 @@
 				17F71BB32B880B4500905CBA /* XCRemoteSwiftPackageReference "CompactSlider" */,
 				7127A9FB2C4881BC00D99DEF /* XCRemoteSwiftPackageReference "Ifrit" */,
 				71A065072E680C620087DB38 /* XCRemoteSwiftPackageReference "Semaphore" */,
+				6F35D2302FC50E8A0021FDEA /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 			);
 			productRefGroup = 7166832B2A767E6A006ABF84 /* Products */;
 			projectDirPath = "";
@@ -590,6 +592,14 @@
 				minimumVersion = 1.1.5;
 			};
 		};
+		6F35D2302FC50E8A0021FDEA /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.14.0;
+			};
+		};
 		7127A9FB2C4881BC00D99DEF /* XCRemoteSwiftPackageReference "Ifrit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/ukushu/Ifrit";
@@ -643,6 +653,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 71A065072E680C620087DB38 /* XCRemoteSwiftPackageReference "Semaphore" */;
 			productName = Semaphore;
+		};
+		108CD334ED0A4341B1D2AC87 /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6F35D2302FC50E8A0021FDEA /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

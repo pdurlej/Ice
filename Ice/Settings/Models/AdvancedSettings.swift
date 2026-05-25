@@ -36,6 +36,20 @@ final class AdvancedSettings: ObservableObject {
     /// Time interval to temporarily show items for.
     @Published var tempShowInterval: TimeInterval = 15
 
+    /// A Boolean value that indicates whether the user has opted into
+    /// sharing anonymous crash reports with the Fire fork maintainer.
+    ///
+    /// When `true`, the Sentry SDK is initialized at app launch and
+    /// captures crashes (stack trace + thread state + macOS version
+    /// + Ice version only — no PII, no menu bar item contents, no
+    /// screenshots, no user interactions). When `false` (the default),
+    /// Sentry is never initialized and nothing leaves the device.
+    ///
+    /// This is a Fire-fork-specific addition; upstream Ice has no
+    /// crash reporting at all because it predates the maintainer's
+    /// Apple Developer Program enrollment.
+    @Published var shareDiagnostics = false
+
     /// Storage for internal observers.
     private var cancellables = Set<AnyCancellable>()
 
@@ -57,6 +71,7 @@ final class AdvancedSettings: ObservableObject {
         Defaults.ifPresent(key: .enableSecondaryContextMenu, assign: &enableSecondaryContextMenu)
         Defaults.ifPresent(key: .showOnHoverDelay, assign: &showOnHoverDelay)
         Defaults.ifPresent(key: .tempShowInterval, assign: &tempShowInterval)
+        Defaults.ifPresent(key: .shareDiagnostics, assign: &shareDiagnostics)
 
         Defaults.ifPresent(key: .sectionDividerStyle) { rawValue in
             if let style = SectionDividerStyle(rawValue: rawValue) {
@@ -115,6 +130,13 @@ final class AdvancedSettings: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { interval in
                 Defaults.set(interval, forKey: .tempShowInterval)
+            }
+            .store(in: &c)
+
+        $shareDiagnostics
+            .receive(on: DispatchQueue.main)
+            .sink { share in
+                Defaults.set(share, forKey: .shareDiagnostics)
             }
             .store(in: &c)
 

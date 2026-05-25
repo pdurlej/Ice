@@ -162,6 +162,7 @@ extension Defaults {
         case enableSecondaryContextMenu = "EnableSecondaryContextMenu"
         case showOnHoverDelay = "ShowOnHoverDelay"
         case tempShowInterval = "TempShowInterval"
+        case shareDiagnostics = "ShareDiagnostics"
 
         // MARK: Appearance Settings
         case menuBarAppearanceConfigurationV2 = "MenuBarAppearanceConfigurationV2"

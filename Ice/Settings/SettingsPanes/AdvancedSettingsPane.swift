@@ -39,6 +39,29 @@ struct AdvancedSettingsPane: View {
             IceSection("Permissions") {
                 allPermissions
             }
+            IceSection("Privacy & Diagnostics") {
+                shareDiagnostics
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var shareDiagnostics: some View {
+        Toggle(
+            "Share anonymous crash reports with the Fire fork maintainer",
+            isOn: $settings.shareDiagnostics
+        )
+        .annotation {
+            Text(
+                """
+                When enabled, sends crash reports (stack trace + thread state + \
+                macOS version + Ice version) to the Fire fork maintainer via Sentry. \
+                Never sends your hostname, IP address, menu bar item contents, \
+                screenshots, or any usage telemetry. Takes effect after the next \
+                app launch. Default: off.
+                """
+            )
+            .padding(.trailing, 75)
         }
     }
 

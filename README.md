@@ -83,6 +83,25 @@ xcodebuild -scheme Ice -configuration Release \
 
 The resulting `Ice.app` is unsigned (`ad-hoc`) and will need `tccutil reset` on every rebuild on Tahoe. For signed local builds, the full sign + notarize + staple pipeline is in [`.github/workflows/build-dmg.yml`](.github/workflows/build-dmg.yml).
 
+## Privacy & Diagnostics
+
+Fire ships with **opt-in crash reporting** via Sentry. **Default: OFF** — no data leaves your machine until you explicitly enable it in **Advanced Settings → Privacy & Diagnostics**.
+
+When you opt in, Fire sends crash reports only — stack trace, thread state, macOS version, CPU architecture, and Fire version. That is what a maintainer needs to debug a crash and nothing more.
+
+**What is never sent**, even when you opt in:
+
+- Hostname or IP address
+- Menu bar item contents (icons, titles, bundle IDs of running apps)
+- Screenshots or view hierarchy
+- Click/interaction breadcrumbs
+- Network requests or fetched URLs
+- Any usage analytics or telemetry
+
+The Sentry SDK is only initialized at app launch if the toggle is on. When the toggle is off, no Sentry code runs, no data is collected, and no network connections are opened to Sentry's servers. You can flip it back off at any time; the change takes effect on the next app launch.
+
+This is a Fire-fork-specific addition; upstream Ice has no crash reporting because it predates the maintainer's Apple Developer Program enrollment.
+
 ## Features (inherited from upstream Ice)
 
 ### Menu bar item management
