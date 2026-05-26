@@ -3,6 +3,48 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🔥🔥🔥 SHIPPED fire.8 - write ops live (2026-05-26 ~22:01)
+
+**Tagged `v0.11.13-fire.8`** (build 1131). CI built + signed + notarized
+in 4m34s — DMG at https://github.com/pdurlej/Ice/releases/tag/v0.11.13-fire.8.
+Sparkle appcast updated (`pdurlej/fire-releases` commit `22aa494`),
+fire.7.1 users will get the fire.8 auto-update prompt.
+
+**What fire.8 ships:**
+- First fire build where AI assistants can actually **rearrange** the
+  menu bar, not just read it. `move_item`, `hide_item`, `show_item`,
+  `apply_layout` now post real synthetic ⌘-drag events that move items
+  between sections.
+- New `MCPBackend.xpc` service runs alongside `MenuBarItemService.xpc`.
+  Bridge connects to the new service; old one stays in the bundle for
+  the Ice-internal sourcePID handshake.
+- `Mover.swift` (~530 lines, lean port of upstream Ice's
+  MenuBarItemManager.move / postMoveEvents / scrombleEvent pipeline)
+  is the new write-op engine. Three-EventTap synchronization dance
+  same as upstream, minus the HIDEventManager coordination (no taps to
+  suspend in this process) and cursor warping.
+- `SourcePIDCache` promoted to `Shared/` so both .xpc services resolve
+  the macOS 26 Control Center reparenting correctly.
+
+**Smoke test status**: bridge + XPC + listItems verified via afternoon
+ad-hoc-signed Debug install. Move logic itself not yet end-to-end
+tested — TCC blocks AX permission inheritance on ad-hoc-signed
+re-installs. NOW that fire.8 is shipped under the same Developer ID
+identity as fire.7.1, installing the signed DMG over fire.7.1 should
+give MCPBackend.xpc full AX inheritance and unblock real move tests.
+The Mover.swift code is a faithful port of upstream Ice's logic that
+has shipped working in Ice for years, so confidence is reasonable.
+
+**Remaining post-ship work** (not blocking, can land as fire.8.x):
+- W5: ship 3 starter presets (Focus / Meeting / Default) seeded on
+  first launch via MigrationManager. ~1h.
+- W6: SwiftUI "Layouts" subpane in Settings — browse / rename / delete /
+  apply / hotkey assignment for layouts. ~2-3h.
+- Cross-MCP demo screencast: Fantastical event → AI agent calls
+  fire's `apply_layout` → menu bar visibly reorganizes. ~30 min to
+  record once a Fantastical MCP is in place. Headline content for the
+  AI-native positioning.
+
 ## 🔥 SHIPPED fire.7.1 + fire.8 W1+W2+W3 on branch (2026-05-26 ~18:00)
 
 This afternoon session shipped fire.7.1 (after recovering from GitHub
