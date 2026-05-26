@@ -1,13 +1,23 @@
 <div align="center">
-    <img src="Resources/Banner.png" alt="Fire from Ice — ice cube with inner flame on a blue-to-ember gradient">
+    <img src="Resources/Banner.png" alt="Fire from Ice - ice cube with inner flame on a blue-to-ember gradient">
     <h1>Fire from Ice 🔥🧊</h1>
-    <p><em>Maintained continuation of <a href="https://github.com/jordanbaird/Ice">jordanbaird/Ice</a> with macOS 26 Tahoe support + signed/notarized DMGs</em></p>
+    <p><em>AI-native maintained fork of <a href="https://github.com/jordanbaird/Ice">jordanbaird/Ice</a> - macOS 26 Tahoe support, signed/notarized DMGs, and an embedded MCP server so AI assistants can read your menu bar</em></p>
 </div>
 
 > [!IMPORTANT]
-> Upstream Ice received its last code commit on **2025-06-06** and its last stable release (`0.11.12`) predates macOS Sequoia and Tahoe. Multiple Tahoe-only bugs are reported but unaddressed upstream — most visibly the **menu bar items not loading** regression (upstream issues [#744](https://github.com/jordanbaird/Ice/issues/744), [#891](https://github.com/jordanbaird/Ice/issues/891), [#913](https://github.com/jordanbaird/Ice/issues/913); ~80 reactions combined). This fork ships those fixes as proper signed, notarized DMG releases.
+> Upstream Ice received its last code commit on **2025-06-06** and its last stable release (`0.11.12`) predates macOS Sequoia and Tahoe. Multiple Tahoe-only bugs are reported but unaddressed upstream - most visibly the **menu bar items not loading** regression (upstream issues [#744](https://github.com/jordanbaird/Ice/issues/744), [#891](https://github.com/jordanbaird/Ice/issues/891), [#913](https://github.com/jordanbaird/Ice/issues/913); ~80 reactions combined). This fork ships those fixes as proper signed, notarized DMG releases.
 >
 > If you're on macOS 26 Tahoe and upstream Ice's Menu Bar Layout pane is empty for you, this fork fixes it.
+
+## Fire vs Thaw vs upstream Ice
+
+Multiple maintained forks of Ice exist - that's healthy for the ecosystem.
+
+- **[stonerl/Thaw](https://github.com/stonerl/Thaw)** is the established maintenance fork. 6,000+ stars, active release cadence, pure focus on Tahoe stability. **Pick Thaw** if you want a drop-in replacement with no AI surface area.
+- **Fire (this repo)** is an *AI-native* fork. The differentiator is the embedded MCP server (Model Context Protocol) - AI assistants like Claude, Cursor, and Codex can read and (in fire.7+) modify your menu bar layout. **Pick Fire** if you want to experiment with AI-assisted menu bar management.
+- **upstream [jordanbaird/Ice](https://github.com/jordanbaird/Ice)** remains the canonical project - both Thaw and Fire honor that. Bugs found in either fork that exist upstream should be filed upstream first.
+
+Fire is maintained by a non-developer running product / vision, with Claude (Anthropic's AI) as the implementation collaborator. That's the experiment - keeping useful software alive when the maintainer cohort isn't there to write the code by hand.
 
 Ice is a powerful menu bar management tool for macOS. While its primary function is hiding and showing menu bar items, it covers many additional features that make it one of the most versatile menu bar tools available.
 
@@ -22,9 +32,9 @@ Ice is a powerful menu bar management tool for macOS. While its primary function
 
 | Symptom | Upstream issue | Fixed in |
 |---|---|---|
-| Menu Bar Layout pane shows empty rows on macOS 26 | [#744](https://github.com/jordanbaird/Ice/issues/744), [#891](https://github.com/jordanbaird/Ice/issues/891), [#913](https://github.com/jordanbaird/Ice/issues/913) | `fire.2` + `fire.3` — `MenuBarItemService` XPC peer-requirement guard |
-| TCC permissions reset on every new ad-hoc build | n/a (Apple Developer Program required) | `fire.4` — Developer ID signed + Apple-notarized DMG |
-| `Node.js 20` deprecation warnings in CI | n/a | `fire.4` workflow — bumped all actions to Node 24 majors |
+| Menu Bar Layout pane shows empty rows on macOS 26 | [#744](https://github.com/jordanbaird/Ice/issues/744), [#891](https://github.com/jordanbaird/Ice/issues/891), [#913](https://github.com/jordanbaird/Ice/issues/913) | `fire.2` + `fire.3` - `MenuBarItemService` XPC peer-requirement guard |
+| TCC permissions reset on every new ad-hoc build | n/a (Apple Developer Program required) | `fire.4` - Developer ID signed + Apple-notarized DMG |
+| `Node.js 20` deprecation warnings in CI | n/a | `fire.4` workflow - bumped all actions to Node 24 majors |
 
 ## Install
 
@@ -32,7 +42,7 @@ Ice is a powerful menu bar management tool for macOS. While its primary function
 
 1. Grab the latest `Ice-v0.11.13-fire.X.dmg` from [Releases](https://github.com/pdurlej/Ice/releases/latest).
 2. Open the DMG. Drag **Ice.app** to your `Applications` folder.
-3. Launch from `/Applications`. On first run, macOS may prompt for **Accessibility** and **Screen Recording** — grant both.
+3. Launch from `/Applications`. On first run, macOS may prompt for **Accessibility** and **Screen Recording** - grant both.
 
 The DMG is **signed** with `Developer ID Application: Piotr Durlej (R47JTHX25P)` and **stapled** with an offline notarization ticket. First launch works without an internet round-trip; Gatekeeper accepts on macOS 14 (Sonoma) and later, including Tahoe 26.x.
 
@@ -48,7 +58,7 @@ spctl -avv --type install Ice-v0.11.13-fire.4.dmg
 
 ### Upgrading from upstream Ice, or from any Fire ad-hoc build (fire.0/.1/.2/.3)
 
-**One-time** TCC reset is needed after the first install of a signed Fire build over any ad-hoc-signed predecessor — the cryptographic signature anchor changes, so existing TCC grants silently fail to match:
+**One-time** TCC reset is needed after the first install of a signed Fire build over any ad-hoc-signed predecessor - the cryptographic signature anchor changes, so existing TCC grants silently fail to match:
 
 ```sh
 tccutil reset All com.jordanbaird.Ice
@@ -58,13 +68,13 @@ open /Applications/Ice.app
 # then re-grant Accessibility (and Screen Recording if used) in System Settings
 ```
 
-All subsequent Fire updates (`fire.5+`, signed under the same Team ID) preserve permissions automatically — no further reset needed.
+All subsequent Fire updates (`fire.5+`, signed under the same Team ID) preserve permissions automatically - no further reset needed.
 
 ## Auto-updates (Sparkle)
 
 Fire ships with **Sparkle 2.9.2** wired to a custom appcast at <https://pdurlej.github.io/fire-releases/appcast.xml>. After installing Ice, **Check for Updates** (Ice menu → Check for Updates) will auto-discover new Fire releases.
 
-The appcast is signed with **EdDSA** — the public key is embedded in the app's `Info.plist` (`SUPublicEDKey`), and the matching private key lives only in the maintainer's macOS Keychain. A network attacker who tampers with the GitHub Pages feed cannot inject a malicious update.
+The appcast is signed with **EdDSA** - the public key is embedded in the app's `Info.plist` (`SUPublicEDKey`), and the matching private key lives only in the maintainer's macOS Keychain. A network attacker who tampers with the GitHub Pages feed cannot inject a malicious update.
 
 ## Bundle ID & upstream compatibility
 
@@ -85,13 +95,15 @@ The resulting `Ice.app` is unsigned (`ad-hoc`) and will need `tccutil reset` on 
 
 ## MCP Server
 
-Fire ships an embedded MCP server so you can ask an AI assistant to manage your menu bar. Wire Claude Desktop, Claude Code, Cursor, or Continue to `/Applications/Ice.app/Contents/MacOS/IceMCPBridge` and the 6 tools (`list_items`, `hide_item`, `show_item`, `move_item`, `save_layout`, `apply_layout`) become available. See [docs/mcp/CLIENT-SETUP.md](docs/mcp/CLIENT-SETUP.md) for setup.
+Fire ships an embedded MCP server so you can ask an AI assistant to manage your menu bar. Wire Claude Desktop, Claude Code, Cursor, or Codex to `/Applications/Ice.app/Contents/MacOS/IceMCPBridge` and the 6 tools (`list_items`, `hide_item`, `show_item`, `move_item`, `save_layout`, `apply_layout`) become available. See [docs/mcp/CLIENT-SETUP.md](docs/mcp/CLIENT-SETUP.md) for setup.
+
+**fire.6 status:** `list_items` and `save_layout` ship working - the LLM can inspect your current layout and persist named snapshots. The four write operations (`move_item`, `hide_item`, `show_item`, `apply_layout`) currently return "Coming in fire.7" - they require a cross-process architectural change that's planned for the next release.
 
 ## Privacy & Diagnostics
 
-Fire ships with **opt-in crash reporting** via Sentry. **Default: OFF** — no data leaves your machine until you explicitly enable it in **Advanced Settings → Privacy & Diagnostics**.
+Fire ships with **opt-in crash reporting** via Sentry. **Default: OFF** - no data leaves your machine until you explicitly enable it in **Advanced Settings → Privacy & Diagnostics**.
 
-When you opt in, Fire sends crash reports only — stack trace, thread state, macOS version, CPU architecture, and Fire version. That is what a maintainer needs to debug a crash and nothing more.
+When you opt in, Fire sends crash reports only - stack trace, thread state, macOS version, CPU architecture, and Fire version. That is what a maintainer needs to debug a crash and nothing more.
 
 **What is never sent**, even when you opt in:
 
@@ -147,10 +159,10 @@ See [ROADMAP.md](ROADMAP.md) for fork-specific planned features (profiles, trigg
 
 ## Credits
 
-- **Original Ice** by [Jordan Baird](https://github.com/jordanbaird) — every line of upstream code remains his copyright under GPL-3.0.
+- **Original Ice** by [Jordan Baird](https://github.com/jordanbaird) - every line of upstream code remains his copyright under GPL-3.0.
 - **Fire fork** maintained by [Piotr Durlej](https://github.com/pdurlej). Fork-specific changes are also GPL-3.0.
-- The fork is **independent and unofficial** — please do not file fork-specific issues on the upstream tracker.
+- The fork is **independent and unofficial** - please do not file fork-specific issues on the upstream tracker.
 
 ## License
 
-[GPL-3.0](LICENSE) — unchanged from upstream.
+[GPL-3.0](LICENSE) - unchanged from upstream.

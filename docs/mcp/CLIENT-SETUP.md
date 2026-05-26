@@ -1,6 +1,6 @@
 # Connecting MCP clients to Fire
 
-Fire exposes a Model Context Protocol (MCP) server so AI assistants can read and modify your menu bar layout via tool calls. The bridge binary ships embedded in Ice.app at `/Applications/Ice.app/Contents/MacOS/IceMCPBridge`. Your MCP client launches it directly via stdio — no daemon or background process to manage.
+Fire exposes a Model Context Protocol (MCP) server so AI assistants can read and modify your menu bar layout via tool calls. The bridge binary ships embedded in Ice.app at `/Applications/Ice.app/Contents/MacOS/IceMCPBridge`. Your MCP client launches it directly via stdio - no daemon or background process to manage.
 
 ## Prerequisites
 
@@ -51,33 +51,30 @@ Edit `~/.cursor/mcp.json` for a global install, or `.cursor/mcp.json` in your pr
 
 Restart Cursor. See [Cursor's MCP docs](https://cursor.com/docs/context/mcp) for additional options (env vars, per-workspace overrides).
 
-## Continue
+## Codex (OpenAI Codex CLI)
 
-Continue uses YAML. Create `.continue/mcpServers/fire.yaml` in your workspace, or add a `mcpServers:` block to `.continue/config.yaml`:
+Codex uses TOML. Add to `~/.codex/config.toml`:
 
-```yaml
-mcpServers:
-  - name: fire
-    type: stdio
-    command: /Applications/Ice.app/Contents/MacOS/IceMCPBridge
-    args:
-      - --stdio
+```toml
+[mcp_servers.fire]
+command = "/Applications/Ice.app/Contents/MacOS/IceMCPBridge"
+args = ["--stdio"]
 ```
 
-Reload the Continue extension. See [Continue's MCP docs](https://docs.continue.dev/customize/deep-dives/mcp) for additional options.
+Restart Codex. See [Codex's MCP docs](https://github.com/openai/codex/blob/main/docs/config.md#mcp_servers) for additional options (env vars, transport types).
 
 ## Available tools
 
-- `list_items` — read-only — list menu bar items, optionally filtered by section (`alwaysVisible` / `hidden` / `alwaysHidden`)
-- `hide_item` — write — move an item to the hidden section by bundle ID
-- `show_item` — write — move an item to the alwaysVisible section by bundle ID
-- `move_item` — write — move an item to any section at an optional position
-- `save_layout` — write — snapshot the current layout under a name
-- `apply_layout` — write — restore a previously saved layout
+- `list_items` - read-only - list menu bar items, optionally filtered by section (`alwaysVisible` / `hidden` / `alwaysHidden`)
+- `hide_item` - write - move an item to the hidden section by bundle ID
+- `show_item` - write - move an item to the alwaysVisible section by bundle ID
+- `move_item` - write - move an item to any section at an optional position
+- `save_layout` - write - snapshot the current layout under a name
+- `apply_layout` - write - restore a previously saved layout
 
 ## Privacy
 
-Fire processes all MCP requests locally. No menu bar state, bundle IDs, or layout data leaves your machine via Fire. Your MCP client may send tool call args (e.g., bundle ID strings) to its model provider as part of its normal operation — read your client's privacy docs for details.
+Fire processes all MCP requests locally. No menu bar state, bundle IDs, or layout data leaves your machine via Fire. Your MCP client may send tool call args (e.g., bundle ID strings) to its model provider as part of its normal operation - read your client's privacy docs for details.
 
 ## Troubleshooting
 
