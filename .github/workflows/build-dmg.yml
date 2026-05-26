@@ -20,13 +20,26 @@ jobs:
 
       - name: Set up Xcode
         # Skip maxim-lobanov/setup-xcode action - codeload.github.com
-        # had a partial outage during fire.7.1 ship that intermittently
-        # blocked action archive downloads. Runner images come with
-        # multiple Xcode versions preinstalled at /Applications/Xcode*.app
-        # with /Applications/Xcode.app symlinked to the latest stable.
-        # Just xcode-select to that directly.
+        # had a partial outage during the first fire.7.1 ship attempt
+        # that intermittently blocked action archive downloads. Runner
+        # images come with multiple Xcode versions preinstalled at
+        # /Applications/Xcode_*.app — pick the highest Xcode 26.x because
+        # that's the one with the macOS 26 SDK we actually need.
+        # XPCListener(service:requirement:) is a macOS 26-only API, so
+        # MacOSX26.* SDK is mandatory. /Applications/Xcode.app symlinks
+        # to Xcode_16.x on current runner images (ships MacOSX15.5.sdk),
+        # which is why the first xcode-select-only attempt died with
+        # "extra arguments at positions #2, #3" inside the @available
+        # macOS 26 guard.
         run: |
-          sudo xcode-select -s /Applications/Xcode.app
+          XCODE_PATH=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE_PATH" ]; then
+            echo "ERROR: no Xcode 26.x installed on runner" >&2
+            ls -d /Applications/Xcode*.app >&2 2>&1
+            exit 1
+          fi
+          echo "Using $XCODE_PATH"
+          sudo xcode-select -s "$XCODE_PATH"
           xcodebuild -version
 
       - name: Import Code-Signing Certificate
