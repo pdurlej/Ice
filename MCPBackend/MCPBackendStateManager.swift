@@ -123,13 +123,16 @@ final class MCPBackendStateManager {
         section: MenuBarItemService.ItemSection,
         position: Int
     ) -> MenuBarItemService.ItemInfo {
-        // Note: no SourcePIDCache here (it lives in MenuBarItemService.xpc).
-        // ownerPID is the macOS-25-and-older window owner; on macOS 26
-        // Control Center reparents most items so ownerPID may all be
-        // Control Center's PID. bundleID then ends up as
-        // "com.apple.controlcenter" for everything. Not ideal but
-        // honest - W2 decides whether to share SourcePIDCache.
-        let app = NSRunningApplication(processIdentifier: window.ownerPID)
+        // Smoke test discovered the bundleIDs collapsed to
+        // com.apple.controlcenter for every item on macOS 26 — that's
+        // because ownerPID gets reparented to Control Center by the
+        // system. Resolve the source PID via the AX cache (same
+        // mechanism MenuBarItemService.xpc uses for the sourcePID
+        // XPC handshake; promoted to Shared/ so both .xpc services
+        // share the logic, though each process keeps its own cache).
+        let sourcePID = SourcePIDCache.shared.pid(for: window)
+        let resolvedPID = sourcePID ?? window.ownerPID
+        let app = NSRunningApplication(processIdentifier: resolvedPID)
         let bundleID = app?.bundleIdentifier ?? window.ownerName ?? "unknown"
         let displayName = app?.localizedName ?? window.title ?? window.ownerName
 
@@ -289,16 +292,28 @@ final class MCPBackendStateManager {
     /// Finds the menu bar window whose owning or source app has the
     /// given bundle ID. Skips Ice's own control items (which all share
     /// the Ice bundle ID and would confuse a "hide Ice" request).
+    /// Checks both ownerPID (pre-macOS 26 / non-Control-Center items)
+    /// and sourcePID via SourcePIDCache (macOS 26 Control Center
+    /// reparented items).
     private func findWindow(
         for bundleID: String, in windows: [WindowInfo]
     ) -> WindowInfo? {
         guard bundleID != Self.iceBundleID else {
-            // Ice's own control items aren't moveable by the user.
             return nil
         }
         return windows.first { window in
-            let app = NSRunningApplication(processIdentifier: window.ownerPID)
-            return app?.bundleIdentifier == bundleID
+            // Try ownerPID first (cheap).
+            if let owner = NSRunningApplication(processIdentifier: window.ownerPID),
+               owner.bundleIdentifier == bundleID {
+                return true
+            }
+            // Fall back to sourcePID (AX scan).
+            if let sourcePID = SourcePIDCache.shared.pid(for: window),
+               let source = NSRunningApplication(processIdentifier: sourcePID),
+               source.bundleIdentifier == bundleID {
+                return true
+            }
+            return false
         }
     }
 
@@ -332,20 +347,20 @@ final class MCPBackendStateManager {
         return nil
     }
 
-    /// Builds a Mover.MoveItem snapshot from a WindowInfo. No
-    /// SourcePIDCache available in MCPBackend, so sourcePID is always
-    /// nil (Mover falls back to ownerPID for event targeting). The
-    /// isBentoBox heuristic just checks for Control Center ownership
-    /// to bump the move timeout - good enough for W2.
+    /// Builds a Mover.MoveItem snapshot from a WindowInfo. Resolves
+    /// sourcePID via SourcePIDCache so Mover can target the original
+    /// creating process (Control Center on macOS 26) rather than the
+    /// reparented owner.
     private func makeMoveItem(
         window: WindowInfo, displayName: String
     ) -> Mover.MoveItem {
-        let app = NSRunningApplication(processIdentifier: window.ownerPID)
-        let isBento = app?.bundleIdentifier == "com.apple.controlcenter"
+        let sourcePID = SourcePIDCache.shared.pid(for: window)
+        let ownerApp = NSRunningApplication(processIdentifier: window.ownerPID)
+        let isBento = ownerApp?.bundleIdentifier == "com.apple.controlcenter"
         return Mover.MoveItem(
             windowID: window.windowID,
             ownerPID: window.ownerPID,
-            sourcePID: nil,
+            sourcePID: sourcePID,
             bounds: window.bounds,
             isBentoBox: isBento,
             displayName: displayName
