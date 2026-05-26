@@ -472,7 +472,13 @@ private func encode(
 /// NSXPCConnection plumbing, which Wave 2 does not implement.
 @available(macOS 26.0, *)
 func run() async throws {
-    let serviceName = MenuBarItemService.name
+    // fire.8 re-target: connect to MCPBackend.xpc instead of
+    // MenuBarItemService.xpc. Both services implement the same wire
+    // contract (Shared/Services/MenuBarItemService.swift Request/Response
+    // enums), but MCPBackend owns the write-op pipeline carved out in
+    // W2. MenuBarItemService.xpc stays in the bundle for the legacy
+    // sourcePID handshake from the Ice main app.
+    let serviceName = "com.jordanbaird.Ice.MCPBackend"
     let supportedSections = MenuBarItemService.ItemSection.allCases.map(\.rawValue).joined(separator: ", ")
 
     log.info("IceMCPBridge starting (xpc=\(serviceName, privacy: .public), sections=\(supportedSections, privacy: .public))")
