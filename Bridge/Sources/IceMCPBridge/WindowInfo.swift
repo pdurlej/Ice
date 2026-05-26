@@ -1,0 +1,1 @@
+../../../Shared/Utilities/WindowInfo.swift

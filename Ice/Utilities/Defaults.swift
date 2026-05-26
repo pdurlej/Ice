@@ -163,6 +163,9 @@ extension Defaults {
         case showOnHoverDelay = "ShowOnHoverDelay"
         case tempShowInterval = "TempShowInterval"
         case shareDiagnostics = "ShareDiagnostics"
+        case mcpServerEnabled = "MCPServerEnabled"
+        case mcpAllowWrites = "MCPAllowWrites"
+        case mcpNotifyOnWrite = "MCPNotifyOnWrite"
 
         // MARK: Appearance Settings
         case menuBarAppearanceConfigurationV2 = "MenuBarAppearanceConfigurationV2"

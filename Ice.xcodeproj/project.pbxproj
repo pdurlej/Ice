@@ -11,6 +11,7 @@
 		175061912B1543DD003144CD /* LaunchAtLogin in Frameworks */ = {isa = PBXBuildFile; productRef = 175061902B1543DD003144CD /* LaunchAtLogin */; };
 		1787C4272B16890B002F50DF /* AXSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 1787C4262B16890B002F50DF /* AXSwift */; };
 		17F71BB52B880B4500905CBA /* CompactSlider in Frameworks */ = {isa = PBXBuildFile; productRef = 17F71BB42B880B4500905CBA /* CompactSlider */; };
+		6F35D45D2FC5110A0021FDEA /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 108CD334ED0A4341B1D2AC87 /* Sentry */; };
 		7127A9FF2C4886D100D99DEF /* IfritStatic in Frameworks */ = {isa = PBXBuildFile; productRef = 7127A9FE2C4886D100D99DEF /* IfritStatic */; };
 		7168EE532E281CBC00FF9830 /* AXSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7168EE522E281CBC00FF9830 /* AXSwift */; };
 		7188A68C2E27F9ED008F131D /* MenuBarItemService.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = 7188A6832E27F9ED008F131D /* MenuBarItemService.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -75,6 +76,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6F35D45D2FC5110A0021FDEA /* Sentry in Frameworks */,
 				170423D92B56DE78004A2549 /* Sparkle in Frameworks */,
 				7127A9FF2C4886D100D99DEF /* IfritStatic in Frameworks */,
 				175061912B1543DD003144CD /* LaunchAtLogin in Frameworks */,
@@ -126,6 +128,7 @@
 				716683282A767E6A006ABF84 /* Resources */,
 				1720D48F2BB9B60500A7AC63 /* SwiftLint */,
 				7188A68D2E27F9ED008F131D /* Embed XPC Services */,
+				7188D0012E580C000087DB38 /* Build and Embed IceMCPBridge */,
 			);
 			buildRules = (
 			);
@@ -181,7 +184,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2600;
+				LastSwiftUpdateCheck = 2650;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					716683292A767E6A006ABF84 = {
@@ -257,6 +260,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "if [[ \"$(uname -m)\" == arm64 ]]; then\n    export PATH=\"/opt/homebrew/bin:$PATH\"\nfi\n\nif which swiftlint > /dev/null; then\n  swiftlint\nelse\n  echo \"warning: SwiftLint not installed, download from https://github.com/realm/SwiftLint\"\nfi\n";
+		};
+		7188D0012E580C000087DB38 /* Build and Embed IceMCPBridge */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build and Embed IceMCPBridge";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/IceMCPBridge",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e\n\n# Builds IceMCPBridge as a SwiftPM executable (vanilla swift build —\n# Xcode 26's SwiftPM bridge cannot resolve swift-nio transitive deps\n# for tool targets, see Bridge/Package.swift header) and embeds the\n# binary into Ice.app/Contents/MacOS/IceMCPBridge.\n#\n# CI's codesign --deep pass will re-sign with Developer ID; the\n# ad-hoc sign here is for local Debug runs.\n\nBRIDGE_PKG_DIR=\"$SRCROOT/Bridge\"\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n    SWIFT_BUILD_CONFIG=\"release\"\nelse\n    SWIFT_BUILD_CONFIG=\"debug\"\nfi\n\ncd \"$BRIDGE_PKG_DIR\"\nswift build -c \"$SWIFT_BUILD_CONFIG\"\n\nSRC_BIN=\"$BRIDGE_PKG_DIR/.build/$SWIFT_BUILD_CONFIG/IceMCPBridge\"\nDEST=\"$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/IceMCPBridge\"\n\nif [ ! -f \"$SRC_BIN\" ]; then\n    echo \"error: IceMCPBridge binary not found at $SRC_BIN\" >&2\n    exit 1\nfi\n\nmkdir -p \"$(dirname \"$DEST\")\"\ncp \"$SRC_BIN\" \"$DEST\"\ncodesign --force --sign - \"$DEST\" 2>/dev/null || true\necho \"Embedded IceMCPBridge → $DEST\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -628,6 +651,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		108CD334ED0A4341B1D2AC87 /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6F35D2302FC50E8A0021FDEA /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
+		};
 		170423D82B56DE78004A2549 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 170423D72B56DE78004A2549 /* XCRemoteSwiftPackageReference "Sparkle" */;
@@ -662,11 +690,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 71A065072E680C620087DB38 /* XCRemoteSwiftPackageReference "Semaphore" */;
 			productName = Semaphore;
-		};
-		108CD334ED0A4341B1D2AC87 /* Sentry */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 6F35D2302FC50E8A0021FDEA /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
-			productName = Sentry;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

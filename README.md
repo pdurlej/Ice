@@ -83,6 +83,10 @@ xcodebuild -scheme Ice -configuration Release \
 
 The resulting `Ice.app` is unsigned (`ad-hoc`) and will need `tccutil reset` on every rebuild on Tahoe. For signed local builds, the full sign + notarize + staple pipeline is in [`.github/workflows/build-dmg.yml`](.github/workflows/build-dmg.yml).
 
+## MCP Server
+
+Fire ships an embedded MCP server so you can ask an AI assistant to manage your menu bar. Wire Claude Desktop, Claude Code, Cursor, or Continue to `/Applications/Ice.app/Contents/MacOS/IceMCPBridge` and the 6 tools (`list_items`, `hide_item`, `show_item`, `move_item`, `save_layout`, `apply_layout`) become available. See [docs/mcp/CLIENT-SETUP.md](docs/mcp/CLIENT-SETUP.md) for setup.
+
 ## Privacy & Diagnostics
 
 Fire ships with **opt-in crash reporting** via Sentry. **Default: OFF** — no data leaves your machine until you explicitly enable it in **Advanced Settings → Privacy & Diagnostics**.

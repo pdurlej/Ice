@@ -32,9 +32,63 @@ final class Listener {
             case .start:
                 Logger.default.debug("Listener received start request")
                 return .start
+
             case .sourcePID(let window):
                 let pid = SourcePIDCache.shared.pid(for: window)
                 return .sourcePID(pid)
+
+            // MARK: - MCP Server Extension (Phase 4.5)
+
+            case .listItems(let section):
+                let items = MenuBarStateManager.shared.listItems(section: section)
+                return .items(items)
+
+            case .moveItem(let bundleID, let toSection, let toIndex):
+                let result = MenuBarStateManager.shared.moveItem(
+                    bundleID: bundleID,
+                    toSection: toSection,
+                    toIndex: toIndex
+                )
+                return .mutationResult(
+                    success: result.success,
+                    undoToken: nil,         // Phase 5 wires this
+                    message: result.message
+                )
+
+            case .hideItem(let bundleID):
+                let result = MenuBarStateManager.shared.hideItem(bundleID: bundleID)
+                return .mutationResult(
+                    success: result.success,
+                    undoToken: nil,
+                    message: result.message
+                )
+
+            case .showItem(let bundleID):
+                let result = MenuBarStateManager.shared.showItem(bundleID: bundleID)
+                return .mutationResult(
+                    success: result.success,
+                    undoToken: nil,
+                    message: result.message
+                )
+
+            case .applyLayout(let name):
+                let result = MenuBarStateManager.shared.applyLayout(name: name)
+                return .mutationResult(
+                    success: result.success,
+                    undoToken: nil,
+                    message: result.message
+                )
+
+            case .saveLayout(let name):
+                if let savedCount = MenuBarStateManager.shared.saveLayout(name: name) {
+                    return .layoutSaved(name: name, itemCount: savedCount)
+                } else {
+                    return .mutationResult(
+                        success: false,
+                        undoToken: nil,
+                        message: "Failed to save layout"
+                    )
+                }
             }
         } catch {
             Logger.default.error("Listener failed to handle message with error \(error)")

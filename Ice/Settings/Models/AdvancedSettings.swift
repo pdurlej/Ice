@@ -50,6 +50,27 @@ final class AdvancedSettings: ObservableObject {
     /// Apple Developer Program enrollment.
     @Published var shareDiagnostics = false
 
+    /// A Boolean value that indicates whether the MCP (Model Context
+    /// Protocol) server is enabled, allowing external AI assistants
+    /// to inspect (and optionally modify) the menu bar layout.
+    ///
+    /// When `false` (the default), the MCP bridge is never spawned
+    /// and no external process can reach Ice's internals. This is a
+    /// Fire-fork-specific addition.
+    @Published var mcpServerEnabled = false
+
+    /// A Boolean value that indicates whether MCP clients are allowed
+    /// to perform write operations (e.g. moving items between sections,
+    /// toggling visibility). When `false`, the bridge exposes only
+    /// read-only tools.
+    @Published var mcpAllowWrites = false
+
+    /// A Boolean value that indicates whether the user should be
+    /// notified when an MCP client performs a write operation. Only
+    /// relevant when both ``mcpServerEnabled`` and ``mcpAllowWrites``
+    /// are `true`.
+    @Published var mcpNotifyOnWrite = true
+
     /// Storage for internal observers.
     private var cancellables = Set<AnyCancellable>()
 
@@ -72,6 +93,9 @@ final class AdvancedSettings: ObservableObject {
         Defaults.ifPresent(key: .showOnHoverDelay, assign: &showOnHoverDelay)
         Defaults.ifPresent(key: .tempShowInterval, assign: &tempShowInterval)
         Defaults.ifPresent(key: .shareDiagnostics, assign: &shareDiagnostics)
+        Defaults.ifPresent(key: .mcpServerEnabled, assign: &mcpServerEnabled)
+        Defaults.ifPresent(key: .mcpAllowWrites, assign: &mcpAllowWrites)
+        Defaults.ifPresent(key: .mcpNotifyOnWrite, assign: &mcpNotifyOnWrite)
 
         Defaults.ifPresent(key: .sectionDividerStyle) { rawValue in
             if let style = SectionDividerStyle(rawValue: rawValue) {
@@ -137,6 +161,27 @@ final class AdvancedSettings: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { share in
                 Defaults.set(share, forKey: .shareDiagnostics)
+            }
+            .store(in: &c)
+
+        $mcpServerEnabled
+            .receive(on: DispatchQueue.main)
+            .sink { enable in
+                Defaults.set(enable, forKey: .mcpServerEnabled)
+            }
+            .store(in: &c)
+
+        $mcpAllowWrites
+            .receive(on: DispatchQueue.main)
+            .sink { allow in
+                Defaults.set(allow, forKey: .mcpAllowWrites)
+            }
+            .store(in: &c)
+
+        $mcpNotifyOnWrite
+            .receive(on: DispatchQueue.main)
+            .sink { notify in
+                Defaults.set(notify, forKey: .mcpNotifyOnWrite)
             }
             .store(in: &c)
 

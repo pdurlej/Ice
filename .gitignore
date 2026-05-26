@@ -4,3 +4,11 @@ xcuserdata/
 
 # CodeGraph local symbol index
 .codegraph/
+
+# SwiftPM build output (Bridge/.build for IceMCPBridge executable)
+.build/
+
+# SwiftPM lockfile lives at Bridge/Package.resolved — tracked
+# but ignore the per-checkout copies SwiftPM may create elsewhere
+Bridge/Package.resolved.local
+

@@ -1,5 +1,4 @@
 {
-  "originHash" : "ff7d10a19b3030fe8c906d3955f2b829f5d799a32e5c7185179a0dcb91787fb7",
   "pins" : [
     {
       "identity" : "axswift",
@@ -11,66 +10,12 @@
       }
     },
     {
-      "identity" : "compactslider",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/buh/CompactSlider",
-      "state" : {
-        "revision" : "e5219ff353613b6493bfe5a3333c3bfa2d1e4d57",
-        "version" : "1.2.1"
-      }
-    },
-    {
       "identity" : "eventsource",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/mattt/eventsource.git",
       "state" : {
         "revision" : "a3a85a85214caf642abaa96ae664e4c772a59f6e",
         "version" : "1.4.1"
-      }
-    },
-    {
-      "identity" : "ifrit",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/ukushu/Ifrit",
-      "state" : {
-        "revision" : "3f961f6d39cd2188305671f2ec65914d297571d0",
-        "version" : "2.0.6"
-      }
-    },
-    {
-      "identity" : "launchatlogin-modern",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/sindresorhus/LaunchAtLogin-Modern",
-      "state" : {
-        "revision" : "a04ec1c363be3627734f6dad757d82f5d4fa8fcc",
-        "version" : "1.1.0"
-      }
-    },
-    {
-      "identity" : "semaphore",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/groue/Semaphore",
-      "state" : {
-        "revision" : "2543679282aa6f6c8ecf2138acd613ed20790bc2",
-        "version" : "0.1.0"
-      }
-    },
-    {
-      "identity" : "sentry-cocoa",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/getsentry/sentry-cocoa",
-      "state" : {
-        "revision" : "193d313fbfd9affaf2be1692a0284a3b6574c515",
-        "version" : "9.14.0"
-      }
-    },
-    {
-      "identity" : "sparkle",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/sparkle-project/Sparkle",
-      "state" : {
-        "revision" : "9a1d2a19d3595fcf8d9c447173f9a1687b3dcadb",
-        "version" : "2.8.0"
       }
     },
     {
@@ -128,5 +73,5 @@
       }
     }
   ],
-  "version" : 3
+  "version" : 2
 }
