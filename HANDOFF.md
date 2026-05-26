@@ -3,6 +3,54 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🚧 IN-FLIGHT - fire.7.1 tagged but blocked on GitHub outage (2026-05-26 ~12:30)
+
+**`v0.11.13-fire.7.1`** tag pushed (build 1130). Adds `list_layouts` MCP tool - W4 of the fire.8 plan that ships independently because it's a read-only addition. AI can now ask "what layouts has the user saved?" and get the list without trial-and-error apply_layout calls.
+
+**Blocked by GitHub-wide outage**: GitHub Status reports a critical/minor incident affecting Actions auth + codeload.github.com since ~10:57 UTC. CI runs for v0.11.13-fire.7.1 failed 4 times - each on a different infra component (setup-xcode download, action-gh-release download, checkout 403 auth). I hardened the workflow to be more outage-resilient (replaced `maxim-lobanov/setup-xcode@v1` with native `xcode-select`, replaced `softprops/action-gh-release@v3` with `gh release create` CLI), but checkout's git auth still fails because that's GitHub's core infra not actions.
+
+**Next session ship action** (assuming GitHub is healthy):
+```bash
+gh run rerun <latest-failed-run-id> -R pdurlej/Ice
+# or manually:
+gh workflow run "Build macOS and Create DMG" -R pdurlej/Ice --ref v0.11.13-fire.7.1
+```
+
+Then: download the DMG, `sign_update`, append to appcast.xml at `pdurlej/fire-releases`.
+
+**Why this matters**: fire.7.1 unblocks the cross-MCP demo concept. Once shipped, AI assistants connected to Fire can both list and inspect saved layouts. The Fantastical-style auto-switching (apply_layout from calendar context) still needs fire.8 W1-W3 (write ops via embedded MCPBackend.xpc), but list_layouts is the read-side foundation.
+
+## 🌱 IN-FLIGHT - fire.8 W1 scaffold on feature branch (2026-05-26 ~12:50)
+
+Branch: `feature/fire-8-mcpbackend` (pushed). Contains the source files for a new embedded MCPBackend.xpc service that will own write operations once W2 ports the lean CGEvent drag logic in.
+
+**Files added under MCPBackend/**:
+- `main.swift` - entry point, activates listener, RunLoop
+- `Listener.swift` - XPCListener for `com.jordanbaird.Ice.MCPBackend` with handlers for all 7 MCP cases (listItems / moveItem / hideItem / showItem / applyLayout / saveLayout / listLayouts)
+- `MCPBackendStateManager.swift` - state manager. listItems / saveLayout / listLayouts are REAL (ported from fire.7's MenuBarStateManager). moveItem / hideItem / showItem / applyLayout are W2 stubs.
+- `Resources/Info.plist` - XPC service config (same shape as MenuBarItemService.xpc).
+
+**Next steps to land fire.8 W1**:
+1. **pbxproj surgery**: clone MenuBarItemService.xpc Xcode target structure with new UUIDs for MCPBackend.xpc. ~12 edits in Ice.xcodeproj/project.pbxproj:
+   - New PBXNativeTarget for MCPBackend
+   - 3 build phases (Sources, Frameworks, Resources)
+   - PBXFileSystemSynchronizedRootGroup for MCPBackend/ + Shared/ exception set for Resources/Info.plist
+   - PBXFileReference for built .xpc product
+   - XCConfigurationList + Debug/Release configs with PRODUCT_BUNDLE_IDENTIFIER=com.jordanbaird.Ice.MCPBackend
+   - Add MCPBackend to project's targets array + root PBXGroup children + Products group children
+   - Add MCPBackend.xpc to Ice target's "Embed XPC Services" build phase
+2. **Decide on SourcePIDCache**: MCPBackend's listItems uses `ownerPID` (not source PID) so on macOS 26 with Control Center reparenting, bundleIDs may all resolve to "com.apple.controlcenter". Two options for W1:
+   - (a) Add MenuBarItemService/SourcePIDCache.swift to MCPBackend target's source compilation (same file compiled into both targets)
+   - (b) Accept ownerPID-only for now, document the limitation, fix in W2 if needed
+3. **Bridge re-target**: update `Bridge/Sources/IceMCPBridge/main.swift` service name from `MenuBarItemService.name` to `com.jordanbaird.Ice.MCPBackend`. Keep MenuBarItemService.xpc for legacy sourcePID handshake from Ice main app.
+4. **Build + smoke test**: confirm MCPBackend.xpc spawns as subprocess of Ice.app, bridge can connect, listItems returns real data.
+
+**Then W2** (~4-5h): port lean CGEvent drag logic from Ice/MenuBar/MenuBarItems/MenuBarItemManager.swift into MCPBackend/Mover.swift (new file). The 600-800 lines of helpers needed: `permitLocalEvents`, `getTargetPoints`, `postMoveEvents`, retry loop. HIDEventManager interaction may need to be skipped or simplified - test empirically.
+
+**Then W3+**: bridge re-target + smoke test + W5 starter presets + W6 settings UI + W7 ship.
+
+Estimated remaining for fire.8: 7-8h (depending on whether SourcePIDCache sharing is needed).
+
 ## 🔥 SHIPPED fire.7 - multi-display read-only MCP (2026-05-26 ~12:10)
 
 **Tagged `v0.11.13-fire.7`** (build 1129). CI built + signed + notarized; DMG at https://github.com/pdurlej/Ice/releases/tag/v0.11.13-fire.7. Sparkle appcast updated with EdDSA-signed entry (`pdurlej/fire-releases` commit `7dbebdd`) so fire.6 users will receive auto-update notification.
