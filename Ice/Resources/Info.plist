@@ -21,24 +21,5 @@
 	<string>https://pdurlej.github.io/fire-releases/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>JQ+doXtLQyWmGDao7dTzF4dNgnkSmAWmN66Ee/lw9Yc=</string>
-
-	<!--
-	  In-process Mach service hosted by Ice main app for the MCP backend
-	  (com.jordanbaird.Ice.MCPBackend). Lets the IceMCPBridge binary
-	  connect via XPCSession to a listener that runs INSIDE Ice's
-	  process - so MenuBarItemManager.itemCache is populated and write
-	  operations (move/hide/show/applyLayout) can use the real AX drag
-	  path that the Layout settings UI uses.
-
-	  This is distinct from MenuBarItemService.xpc (the embedded XPC
-	  service bundle which still serves legacy sourcePID lookups for
-	  Ice main app itself). Bridge fire.7+ targets MCPBackend; fire.6
-	  targeted MenuBarItemService.
-	-->
-	<key>MachServices</key>
-	<dict>
-		<key>com.jordanbaird.Ice.MCPBackend</key>
-		<true/>
-	</dict>
 </dict>
 </plist>

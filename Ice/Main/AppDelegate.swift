@@ -57,23 +57,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appState.permissions.logger.debug("Failed required permissions checks")
             appState.performSetup(hasPermissions: false)
         }
-
-        // Activate the in-process MCP backend listener if the user has
-        // opted in via Settings > Advanced > MCP Server. The listener
-        // owns the `com.jordanbaird.Ice.MCPBackend` Mach service that
-        // the bridge binary (Bridge/Sources/IceMCPBridge) connects to.
-        //
-        // Strict opt-in: defaults off, like Sentry. The toggle is read
-        // once at launch - flipping it at runtime requires an Ice
-        // relaunch to take effect (same model as Sentry, documented in
-        // the toggle's footnote in AdvancedSettingsPane).
-        if #available(macOS 26.0, *), Defaults.bool(forKey: .mcpServerEnabled) {
-            Logger.default.info("MCP server: user opted in, activating MCPBackend listener")
-            MCPBackendStateManager.shared.configure(itemManager: appState.itemManager)
-            MCPBackend.shared.activate()
-        } else {
-            Logger.default.debug("MCP server: user has not opted in, skipping MCPBackend activation")
-        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
