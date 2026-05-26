@@ -3,7 +3,46 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
-## ✅ MERGED to fire/main — MCP Phase 4.5 wire-only (2026-05-26 ~03:30)
+## 🔥 SHIPPED fire.6 — MCP read-only (2026-05-26 ~08:40)
+
+**Tagged `v0.11.13-fire.6`** (build 1128). CI workflow "Build macOS and Create DMG" running on the tag — will sign + notarize + draft GitHub Release with the DMG. Tracked at https://github.com/pdurlej/Ice/actions.
+
+**What fire.6 adds over fire.5:**
+- Real `list_items` MCP tool — Claude/Cursor/Continue can read your menu bar layout. Section detection works when Ice is running (uses Ice's 3 control items as x-coordinate boundaries). Graceful fallback to "all alwaysVisible" when Ice isn't running. Multi-display deferred to fire.7.
+- Real `save_layout` MCP tool — snapshots current state to `MCPLayouts` dict in `com.jordanbaird.Ice` plist. fire.7's `apply_layout` will read from the same key.
+- `move_item / hide_item / show_item / apply_layout` return a friendly "Coming in fire.7" message instead of "Not implemented" — clients understand the deferral.
+
+**Wave G commit on fire/main**: `ad5542a feat(mcp): Wave G — listItems + saveLayout real impl (fire.6)`. Touched `MenuBarItemService/MenuBarStateManager.swift` (replaced stubs) + version bumps in `Ice.xcodeproj/project.pbxproj` (1127→1128, fire.5→fire.6). No cross-target refactor needed — the new code uses only `Bridging` + `WindowInfo` + `SourcePIDCache` (all in Shared/) and `NSRunningApplication`.
+
+**Smoke test verification (local)**: bridge protocol over stdin → JSON-RPC initialize works → tools/list returns all 6 with annotations → `tools/call list_items` dispatches via XPC → returns 3 real items (Ice + ControlCenter + BentoBox on macOS 26) → `tools/call save_layout` persists to plist (`defaults read com.jordanbaird.Ice MCPLayouts` confirms). 2 MenuBarItemService processes seen during test: installed fire.4 + my Debug build — bridge correctly routed to its sibling Debug XPC service via bundle proximity.
+
+**Still pending (next session, for fire.7):**
+1. **Sparkle appcast update**: append fire.6 item to `pdurlej/fire-releases/appcast.xml` with EdDSA signature of the DMG (`sign_update build/Ice-v0.11.13-fire.6.dmg` using the SUPublicEDKey's private counterpart, which lives in pdurlej's local keychain — not in any repo). Until this lands, fire.5 users won't auto-update; they have to grab fire.6 manually from the GitHub Release page.
+2. **Option D — Ice hosts MCP backend (write ops)**: see the "NEXT SESSION" brief that follows this section. ~2-3h work.
+
+## ⏭️ NEXT SESSION — Option D: Ice.app hosts MCP backend (unblocks write ops)
+
+**Goal**: fire.7 ships full write op support — `move_item`, `hide_item`, `show_item`, `apply_layout` actually move menu bar items via AX drag events.
+
+**Approach (Option D from the G→D analysis)**: Add a new XPC service hosted by Ice.app itself (`com.jordanbaird.Ice.MCPBackend`), separate from the existing `com.jordanbaird.Ice.MenuBarItemService` (which stays for legacy sourcePID handshake + the read-only listItems/saveLayout fire.6 path). The bridge talks to the new service; the new service runs in Ice.app's process so `MenuBarItemManager.shared` is populated and `move(item:to:)` Just Works.
+
+**Concrete steps:**
+1. Add `Ice/Services/MCPBackend.swift` — XPCListener registered for `com.jordanbaird.Ice.MCPBackend`. Same handler shape as `MenuBarItemService/Listener.swift` but lives in the Ice main app target so it has access to MenuBarItem / MenuBarItemManager / MenuBarSection.
+2. Promote `MenuBarItemService/MenuBarStateManager.swift.proposal.phase3` to `Ice/Services/MCPBackendStateManager.swift`. Worker B already wrote 380 lines of correct logic — it'll compile in Ice main app target since all referenced types are local. Drop the existing fire.6 read-only logic OR keep both implementations behind a feature flag during transition.
+3. Update `Ice/Resources/Info.plist` with an `XPCService` dict entry for the new service name (similar to how MenuBarItemService is currently embedded).
+4. Update `Bridge/Sources/IceMCPBridge/main.swift` to connect to `com.jordanbaird.Ice.MCPBackend` instead of `com.jordanbaird.Ice.MenuBarItemService`. (Or keep both connections, use MCPBackend for MCP-extension cases, keep MenuBarItemService for legacy.)
+5. Smoke test from Claude Desktop: install fire.7 build, ask "hide control center" → it actually moves. Ask "undo" if undo ring buffer lands at the same time.
+6. Ship fire.7.
+
+**Estimated effort**: 2-3h. Worker B's pre-written logic does most of the heavy lifting; the new XPC service plumbing is standard.
+
+**Optional — also in fire.7**:
+- Undo ring buffer (Phase 5 of the original plan — 1h, useless without write ops, ship together)
+- `.v1` XPC service version marker (Q5 — only if the new MCPBackend service makes deprecation of the old wire-contract cases practical)
+- AppDelegate lifecycle plumbing if Settings UI "Enable MCP server" toggle needs to spawn anything (currently the toggle just stores a preference; bridge is spawned by MCP client per Q4)
+- UNUserNotification on write ops gated by `mcpNotifyOnWrite` default
+
+## 🗄️ SUPERSEDED — MCP Phase 4.5 wire-only milestone (2026-05-26 ~03:30)
 
 PR #2 merged. 4 commits on fire/main beyond fire.5. **fire.6 NOT
 tagged** — per the plan's "if smoke test fails, do not tag" guardrail.
