@@ -207,15 +207,20 @@ jobs:
           path: build/*.dmg
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: build/*.dmg
-          name: Ice ${{ steps.version.outputs.VERSION }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          token: ${{ github.token }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Use gh CLI (preinstalled on runners, no action download needed)
+          # instead of softprops/action-gh-release. Same end result but
+          # resilient to codeload.github.com being degraded - we hit that
+          # during fire.7.1 ship when GitHub had a partial outage and
+          # action downloads kept failing.
+          gh release create "${{ steps.version.outputs.VERSION }}" \
+            --repo "${{ github.repository }}" \
+            --title "Ice ${{ steps.version.outputs.VERSION }}" \
+            --generate-notes \
+            build/*.dmg
 
       - name: Tear down the ephemeral keychain
         if: always()
