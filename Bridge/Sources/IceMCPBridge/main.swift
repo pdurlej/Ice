@@ -336,6 +336,17 @@ private func buildToolList() -> [Tool] {
             destructive: true,
             idempotent: true
         ),
+        makeTool(
+            name: "list_layouts",
+            description: "List all saved menu bar layout names. Use this first to see what layouts the user has saved (e.g. 'Focus', 'Meeting', 'Default'), then pass a name to apply_layout. Returns an empty array if no layouts are saved yet.",
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([:]),
+                "additionalProperties": .bool(false),
+            ]),
+            readOnly: true,
+            idempotent: true
+        ),
     ]
 }
 
@@ -380,6 +391,9 @@ private func dispatch(
         case "save_layout":
             let layoutName = try parseRequiredString(arguments?["name"], name: "name")
             request = .saveLayout(name: layoutName)
+
+        case "list_layouts":
+            request = .listLayouts
 
         default:
             throw ToolError.invalidArgument("unknown tool: \(name)")
@@ -426,6 +440,15 @@ private func encode(
         let payload = LayoutSavedPayload(success: true, name: layoutName, itemCount: itemCount)
         return CallTool.Result(
             content: [.text(text: jsonString(payload), annotations: nil, _meta: nil)],
+            isError: false
+        )
+
+    case .layouts(let names):
+        // Just the array of names - simpler structure than items
+        // (no per-element metadata). LLM can use this directly to
+        // decide which layout to apply_layout next.
+        return CallTool.Result(
+            content: [.text(text: jsonString(names), annotations: nil, _meta: nil)],
             isError: false
         )
 

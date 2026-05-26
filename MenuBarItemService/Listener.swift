@@ -89,6 +89,10 @@ final class Listener {
                         message: "Failed to save layout"
                     )
                 }
+
+            case .listLayouts:
+                let names = MenuBarStateManager.shared.listLayouts()
+                return .layouts(names)
             }
         } catch {
             Logger.default.error("Listener failed to handle message with error \(error)")

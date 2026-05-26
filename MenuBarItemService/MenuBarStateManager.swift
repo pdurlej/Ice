@@ -247,6 +247,17 @@ final class MenuBarStateManager {
         )
     }
 
+    // MARK: - List Layouts (W4 - read-only, ships independently)
+
+    /// Returns the names of all saved layouts, in stable
+    /// alphabetical order. Empty array if no layouts have been
+    /// saved yet (first-run state, or user hasn't called save_layout).
+    func listLayouts() -> [String] {
+        Logger.default.debug("MenuBarStateManager.listLayouts()")
+        let layouts = defaults.dictionary(forKey: Self.layoutsKey) ?? [:]
+        return layouts.keys.sorted()
+    }
+
     // MARK: - Save Layout (read-side write — implemented)
 
     /// Snapshots the current menu bar state as a named layout.

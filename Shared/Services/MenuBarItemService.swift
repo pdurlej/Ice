@@ -86,6 +86,12 @@ extension MenuBarItemService {
         /// Saves the current menu bar state as a named layout in the
         /// plist. Maps to MCP `save_layout` tool.
         case saveLayout(name: String)
+
+        /// Lists all saved layout names. Maps to MCP `list_layouts`
+        /// tool. Added in fire.8 (W4 of the Fantastical-style "sets"
+        /// rollout) so MCP clients can discover what layouts exist
+        /// without trial-and-error apply_layout calls.
+        case listLayouts
     }
 
     enum Response: Codable {
@@ -105,6 +111,11 @@ extension MenuBarItemService {
         /// Response to `.saveLayout` — confirms the layout was persisted
         /// and reports how many items it captured.
         case layoutSaved(name: String, itemCount: Int)
+
+        /// Response to `.listLayouts` — ordered list of layout names
+        /// currently persisted in the plist. Empty array if no layouts
+        /// have been saved yet.
+        case layouts([String])
     }
 
     // MARK: - Shared Model Types
