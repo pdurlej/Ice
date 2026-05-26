@@ -52,87 +52,103 @@ final class MenuBarStateManager {
 
     // MARK: - Read
 
-    /// Returns the list of menu bar items on the primary display,
+    /// Returns the list of menu bar items across ALL active displays,
     /// classified by section based on x-coordinate relative to Ice's
-    /// 3 control items.
+    /// per-display control items.
     ///
     /// - Parameter section: If non-nil, filter results to that section.
     ///
-    /// Multi-display support is deferred to fire.7 — items not on the
-    /// primary display are excluded from results.
+    /// fire.7: multi-display support added. Items are accumulated across
+    /// displays, with positions numbered per-section globally (primary
+    /// display first, then secondary displays in `CGGetActiveDisplayList`
+    /// order). When a display has fewer than 3 Ice control items
+    /// visible (Ice's hidden or always-hidden section is collapsed
+    /// off-screen, or Ice isn't running on that display), items on that
+    /// display get assigned to `.alwaysVisible` as a graceful fallback.
     func listItems(section: MenuBarItemService.ItemSection?) -> [MenuBarItemService.ItemInfo] {
         Logger.default.debug(
             "MenuBarStateManager.listItems(section: \(String(describing: section)))"
         )
 
-        // 1. Enumerate menu bar item windows.
+        // 1. Enumerate menu bar item windows across all displays.
         let windowIDs = Bridging.getMenuBarWindowList(option: .itemsOnly)
         let allWindows = WindowInfo.createWindows(from: windowIDs)
 
-        // 2. Filter to the primary display. fire.7 will expand this.
-        let mainDisplay = CGMainDisplayID()
-        let mainBounds = CGDisplayBounds(mainDisplay)
-        let primaryWindows = allWindows.filter { window in
-            mainBounds.contains(
-                CGPoint(x: window.bounds.midX, y: window.bounds.midY)
-            )
-        }
+        // 2. Iterate active displays (primary first per CGS convention).
+        //    Per-display section detection means each display's Ice
+        //    control items act as boundaries only for that display's
+        //    items, never bleeding into another display's classification.
+        let displays = Self.activeDisplayIDs()
 
-        // 3. Split Ice's control items from the rest.
-        let (iceControls, otherItems) = primaryWindows.splitByPredicate { window in
-            window.owningApplication?.bundleIdentifier == Self.iceBundleID
-        }
-
-        // 4. Ice creates 3 control items per display (one per section).
-        //    Sorted ascending by x, they mark the LEFT edges of the
-        //    alwaysHidden / hidden / visible sections respectively.
-        //
-        //    If we can't find them (Ice isn't running, or fewer than 3
-        //    are placed), gracefully degrade by reporting all items as
-        //    .alwaysVisible. Less precise but still useful — the LLM
-        //    sees what's in the menu bar even when Ice is off.
-        let sortedControls = iceControls.sorted { $0.bounds.minX < $1.bounds.minX }
-        guard sortedControls.count >= 3 else {
-            Logger.default.notice(
-                "Found \(sortedControls.count) Ice control items on primary display (expected 3) — reporting all items as alwaysVisible"
-            )
-            let fallback = otherItems
-                .sorted { $0.bounds.minX < $1.bounds.minX }
-                .enumerated()
-                .map { index, window in
-                    makeItemInfo(window: window, section: .alwaysVisible, position: index)
-                }
-            if let section {
-                return fallback.filter { $0.section == section }
-            }
-            return fallback
-        }
-
-        let alwaysHiddenBoundary = sortedControls[0].bounds.minX
-        let hiddenBoundary = sortedControls[1].bounds.minX
-        let visibleBoundary = sortedControls[2].bounds.minX
-
-        // 5. Classify each non-Ice item by x-coordinate.
-        //    Items right of visibleBoundary       → .alwaysVisible
-        //    Items between hidden and visible     → .hidden
-        //    Items between alwaysHidden and hidden → .alwaysHidden
-        //    Items left of alwaysHiddenBoundary    → also .alwaysHidden
-        //                                           (offscreen edge)
+        // Accumulate items per section across all displays. Items
+        // discovered earlier (e.g. on primary display) come first in
+        // each section's array, giving stable positions.
         var bucketed: [MenuBarItemService.ItemSection: [WindowInfo]] = [:]
-        for window in otherItems.sorted(by: { $0.bounds.minX < $1.bounds.minX }) {
-            let x = window.bounds.minX
-            let assigned: MenuBarItemService.ItemSection
-            if x > visibleBoundary {
-                assigned = .alwaysVisible
-            } else if x > hiddenBoundary {
-                assigned = .hidden
-            } else {
-                assigned = .alwaysHidden
+        var totalSeen = 0
+        var totalBucketed = 0
+
+        for (displayIndex, displayID) in displays.enumerated() {
+            let displayBounds = CGDisplayBounds(displayID)
+            let displayWindows = allWindows.filter { window in
+                displayBounds.contains(
+                    CGPoint(x: window.bounds.midX, y: window.bounds.midY)
+                )
             }
-            bucketed[assigned, default: []].append(window)
+            totalSeen += displayWindows.count
+
+            let (iceControls, otherItems) = displayWindows.splitByPredicate { window in
+                window.owningApplication?.bundleIdentifier == Self.iceBundleID
+            }
+
+            let sortedControls = iceControls.sorted { $0.bounds.minX < $1.bounds.minX }
+
+            guard sortedControls.count >= 3 else {
+                // Per-display fallback: this display doesn't have Ice's
+                // 3 control items visible (collapsed section / Ice off /
+                // secondary display where Ice isn't placed). Report items
+                // as alwaysVisible - the LLM still sees them.
+                Logger.default.notice(
+                    "Display \(displayIndex) (id=\(displayID)): \(sortedControls.count) Ice control items found, falling back to alwaysVisible classification"
+                )
+                bucketed[.alwaysVisible, default: []].append(
+                    contentsOf: otherItems.sorted { $0.bounds.minX < $1.bounds.minX }
+                )
+                totalBucketed += otherItems.count
+                continue
+            }
+
+            let alwaysHiddenBoundary = sortedControls[0].bounds.minX
+            let hiddenBoundary = sortedControls[1].bounds.minX
+            let visibleBoundary = sortedControls[2].bounds.minX
+
+            // Classify each non-Ice item on this display by x-coordinate.
+            //   Items right of visibleBoundary        -> .alwaysVisible
+            //   Items between hidden and visible      -> .hidden
+            //   Items between alwaysHidden and hidden -> .alwaysHidden
+            //   Items left of alwaysHiddenBoundary    -> also .alwaysHidden
+            //                                            (offscreen edge)
+            for window in otherItems.sorted(by: { $0.bounds.minX < $1.bounds.minX }) {
+                let x = window.bounds.minX
+                let assigned: MenuBarItemService.ItemSection
+                if x > visibleBoundary {
+                    assigned = .alwaysVisible
+                } else if x > hiddenBoundary {
+                    assigned = .hidden
+                } else {
+                    assigned = .alwaysHidden
+                }
+                bucketed[assigned, default: []].append(window)
+                totalBucketed += 1
+            }
         }
 
-        // 6. Build ItemInfo list with per-section positions.
+        Logger.default.info(
+            "listItems across \(displays.count) display(s): \(totalSeen) windows seen, \(totalBucketed) bucketed into sections"
+        )
+
+        // 3. Build ItemInfo list with per-section positions (numbered
+        //    globally across all displays - primary display items get
+        //    lower positions because they're accumulated first).
         var results: [MenuBarItemService.ItemInfo] = []
         for assigned in MenuBarItemService.ItemSection.allCases {
             let windows = bucketed[assigned] ?? []
@@ -145,6 +161,28 @@ final class MenuBarStateManager {
             return results.filter { $0.section == section }
         }
         return results
+    }
+
+    /// Returns the IDs of all active displays, with the main display
+    /// first. Wraps `CGGetActiveDisplayList` so callers don't have to
+    /// deal with the two-call query-then-fill pattern.
+    private static func activeDisplayIDs() -> [CGDirectDisplayID] {
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else {
+            return []
+        }
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        guard CGGetActiveDisplayList(count, &ids, &count) == .success else {
+            return []
+        }
+        // Hoist the main display to the front so its items are numbered
+        // first in each section. Some users have their MacBook display
+        // as secondary; we still want their primary screen to lead.
+        let mainID = CGMainDisplayID()
+        if let mainIndex = ids.firstIndex(of: mainID), mainIndex != 0 {
+            ids.swapAt(0, mainIndex)
+        }
+        return ids
     }
 
     /// Builds a wire `ItemInfo` from a `WindowInfo`. Resolves bundle ID
