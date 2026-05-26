@@ -14,7 +14,9 @@
 		6F35D45D2FC5110A0021FDEA /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 108CD334ED0A4341B1D2AC87 /* Sentry */; };
 		7127A9FF2C4886D100D99DEF /* IfritStatic in Frameworks */ = {isa = PBXBuildFile; productRef = 7127A9FE2C4886D100D99DEF /* IfritStatic */; };
 		7168EE532E281CBC00FF9830 /* AXSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7168EE522E281CBC00FF9830 /* AXSwift */; };
+		7188A7102E600000008F131D /* AXSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7188A70E2E600000008F131D /* AXSwift */; };
 		7188A68C2E27F9ED008F131D /* MenuBarItemService.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = 7188A6832E27F9ED008F131D /* MenuBarItemService.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		7188A70A2E600000008F131D /* MCPBackend.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = 7188A7052E600000008F131D /* MCPBackend.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		71A065092E680C620087DB38 /* Semaphore in Frameworks */ = {isa = PBXBuildFile; productRef = 71A065082E680C620087DB38 /* Semaphore */; };
 /* End PBXBuildFile section */
 
@@ -26,6 +28,13 @@
 			remoteGlobalIDString = 7188A6822E27F9ED008F131D;
 			remoteInfo = MenuBarItemService;
 		};
+		7188A7082E600000008F131D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 716683222A767E6A006ABF84 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7188A7012E600000008F131D;
+			remoteInfo = MCPBackend;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -36,6 +45,7 @@
 			dstSubfolderSpec = 16;
 			files = (
 				7188A68C2E27F9ED008F131D /* MenuBarItemService.xpc in Embed XPC Services */,
+				7188A70A2E600000008F131D /* MCPBackend.xpc in Embed XPC Services */,
 			);
 			name = "Embed XPC Services";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -45,6 +55,7 @@
 /* Begin PBXFileReference section */
 		7166832A2A767E6A006ABF84 /* Ice.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ice.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7188A6832E27F9ED008F131D /* MenuBarItemService.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = MenuBarItemService.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
+		7188A7052E600000008F131D /* MCPBackend.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = MCPBackend.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -54,6 +65,13 @@
 				Resources/Info.plist,
 			);
 			target = 7188A6822E27F9ED008F131D /* MenuBarItemService */;
+		};
+		7188A7072E600000008F131D /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Resources/Info.plist,
+			);
+			target = 7188A7012E600000008F131D /* MCPBackend */;
 		};
 		71BDFC6C2C978E2A00EF145F /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
@@ -67,6 +85,7 @@
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		7188A6842E27F9ED008F131D /* MenuBarItemService */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (7188A6912E27F9ED008F131D /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = MenuBarItemService; sourceTree = "<group>"; };
+		7188A7062E600000008F131D /* MCPBackend */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (7188A7072E600000008F131D /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = MCPBackend; sourceTree = "<group>"; };
 		7188A69E2E280BB4008F131D /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Shared; sourceTree = "<group>"; };
 		71BDFBE12C978E2A00EF145F /* Ice */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (71BDFC6C2C978E2A00EF145F /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Ice; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -94,6 +113,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7188A7032E600000008F131D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7188A7102E600000008F131D /* AXSwift in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -103,6 +130,7 @@
 				7188A69E2E280BB4008F131D /* Shared */,
 				71BDFBE12C978E2A00EF145F /* Ice */,
 				7188A6842E27F9ED008F131D /* MenuBarItemService */,
+				7188A7062E600000008F131D /* MCPBackend */,
 				7166832B2A767E6A006ABF84 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -112,6 +140,7 @@
 			children = (
 				7166832A2A767E6A006ABF84 /* Ice.app */,
 				7188A6832E27F9ED008F131D /* MenuBarItemService.xpc */,
+				7188A7052E600000008F131D /* MCPBackend.xpc */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -134,6 +163,7 @@
 			);
 			dependencies = (
 				7188A68B2E27F9ED008F131D /* PBXTargetDependency */,
+				7188A7092E600000008F131D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				7188A69E2E280BB4008F131D /* Shared */,
@@ -177,6 +207,30 @@
 			productReference = 7188A6832E27F9ED008F131D /* MenuBarItemService.xpc */;
 			productType = "com.apple.product-type.xpc-service";
 		};
+		7188A7012E600000008F131D /* MCPBackend */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7188A70B2E600000008F131D /* Build configuration list for PBXNativeTarget "MCPBackend" */;
+			buildPhases = (
+				7188A7022E600000008F131D /* Sources */,
+				7188A7032E600000008F131D /* Frameworks */,
+				7188A7042E600000008F131D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				7188A7062E600000008F131D /* MCPBackend */,
+				7188A69E2E280BB4008F131D /* Shared */,
+			);
+			name = MCPBackend;
+			packageProductDependencies = (
+				7188A70E2E600000008F131D /* AXSwift */,
+			);
+			productName = MCPBackend;
+			productReference = 7188A7052E600000008F131D /* MCPBackend.xpc */;
+			productType = "com.apple.product-type.xpc-service";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -191,6 +245,9 @@
 						CreatedOnToolsVersion = 14.3.1;
 					};
 					7188A6822E27F9ED008F131D = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					7188A7012E600000008F131D = {
 						CreatedOnToolsVersion = 26.0;
 					};
 				};
@@ -220,6 +277,7 @@
 			targets = (
 				716683292A767E6A006ABF84 /* Ice */,
 				7188A6822E27F9ED008F131D /* MenuBarItemService */,
+				7188A7012E600000008F131D /* MCPBackend */,
 			);
 		};
 /* End PBXProject section */
@@ -233,6 +291,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		7188A6812E27F9ED008F131D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7188A7042E600000008F131D /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -298,6 +363,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7188A7022E600000008F131D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -305,6 +377,11 @@
 			isa = PBXTargetDependency;
 			target = 7188A6822E27F9ED008F131D /* MenuBarItemService */;
 			targetProxy = 7188A68A2E27F9ED008F131D /* PBXContainerItemProxy */;
+		};
+		7188A7092E600000008F131D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7188A7012E600000008F131D /* MCPBackend */;
+			targetProxy = 7188A7082E600000008F131D /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -551,6 +628,57 @@
 			};
 			name = Release;
 		};
+		7188A70C2E600000008F131D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MCPBackend/Resources/Info.plist;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jordanbaird.Ice.MCPBackend;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		7188A70D2E600000008F131D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MCPBackend/Resources/Info.plist;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jordanbaird.Ice.MCPBackend;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -577,6 +705,15 @@
 			buildConfigurations = (
 				7188A68E2E27F9ED008F131D /* Debug */,
 				7188A68F2E27F9ED008F131D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7188A70B2E600000008F131D /* Build configuration list for PBXNativeTarget "MCPBackend" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7188A70C2E600000008F131D /* Debug */,
+				7188A70D2E600000008F131D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -690,6 +827,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 71A065072E680C620087DB38 /* XCRemoteSwiftPackageReference "Semaphore" */;
 			productName = Semaphore;
+		};
+		7188A70E2E600000008F131D /* AXSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1787C4252B16890B002F50DF /* XCRemoteSwiftPackageReference "AXSwift" */;
+			productName = AXSwift;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
