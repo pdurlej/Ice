@@ -42,6 +42,12 @@ struct AdvancedSettingsPane: View {
             IceSection("Privacy & Diagnostics") {
                 shareDiagnostics
             }
+            IceSection("MCP Server (experimental)") {
+                mcpServerDescription
+                mcpServerEnabled
+                mcpAllowWrites
+                mcpNotifyOnWrite
+            }
         }
     }
 
@@ -63,6 +69,44 @@ struct AdvancedSettingsPane: View {
             )
             .padding(.trailing, 75)
         }
+    }
+
+    @ViewBuilder
+    private var mcpServerDescription: some View {
+        Text(
+            """
+            Lets AI assistants (Claude Desktop, Claude Code, Cursor, Continue) \
+            read and modify your menu bar layout via the Model Context Protocol. \
+            See docs/mcp/CLIENT-SETUP.md for setup.
+            """
+        )
+        .padding(.trailing, 75)
+    }
+
+    @ViewBuilder
+    private var mcpServerEnabled: some View {
+        Toggle(
+            "Enable MCP server",
+            isOn: $settings.mcpServerEnabled
+        )
+    }
+
+    @ViewBuilder
+    private var mcpAllowWrites: some View {
+        Toggle(
+            "Allow write operations",
+            isOn: $settings.mcpAllowWrites
+        )
+        .disabled(!settings.mcpServerEnabled)
+    }
+
+    @ViewBuilder
+    private var mcpNotifyOnWrite: some View {
+        Toggle(
+            "Notify on write operations",
+            isOn: $settings.mcpNotifyOnWrite
+        )
+        .disabled(!settings.mcpServerEnabled || !settings.mcpAllowWrites)
     }
 
     @ViewBuilder

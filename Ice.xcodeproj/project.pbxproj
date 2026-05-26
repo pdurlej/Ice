@@ -691,11 +691,6 @@
 			package = 71A065072E680C620087DB38 /* XCRemoteSwiftPackageReference "Semaphore" */;
 			productName = Semaphore;
 		};
-		E63D38C9223E45B68921EC6F /* MCP */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CBCAD64D4CE24F6C97D53266 /* XCRemoteSwiftPackageReference "swift-sdk" */;
-			productName = MCP;
-		};
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 716683222A767E6A006ABF84 /* Project object */;
