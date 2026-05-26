@@ -161,20 +161,70 @@ final class MCPBackendStateManager {
         return ids
     }
 
-    // MARK: - Write (W2 will implement)
+    // MARK: - Write (W2 - real implementation via Mover)
 
+    /// Moves the item with the given bundle ID to the target section.
+    ///
+    /// Implementation: find the source item in the menu bar, find Ice's
+    /// control item that bounds the destination section, dispatch a
+    /// `Mover.MoveDestination.rightOfItem(controlItem)` so the moved item
+    /// lands just inside the target section. `toIndex` is currently
+    /// ignored - the moved item lands at the start of the target section.
+    /// Refinement to land at a specific intra-section index is a future
+    /// pass (would require iterating siblings and picking left/right of
+    /// the right neighbour).
     func moveItem(
         bundleID: String,
         toSection: MenuBarItemService.ItemSection,
         toIndex: Int?
     ) async -> (success: Bool, message: String?) {
         logger.debug(
-            "moveItem(\(bundleID), to: \(toSection.rawValue), index: \(String(describing: toIndex))) - W2 stub"
+            "moveItem(\(bundleID), to: \(toSection.rawValue), index: \(String(describing: toIndex)))"
         )
-        return (
-            false,
-            "Write operations land in fire.8 W2 (lean port of CGEvent drag logic). MCPBackend service scaffold ships first."
-        )
+
+        // Find the source window for the bundle ID across all displays.
+        let windowIDs = Bridging.getMenuBarWindowList(option: .itemsOnly)
+        let allWindows = WindowInfo.createWindows(from: windowIDs)
+        guard let sourceWindow = findWindow(for: bundleID, in: allWindows) else {
+            return (false, "Item with bundle ID '\(bundleID)' not found in menu bar")
+        }
+
+        // Find Ice control items for the same display as the source item.
+        // Falls back to main display if the source's display detection
+        // fails (e.g. item just off the menu bar's drawn region).
+        let displayID = displayContaining(sourceWindow.bounds) ?? CGMainDisplayID()
+        guard let controls = findIceControlItems(displayID: displayID, in: allWindows) else {
+            return (false, "Could not locate Ice's 3 control items on the current display - is Ice running with 'Hidden' section enabled?")
+        }
+
+        // Pick the control item that bounds the target section.
+        // See section detection algorithm in listItems above:
+        //   .alwaysHidden lies between controls[0] and controls[1]
+        //   .hidden       lies between controls[1] and controls[2]
+        //   .alwaysVisible lies to the right of controls[2]
+        // Posting "rightOf(controls[N])" lands the moved item just inside
+        // the target section's leftmost position.
+        let boundaryControl: WindowInfo
+        switch toSection {
+        case .alwaysHidden: boundaryControl = controls[0]
+        case .hidden:       boundaryControl = controls[1]
+        case .alwaysVisible: boundaryControl = controls[2]
+        }
+
+        let moveItem = makeMoveItem(window: sourceWindow, displayName: bundleID)
+        let targetItem = makeMoveItem(window: boundaryControl, displayName: "IceControl[\(toSection.rawValue)]")
+
+        do {
+            try await Mover.shared.move(
+                item: moveItem,
+                to: .rightOfItem(targetItem)
+            )
+            logger.info("moveItem succeeded for \(bundleID) → \(toSection.rawValue)")
+            return (true, nil)
+        } catch {
+            logger.error("moveItem failed for \(bundleID): \(error)")
+            return (false, "\(error)")
+        }
     }
 
     func hideItem(bundleID: String) async -> (success: Bool, message: String?) {
@@ -185,11 +235,120 @@ final class MCPBackendStateManager {
         await moveItem(bundleID: bundleID, toSection: .alwaysVisible, toIndex: nil)
     }
 
+    /// Applies a previously saved layout by replaying each item's
+    /// recorded section assignment. Items not currently in the menu bar
+    /// are skipped silently. First failure aborts and returns the
+    /// partial state (rolling back would need the undo ring buffer,
+    /// which lands in fire.8 W5 polish).
     func applyLayout(name: String) async -> (success: Bool, message: String?) {
-        logger.debug("applyLayout(\(name)) - W2 stub")
-        return (
-            false,
-            "Layout application requires write ops (fire.8 W2). Currently lists / saves layouts only."
+        logger.debug("applyLayout(\(name))")
+
+        guard
+            let allLayouts = defaults.dictionary(forKey: Self.layoutsKey),
+            let layout = allLayouts[name] as? [String: [[String: Any]]]
+        else {
+            return (false, "Layout '\(name)' not found")
+        }
+
+        // Replay order: alwaysHidden first (leftmost), then hidden, then
+        // alwaysVisible. This minimises cascade re-positioning - if we
+        // moved an alwaysVisible item first, then later moved an
+        // alwaysHidden item, the alwaysVisible's index could shift.
+        let replayOrder: [MenuBarItemService.ItemSection] = [
+            .alwaysHidden, .hidden, .alwaysVisible,
+        ]
+        var moved = 0
+        var skipped = 0
+        for section in replayOrder {
+            guard let entries = layout[section.rawValue] else { continue }
+            // Within each section, preserve the position order.
+            let sorted = entries.sorted { a, b in
+                (a["position"] as? Int ?? 0) < (b["position"] as? Int ?? 0)
+            }
+            for entry in sorted {
+                guard let bundleID = entry["bundleID"] as? String else { continue }
+                let result = await moveItem(
+                    bundleID: bundleID, toSection: section, toIndex: nil
+                )
+                if result.success {
+                    moved += 1
+                } else if let msg = result.message,
+                          msg.contains("not found in menu bar") {
+                    skipped += 1
+                    logger.debug("applyLayout skipping absent item \(bundleID)")
+                } else {
+                    return (false, "Failed at \(bundleID) → \(section.rawValue): \(result.message ?? "unknown")")
+                }
+            }
+        }
+        return (true, "Applied layout '\(name)': moved \(moved) items, skipped \(skipped) absent")
+    }
+
+    // MARK: - W2 helpers
+
+    /// Finds the menu bar window whose owning or source app has the
+    /// given bundle ID. Skips Ice's own control items (which all share
+    /// the Ice bundle ID and would confuse a "hide Ice" request).
+    private func findWindow(
+        for bundleID: String, in windows: [WindowInfo]
+    ) -> WindowInfo? {
+        guard bundleID != Self.iceBundleID else {
+            // Ice's own control items aren't moveable by the user.
+            return nil
+        }
+        return windows.first { window in
+            let app = NSRunningApplication(processIdentifier: window.ownerPID)
+            return app?.bundleIdentifier == bundleID
+        }
+    }
+
+    /// Finds Ice's 3 control items on the given display, sorted by X
+    /// position (leftmost first). Returns nil if fewer than 3 are
+    /// visible - that typically means Ice isn't running or all of
+    /// alwaysHidden + hidden are collapsed off-screen.
+    private func findIceControlItems(
+        displayID: CGDirectDisplayID,
+        in windows: [WindowInfo]
+    ) -> [WindowInfo]? {
+        let displayBounds = CGDisplayBounds(displayID)
+        let iceControls = windows.filter { window in
+            window.owningApplication?.bundleIdentifier == Self.iceBundleID &&
+            displayBounds.contains(CGPoint(x: window.bounds.midX, y: window.bounds.midY))
+        }
+        let sorted = iceControls.sorted { $0.bounds.minX < $1.bounds.minX }
+        guard sorted.count >= 3 else { return nil }
+        return Array(sorted.prefix(3))
+    }
+
+    /// Returns the active display whose bounds contain the given
+    /// rectangle's midpoint, or nil if no active display contains it.
+    private func displayContaining(_ rect: CGRect) -> CGDirectDisplayID? {
+        let mid = CGPoint(x: rect.midX, y: rect.midY)
+        for displayID in Self.activeDisplayIDs() {
+            if CGDisplayBounds(displayID).contains(mid) {
+                return displayID
+            }
+        }
+        return nil
+    }
+
+    /// Builds a Mover.MoveItem snapshot from a WindowInfo. No
+    /// SourcePIDCache available in MCPBackend, so sourcePID is always
+    /// nil (Mover falls back to ownerPID for event targeting). The
+    /// isBentoBox heuristic just checks for Control Center ownership
+    /// to bump the move timeout - good enough for W2.
+    private func makeMoveItem(
+        window: WindowInfo, displayName: String
+    ) -> Mover.MoveItem {
+        let app = NSRunningApplication(processIdentifier: window.ownerPID)
+        let isBento = app?.bundleIdentifier == "com.apple.controlcenter"
+        return Mover.MoveItem(
+            windowID: window.windowID,
+            ownerPID: window.ownerPID,
+            sourcePID: nil,
+            bounds: window.bounds,
+            isBentoBox: isBento,
+            displayName: displayName
         )
     }
 

@@ -14,9 +14,9 @@
 		6F35D45D2FC5110A0021FDEA /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 108CD334ED0A4341B1D2AC87 /* Sentry */; };
 		7127A9FF2C4886D100D99DEF /* IfritStatic in Frameworks */ = {isa = PBXBuildFile; productRef = 7127A9FE2C4886D100D99DEF /* IfritStatic */; };
 		7168EE532E281CBC00FF9830 /* AXSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7168EE522E281CBC00FF9830 /* AXSwift */; };
-		7188A7102E600000008F131D /* AXSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7188A70E2E600000008F131D /* AXSwift */; };
 		7188A68C2E27F9ED008F131D /* MenuBarItemService.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = 7188A6832E27F9ED008F131D /* MenuBarItemService.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7188A70A2E600000008F131D /* MCPBackend.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = 7188A7052E600000008F131D /* MCPBackend.xpc */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		7188A7102E600000008F131D /* AXSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 7188A70E2E600000008F131D /* AXSwift */; };
 		71A065092E680C620087DB38 /* Semaphore in Frameworks */ = {isa = PBXBuildFile; productRef = 71A065082E680C620087DB38 /* Semaphore */; };
 /* End PBXBuildFile section */
 
@@ -85,8 +85,8 @@
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		7188A6842E27F9ED008F131D /* MenuBarItemService */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (7188A6912E27F9ED008F131D /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = MenuBarItemService; sourceTree = "<group>"; };
-		7188A7062E600000008F131D /* MCPBackend */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (7188A7072E600000008F131D /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = MCPBackend; sourceTree = "<group>"; };
 		7188A69E2E280BB4008F131D /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Shared; sourceTree = "<group>"; };
+		7188A7062E600000008F131D /* MCPBackend */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (7188A7072E600000008F131D /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = MCPBackend; sourceTree = "<group>"; };
 		71BDFBE12C978E2A00EF145F /* Ice */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (71BDFC6C2C978E2A00EF145F /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Ice; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
@@ -220,8 +220,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				7188A7062E600000008F131D /* MCPBackend */,
 				7188A69E2E280BB4008F131D /* Shared */,
+				7188A7062E600000008F131D /* MCPBackend */,
 			);
 			name = MCPBackend;
 			packageProductDependencies = (
@@ -823,15 +823,15 @@
 			package = 1787C4252B16890B002F50DF /* XCRemoteSwiftPackageReference "AXSwift" */;
 			productName = AXSwift;
 		};
-		71A065082E680C620087DB38 /* Semaphore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 71A065072E680C620087DB38 /* XCRemoteSwiftPackageReference "Semaphore" */;
-			productName = Semaphore;
-		};
 		7188A70E2E600000008F131D /* AXSwift */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 1787C4252B16890B002F50DF /* XCRemoteSwiftPackageReference "AXSwift" */;
 			productName = AXSwift;
+		};
+		71A065082E680C620087DB38 /* Semaphore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 71A065072E680C620087DB38 /* XCRemoteSwiftPackageReference "Semaphore" */;
+			productName = Semaphore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
