@@ -3,6 +3,57 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## ✅ MERGED to fire/main — MCP Phase 4.5 wire-only (2026-05-26 ~03:30)
+
+PR #2 merged. 4 commits on fire/main beyond fire.5. **fire.6 NOT
+tagged** — per the plan's "if smoke test fails, do not tag" guardrail.
+End-to-end MCP protocol works (clients can connect + discover all 6
+tools + call them) but every call returns "Not implemented in Phase 1"
+because Worker B's real `MenuBarStateManager` implementation needs a
+cross-target refactor that didn't fit in tonight's window.
+
+**What the merge ships:**
+
+| Commit | Wave | What |
+|---|---|---|
+| `aded612` | Phase 1 (prev session) | XPC wire contract — Request/Response enums, 6 MCP cases, ItemSection, ItemInfo |
+| `13c1d6e` | Phase 2 (prev session) | IceMCPBridge Xcode target scaffold (later removed in Wave 1 below) |
+| `9417801` | **Wave 1 (tonight)** | **Pivot to SwiftPM executable** — Xcode 26's SwiftPM bridge cannot resolve swift-nio transitive deps (`DequeModule`, `Atomics`) for tool-product targets. Tried the full Option A spectrum (explicit `XCRemoteSwiftPackageReference` + `XCSwiftPackageProductDependency` + `PBXBuildFile` + project `packageReferences`); NIOCore still fails every variation. Bridge moved to `Bridge/Package.swift`; vanilla `swift build` works (335-module graph, ~30s). Old Xcode IceMCPBridge target REMOVED entirely. Ice target gains a Run Script ("Build and Embed IceMCPBridge") that runs `cd Bridge && swift build -c $CONFIG` and copies the 13MB binary to `Ice.app/Contents/MacOS/IceMCPBridge` with ad-hoc sign. CI's `--deep` codesign pass will re-sign with Developer ID. Documented bug: https://forums.swift.org/t/xcode-26-unable-to-find-module-dependency/80516 |
+| `5f907a7` | **Wave 2 (tonight)** | Real MCP server (`Bridge/Sources/IceMCPBridge/main.swift`, 498 lines) using modelcontextprotocol/swift-sdk with verified API surface — `Server` + `withMethodHandler(ListTools.self/CallTool.self)`, `StdioTransport`, `XPCSession` (NOT NSXPCConnection) mirroring Ice's existing `MenuBarItemServiceConnection` with `.isFromSameTeam()` ad-hoc-build guard, 6 tools registered with FULL annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`). PLUS Settings UI subpane "MCP Server (experimental)" with 3 consent toggles (`mcpServerEnabled` / `mcpAllowWrites` / `mcpNotifyOnWrite`, mirroring the existing Sentry shareDiagnostics pattern). PLUS `docs/mcp/CLIENT-SETUP.md` (per-client config for Claude Desktop / Claude Code / Cursor / Continue, all verified from each client's official MCP docs) + README MCP Server section. |
+
+**Verification at merge:**
+- `xcodebuild -scheme Ice build` succeeds
+- `Ice.app/Contents/MacOS/IceMCPBridge` exists (13MB)
+- Bridge process starts on stdio and registers 6 tools (verified by `Server` type loading)
+- Worker C's 3 toggles render in Settings → Advanced (visual confirmation pending — relies on user running the local build)
+
+**Why fire.6 NOT tagged:** Worker B's `MenuBarStateManager` real implementation cannot compile in MenuBarItemService XPC target — references `MenuBarSection`, `MenuBarItem`, `MenuBarItemManager`, `MenuBarItemTag` which all live in Ice main app target. Saved as `MenuBarItemService/MenuBarStateManager.swift.proposal.phase3` (380 lines, architecturally correct, just needs the types accessible). The end-to-end "Claude Desktop hides Control Center" smoke test would currently return `"Not implemented in Phase 1"` — that's not a fire.6-worthy ship.
+
+**Phases NOT in this merge (deferred to next session):**
+- Worker B's real MenuBarStateManager (the cross-target refactor below unblocks it)
+- Wave 3 lifecycle plumbing (MCP clients spawn bridge directly per Q4 — no AppDelegate work needed for now)
+- Wave 3 `UNUserNotification` on write ops (useless while mutations are stubs)
+- Wave 3 `.v1` XPC service rename (risky without smoke-test coverage)
+- Wave 4 undo ring buffer (useless without mutations)
+- Wave 5 fire.6 release tag
+
+## ⏭️ NEXT SESSION — Unblock Worker B + ship fire.6
+
+**Primary task: cross-target refactor of MenuBar* types.** Currently `Ice/MenuBar/MenuBarItems/MenuBarItem.swift`, `MenuBarItemManager.swift`, and `MenuBarSection.swift` are members of the Ice main app target only. Worker B's `MenuBarStateManager.swift.proposal.phase3` needs these types from the XPC service target.
+
+**Approach options (in order of preference):**
+1. **Move the files to `Shared/MenuBar/`** — they become accessible to both Ice and MenuBarItemService targets via the existing `Shared/` fileSystemSynchronizedGroup. Risk: cascading deps (these files may depend on more Ice-internal types). Map the dep tree first.
+2. **Add the files to MenuBarItemService target's fileSystemSynchronizedGroup via a custom exception set** that includes specific `Ice/MenuBar/...swift` paths. Less clean (duplicated compilation across both targets) but no refactor cascade.
+3. **Reimplement MenuBarStateManager from AX primitives** — bypass MenuBarItemManager entirely, use only `AXHelpers` + `WindowInfo` + manual CGEvent dispatch. Largest reimplementation but cleanest target boundary.
+
+**Recommended path:** Try option 1 first. Read `MenuBarSection.swift` first (smallest), trace its imports / type deps, then `MenuBarItem.swift`, then `MenuBarItemManager.swift`. Move whatever they need into `Shared/MenuBar/`. Expect 1-2h.
+
+**Then:** rename `MenuBarStateManager.swift.proposal.phase3` → `MenuBarStateManager.swift` (overwriting the stub), fix the `Listener.swift` async-handler bridge (XPC handlers expect sync closures — wrap async calls in `Task.detached` + `DispatchSemaphore` or use `syncWait` pattern: spawn a detached Task, blocking-wait the semaphore), full project build, ship the smoke test (Claude Desktop list_items + hide_item + undo), tag fire.6.
+
+**Estimated total to fire.6 ship:** 2-3h next session.
+
+## 🚧 SUPERSEDED — original WIP PR #2 brief (kept for reference)
+
 ## 🚧 IN-FLIGHT — MCP MVP Phase 1+2 in WIP PR #2 (2026-05-26 ~02:00)
 
 After fire.5 shipped, the session continued with the actual MCP MVP
