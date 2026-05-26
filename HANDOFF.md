@@ -3,6 +3,67 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🛑 IMPORTANT DISCOVERY — Option D is NOT viable as planned (2026-05-26 ~11:35)
+
+**Attempted**: In-process XPCListener in Ice main app hosting `com.jordanbaird.Ice.MCPBackend` Mach service, with MachServices declared in Ice's Info.plist.
+
+**Result**: launchd refuses registration:
+
+```
+launchd: failed activation: name = com.jordanbaird.Ice.MCPBackend,
+         requestor = Ice[89968], error = 1: Operation not permitted
+```
+
+**Root cause**: macOS does NOT allow regular GUI apps to register arbitrary named Mach services with launchd. The MachServices Info.plist key is only honored for LaunchAgents / LaunchDaemons (loaded via launchctl from /Library/LaunchAgents or ~/Library/LaunchAgents plists, not from .app bundles). For GUI apps the only supported XPC patterns are:
+1. Embedded .xpc bundles (separate subprocess, what MenuBarItemService.xpc already does)
+2. Anonymous NSXPCListener with endpoint sharing through some side channel
+3. Becoming a LaunchAgent (changes the install pattern entirely)
+
+The Option D plan in the prior HANDOFF section (host MCP backend in Ice main app process via XPCListener) was **architecturally infeasible on macOS for a non-LaunchAgent app**. Code that explored it: commit `f455335` (added `Ice/Services/MCPBackend.swift` + `MCPBackendStateManager.swift` + MachServices entry); reverted in `aefac16` after the launchd error surfaced.
+
+**The `MCPBackendStateManager.swift` implementation is still good** — it's Worker B's 380-line move/listItems/applyLayout logic adapted for instance-injection of the Ice manager (since Ice's `MenuBarItemManager` is owned by `AppState`, not a singleton). Resurrect from commit `f455335` if going with Path 1 below.
+
+## ⏭️ NEXT SESSION — Pick a viable path to fire.7 write ops
+
+Three realistic options, ranked:
+
+**Path 1 - Embedded MCPBackend.xpc bundle (recommended, ~3-4h)**
+
+Add a new `.xpc` service bundle alongside the existing `MenuBarItemService.xpc`. Same separate-subprocess pattern, but dedicated to MCP. Self-contained: reimplements the AX move logic inside the .xpc target using primitives that DO live in `Shared/` (`Bridging`, `WindowInfo`, `AXHelpers`, `CGEvent` posting via the wrapped APIs Ice already uses). The .xpc service runs fresh AX scans for each tool call rather than relying on Ice main app's `MenuBarItemManager.itemCache` state.
+
+Pros:
+- Architecturally supported by macOS - same pattern as MenuBarItemService.xpc that already works
+- Build / pbxproj surgery limited to new .xpc target (mostly an Xcode UI operation)
+- No cross-target type sharing needed for the simple move case
+- TCC-inherited AX permission from parent Ice.app
+
+Cons:
+- Reimplement (lean version of) Ice's drag-event posting code in the .xpc service. Risk: subtle differences from `MenuBarItemManager.move()` that could miss edge cases. Mitigation: lift the actual event-posting helpers from MenuBarItemManager (or refactor them into Shared/) and reuse.
+- Two move pipelines (Ice's Layout drag UI + this .xpc service) need to stay coordinated. Same risk MCPBackendStateManager already noted in its header comments.
+
+**Path 2 - Move MenuBar* types into Shared/ (~6-8h, cascade risk)**
+
+Move `MenuBarItem.swift` (374 lines, clean), `MenuBarItemTag.swift` (small), `MenuBarSection.swift` (296 lines, references AppState), and `MenuBarItemManager.swift` (1839 lines, references AppState 5x) into `Shared/`. Stub or extract the AppState references. Existing fire.6 read-only `MenuBarStateManager` in `MenuBarItemService.xpc` then becomes the full-fledged backend, and the bridge keeps targeting `com.jordanbaird.Ice.MenuBarItemService`.
+
+Pros:
+- Single move pipeline (reused for both Layout UI and MCP)
+- No new XPC service or bundle to set up
+
+Cons:
+- AppState cascade is real and unbounded - moving 1839-line MenuBarItemManager into Shared/ may pull in 3-4 more files
+- This was the path I rejected before fire.6 due to time risk; the risk hasn't gone down
+
+**Path 3 - Defer write ops indefinitely (~0h)**
+
+Ship fire.7 as a polish release focused on improvements to the read-only MCP layer (multi-display support, better section detection, additional info in `list_items` response, etc.). Write ops remain "Coming soon" in tool descriptions. Set a clear deadline for revisiting (e.g., when Apple introduces a new in-process Mach service mechanism on macOS 27).
+
+Pros:
+- No risk
+- Keeps current shipping cadence
+
+Cons:
+- The headline "AI-native menu bar manager" needs write ops to be genuinely useful. fire.7 without writes is a smaller win than the positioning advertises.
+
 ## 🔥 SHIPPED fire.6 — MCP read-only (2026-05-26 ~08:40)
 
 **Tagged `v0.11.13-fire.6`** (build 1128). CI workflow "Build macOS and Create DMG" running on the tag — will sign + notarize + draft GitHub Release with the DMG. Tracked at https://github.com/pdurlej/Ice/actions.
