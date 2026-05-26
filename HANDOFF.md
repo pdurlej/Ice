@@ -3,6 +3,70 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🚧 IN-FLIGHT — MCP MVP Phase 1+2 in WIP PR #2 (2026-05-26 ~02:00)
+
+After fire.5 shipped, the session continued with the actual MCP MVP
+implementation work, getting through Phases 1 and 2 of the five-phase
+plan from `docs/mcp/ARCHITECTURE.md`.
+
+**WIP PR #2** — https://github.com/pdurlej/Ice/pull/2 (draft, branch
+`feature/mcp-mvp-phase1-xpc-contract` → `fire/main`).
+The PR body is the canonical source for what's in / what's missing.
+
+Two commits on the branch:
+
+- **`aded612`** — Phase 1: XPC contract extension. Adds 6 new Request
+  cases + 3 Response cases + `ItemSection` / `ItemInfo` shared types
+  to `Shared/Services/MenuBarItemService.swift`. NEW
+  `MenuBarItemService/MenuBarStateManager.swift` with Phase-1 stubs
+  (every operation returns `"Not implemented in Phase 1 — wire-contract
+  stub"`). `Listener.swift` extended to dispatch the 6 new cases to
+  the state manager. Builds clean.
+
+- **`13c1d6e`** — Phase 2: IceMCPBridge target scaffold. NEW Xcode
+  target (Command Line Tool, `com.jordanbaird.IceMCPBridge` bundle ID,
+  file-system-sync to `IceMCPBridge/` + `Shared/`). Minimal
+  `IceMCPBridge/main.swift` that proves the Shared/ group is reachable
+  via compile-time witnesses on `MenuBarItemService.name` and
+  `MenuBarItemService.ItemSection.allCases`. Plus
+  `IceMCPBridge/main.swift.proposal.phase3` — 384-line worker draft
+  of the full MCP server (Swarmheart structural-planner lane, fell back
+  to DeepSeek v4-pro). Reference only — uses `NSXPCConnection` instead
+  of `XPCSession`, guesses MCP SDK API names. Phase 3 rewrites from it.
+
+**Critical Phase 3 first task** — the IceMCPBridge target doesn't yet
+build when `import MCP` is added. Reason: SPM-in-Xcode transitive
+dependency resolution bug — `swift-nio` (pulled by MCP SDK) can't
+resolve its own deps on `DequeModule` and `Atomics` for the target's
+compile environment.
+
+Three Phase-3 fix options documented in the `IceMCPBridge/main.swift`
+header (in order of preference):
+
+1. Explicit `XCRemoteSwiftPackageReference` entries for
+   `swift-collections` + `swift-atomics`, then link `Collections` /
+   `Atomics` / `NIOCore` products to IceMCPBridge target via
+   `XCSwiftPackageProductDependency`. Standard SPM-in-Xcode workaround.
+2. Switch IceMCPBridge to a `swift build` executable in a sibling
+   `Package.swift`, embed via Copy Files build phase.
+3. Use a Swift MCP implementation without NIO dependency.
+
+**CI is unaffected.** `build-dmg.yml` uses `-scheme Ice` which does
+not touch the new IceMCPBridge target. Fire users who pull fire.5 see
+zero behavior change from the MCP work — it's all behind the scenes
+on a feature branch.
+
+**Phase 3-5 outstanding** — issue #1 has the full plan + the 9
+architecture decisions are all resolved in `docs/mcp/ARCHITECTURE.md`
+§10. Phase 3 next-session start: resolve the IceMCPBridge build, then
+rewrite `main.swift` from the Phase-3 proposal reference, then
+implement the 6 tool handlers (can dispatch to Swarmheart senior-coder
+in parallel — one worker per tool, independent).
+
+Effort remaining: ~10-12h focused for Phase 3-5.
+
+---
+
 ## ✅ SHIPPED — fire.5 (Sentry opt-in) + MCP scaffold (2026-05-26 01:30)
 
 **fire.5** is live with opt-in Sentry crash reporting. DMG SHA256
