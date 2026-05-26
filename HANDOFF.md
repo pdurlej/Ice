@@ -3,7 +3,129 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
-## 🚧 IN-FLIGHT - fire.7.1 tagged but blocked on GitHub outage (2026-05-26 ~12:30)
+## 🔥 SHIPPED fire.7.1 + fire.8 W1+W2+W3 on branch (2026-05-26 ~18:00)
+
+This afternoon session shipped fire.7.1 (after recovering from GitHub
+outage + suspension that blocked the morning ship), then powered through
+fire.8 waves W1+W2+W3 in one go. Branch `feature/fire-8-mcpbackend` is
+now feature-complete for write ops, just needs smoke testing and the
+W5+W6 polish before tagging fire.8.
+
+### fire.7.1 ship
+
+**`v0.11.13-fire.7.1`** (build 1130) shipped: signed + notarized DMG at
+https://github.com/pdurlej/Ice/releases/tag/v0.11.13-fire.7.1, appcast
+entry appended to `pdurlej/fire-releases` commit `aa6ae05`. fire.7
+users will get the auto-update prompt.
+
+**Root cause of morning failure**: not the outage (that lifted ~12:37).
+The real bug was the workflow change in commit `b59009f` that replaced
+`maxim-lobanov/setup-xcode@v1` with `sudo xcode-select -s /Applications/Xcode.app`.
+fire.7 succeeded because setup-xcode picked Xcode_26.3.app explicitly
+(MacOSX26.2 SDK); my replacement followed the `Xcode.app` symlink which
+now points to Xcode_16.4.app (MacOSX15.5 SDK). `XPCListener(service:requirement:)`
+is a macOS 26-only API, so even though `@available(macOS 26.0, *)` guards
+the call at runtime, the compile fails against the older SDK with
+"extra arguments at positions #2, #3" inside the availability block.
+
+**Fix** (commit `7c521a5`): glob `/Applications/Xcode_26*.app` and pick
+highest version. Forward-compatible when GitHub installs Xcode_26.4 or 27.x.
+
+**Tag was moved** (not renamed): no DMG had been released for the old
+fire.7.1 tag, so I deleted the remote + local tag and re-created at the
+workflow-fix commit.
+
+### fire.8 W1 (pbxproj surgery) — DONE, commit `344c19b`
+
+`MCPBackend.xpc` is now a real Xcode target alongside MenuBarItemService.xpc.
+The pbxproj surgery added 16 entries cloning MenuBarItemService's
+structure with UUID prefix `7188A70*`. Build wires AXSwift product
+dependency (needed because Shared/Utilities/AXHelpers.swift imports it,
+and MCPBackend's synchronized root group pulls all of Shared/).
+
+Verified locally: `xcodebuild -scheme Ice` produces
+`build/Build/Products/Debug/Ice.app/Contents/XPCServices/MCPBackend.xpc`
+side-by-side with MenuBarItemService.xpc.
+
+### fire.8 W2+W3 (Mover.swift + bridge re-target) — DONE, commit `6d8ee82`
+
+**`MCPBackend/Mover.swift`** (~530 lines): lean port of Ice's
+MenuBarItemManager.move/postMoveEvents/scrombleEvent pipeline as a
+standalone `actor`. Substantive differences from upstream:
+- Decoupled from MenuBarItem struct — uses lean `MoveItem` snapshot
+- No AppState / no HIDEventManager coordination (no taps in this process)
+- No AsyncSemaphore (single-flight via actor isolation)
+- No cursor warping on return (CGWarpMouseCursorPosition unreliable on
+  macOS 26 — cursor stays hidden through the move)
+- Same three-EventTap scrombler dance upstream uses
+- CGEvent extensions (menuBarItemMoveEvent, uniqueNullEvent,
+  scrombler field matching) reproduced as `fileprivate extension`
+
+**`MCPBackend/MCPBackendStateManager.swift` write ops wired**:
+- `moveItem(bundleID:, toSection:, toIndex:)`: finds source item across
+  displays, picks Ice's 3 control items for the source's display, posts
+  `.rightOfItem(controls[N])` where N maps to the target section
+- `hideItem` / `showItem`: thin wrappers
+- `applyLayout`: replays saved snapshot in left-to-right section order
+  (alwaysHidden → hidden → alwaysVisible) to minimize cascade
+  repositioning. Missing items skipped silently.
+
+**Shared/ promotions** (file moves, all clean - no Ice-specific deps):
+- `Ice/Events/EventTap.swift` → `Shared/Events/EventTap.swift`
+- `Ice/Utilities/MouseHelpers.swift` → `Shared/Utilities/MouseHelpers.swift`
+- `Ice/Utilities/ConcurrencyHelpers.swift` → `Shared/Utilities/ConcurrencyHelpers.swift`
+
+**Bridge re-target** (`Bridge/Sources/IceMCPBridge/main.swift`): service
+name flipped from `MenuBarItemService.name` to
+`"com.jordanbaird.Ice.MCPBackend"`. MenuBarItemService.xpc stays in the
+bundle for the Ice-internal sourcePID handshake — the bridge just no
+longer routes to it.
+
+Builds clean. Both .xpc bundles ship.
+
+### NOT YET TESTED — smoke verification before fire.8 ship
+
+The move logic compiles and the API is wired correctly, but no actual
+move event has been posted yet. A successful smoke test looks like:
+
+1. Install a `feature/fire-8-mcpbackend` Debug build to `/Applications/Ice.app`
+2. Configure Claude Desktop's `claude_desktop_config.json` to point at
+   the embedded bridge: `/Applications/Ice.app/Contents/MacOS/IceMCPBridge`
+3. Restart Claude Desktop
+4. Ask "List my menu bar items" — should return real items
+5. Ask "Hide Control Center" — Mover should fire, item should visibly
+   shift to the hidden section
+6. Ask "Apply layout 'X'" (after saving one) — items should reflow
+
+If step 5 fails the failure mode is friendly: `Mover.MoveError`
+descriptions surface as the `.mutationResult` message field in the
+MCP response, so the client sees `Mover.itemResponseTimeout(displayName)`
+or similar, not silent loss.
+
+### Remaining fire.8 work
+
+| Wave | What | Effort | Status |
+|---|---|---|---|
+| W1 | pbxproj surgery | 1h | ✅ DONE |
+| W2 | Mover.swift + integration | 4-5h estimated | ✅ DONE (~1.5h actual) |
+| W3 | Bridge re-target | 1h | ✅ DONE |
+| W4 | list_layouts | 30min | ✅ shipped in fire.7.1 |
+| W5 | Starter presets (Focus/Meeting/Default) seeded on first launch | 1h | ⏭️ pending |
+| W6 | Settings Layouts subpane (browse/rename/delete/apply/hotkey) | 2-3h | ⏭️ pending |
+| W7 | Smoke test + tag + ship | 1h | ⏭️ pending |
+
+W5+W6+W7 are the polish layer. They can ship together as fire.8 once
+W5+W6 land and the smoke test is green.
+
+## 🗄️ SUPERSEDED — fire.7.1 GitHub outage status (was IN-FLIGHT)
+
+The morning notes below this section describe the fire.7.1 outage
+saga before recovery. Kept for reference; safely superseded by the
+ship status above.
+
+---
+
+## (legacy) IN-FLIGHT - fire.7.1 tagged but blocked on GitHub outage (2026-05-26 ~12:30)
 
 **`v0.11.13-fire.7.1`** tag pushed (build 1130). Adds `list_layouts` MCP tool - W4 of the fire.8 plan that ships independently because it's a read-only addition. AI can now ask "what layouts has the user saved?" and get the list without trial-and-error apply_layout calls.
 
