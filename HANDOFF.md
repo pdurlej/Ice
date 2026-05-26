@@ -3,6 +3,44 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🔥 SHIPPED fire.7 - multi-display read-only MCP (2026-05-26 ~12:10)
+
+**Tagged `v0.11.13-fire.7`** (build 1129). CI built + signed + notarized; DMG at https://github.com/pdurlej/Ice/releases/tag/v0.11.13-fire.7. Sparkle appcast updated with EdDSA-signed entry (`pdurlej/fire-releases` commit `7dbebdd`) so fire.6 users will receive auto-update notification.
+
+**What fire.7 adds:**
+- `list_items` now iterates ALL active displays via `CGGetActiveDisplayList`, not just the primary
+- Per-display section detection - secondary monitors with collapsed Ice sections fall back gracefully instead of polluting primary display's section boundaries
+- Main display leads ordering even when CGS returns it second (some users have an external as their main with the MBP display IDed first)
+- Better diagnostic logging when section detection degrades on any particular display
+- Wire contract unchanged - fire.6 bridges still work transparently with fire.7 servers
+
+## 🎯 fire.8 plan - write ops + Fantastical-style "layout sets" (~8-10h, multi-session)
+
+**Vision from this morning's brainstorm:** Menu bar layouts behave like Fantastical's calendar sets. User (or AI) flips between named layouts ("Focus", "Meeting", "Default") and Fire auto-arranges the menu bar accordingly. The AI-native part is genuinely novel: a calendar MCP (e.g. Fantastical's) tells an AI agent what context the user is in, the agent calls Fire's `apply_layout` to match. Cross-MCP orchestration with no app-to-app code integration needed.
+
+**Architecture decision locked**: Path 1 from the morning's analysis - new embedded `MCPBackend.xpc` bundle alongside the existing `MenuBarItemService.xpc`. Self-contained move logic in the new .xpc target. Reasons:
+- Path 2 (move MenuBar* to Shared/) was rejected: AppState + HIDEventManager cascade is unbounded, 6-8h optimistic
+- Path 3 (defer writes indefinitely) was rejected: sets without writes is read-only fantasy, not the actual product
+- Option D (in-process Mach service in Ice main app) was rejected: macOS launchd refuses non-LaunchAgent processes registering arbitrary Mach services (verified empirically this morning, see DISCOVERY section below)
+
+**Wave breakdown for fire.8:**
+
+| Wave | What | Effort | Blocker for next? |
+|---|---|---|---|
+| **W1** | Create `MCPBackend.xpc` Xcode target. Copy MenuBarItemService.xpc structure with new bundle ID `com.jordanbaird.Ice.MCPBackend`. Empty `Listener.swift` that responds to `start` only. Verify it spawns as XPC subprocess of Ice.app and bridge can connect to it. | ~1h | Yes - everything below depends on this scaffold |
+| **W2** | Move logic in the new .xpc target: extract just the CGEvent posting + position math from `Ice/MenuBar/MenuBarItems/MenuBarItemManager.swift` into a leaner standalone file. Helpers needed: `permitLocalEvents()`, `getTargetPoints()`, `postMoveEvents()`, retry loop. Total ~600-800 lines of careful porting. HIDEventManager interaction may need to be skipped or simplified - test empirically. | ~4-5h | Yes |
+| **W3** | Wire MCPBackendStateManager.swift (resurrected from commit `f455335`, Worker B's logic adapted) into the new target. Bridge re-target service name in `Bridge/Sources/IceMCPBridge/main.swift` from `MenuBarItemService.name` to `com.jordanbaird.Ice.MCPBackend`. Build + smoke test write ops end-to-end. | ~1h | No |
+| **W4** | `list_layouts` MCP tool: add to wire contract, implement in MCPBackendStateManager (reads from `MCPLayouts` dict), expose in bridge. Small wire-contract addition; backwards compatible. | ~30min | No |
+| **W5** | Three built-in starter presets shipped with Fire as default layouts: "Focus" (minimal - clock/battery/wifi only), "Meeting" (essentials hidden - hide stream deck etc.), "Default" (everything visible). Stored in same `MCPLayouts` dict, seeded on first launch via MigrationManager. | ~1h | No |
+| **W6** | Settings UI: new "Layouts" subpane under Menu Bar Layout. Browse / rename / delete / apply / preview. Hotkey assignment per layout (use existing `HotkeyManager` infrastructure). | ~2-3h | No |
+| **W7** | Ship fire.8 + Sparkle appcast + HANDOFF refresh. | ~30min | - |
+
+**Total estimated**: 9.5-11.5h. Realistically spread across 2-3 sessions.
+
+**W1+W2 are the long-pole.** They unblock everything else. If a session is short, the right starter is W4 (`list_layouts` MCP tool - reads the existing plist, ships independently as fire.7.1).
+
+**Cross-MCP demo concept** (post-W3 milestone, blog/tweet content): live screencast of a Fantastical event → AI agent reads via Fantastical MCP → AI calls Fire's `apply_layout("Meeting")` → menu bar visibly cleans up. ~30 min to record once W3 lands. This is the actual headline content for Fire's positioning as AI-native.
+
 ## 🛑 IMPORTANT DISCOVERY — Option D is NOT viable as planned (2026-05-26 ~11:35)
 
 **Attempted**: In-process XPCListener in Ice main app hosting `com.jordanbaird.Ice.MCPBackend` Mach service, with MachServices declared in Ice's Info.plist.
