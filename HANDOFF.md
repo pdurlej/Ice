@@ -83,7 +83,54 @@ longer routes to it.
 
 Builds clean. Both .xpc bundles ship.
 
-### NOT YET TESTED — smoke verification before fire.8 ship
+### fire.8 W2 follow-up: SourcePIDCache promoted (commit `dd77dc2`)
+
+Smoke test (see next section) uncovered that bundleIDs were collapsing
+to `com.apple.controlcenter` because MCPBackend was using ownerPID
+only. Fix: promoted `MenuBarItemService/SourcePIDCache.swift` to
+`Shared/Utilities/SourcePIDCache.swift` so both .xpc services compile
+it. Each process keeps its own cache instance — the AX scan logic is
+per-process but the resolved (windowID → sourcePID) mappings are local.
+MCPBackendStateManager now resolves sourcePID via the cache in
+`makeItemInfo`, `findWindow`, and `makeMoveItem`.
+
+### Partial smoke test (afternoon, 2026-05-26)
+
+Ran an ad-hoc-signed Debug build of fire.8 W2 over `/Applications/Ice.app`
+with Claude Desktop pointed at the embedded bridge:
+
+- ✅ Bridge speaks MCP protocol (initialize, tools/list returns 7 tools
+  with correct annotations).
+- ✅ Bridge → MCPBackend.xpc XPC handshake succeeds.
+- ✅ MCPBackend.xpc spawns as a subprocess of Ice.app on first request,
+  responds, exits cleanly when the bridge disconnects.
+- ✅ listItems returns real items.
+
+NOT confirmed and why:
+
+- ⚠️ All bundleIDs collapse to `com.apple.controlcenter`. SourcePIDCache
+  was the planned fix and is now in place, but smoke retest STILL
+  shows the collapse — TCC is not granting AX to the ad-hoc-signed
+  Debug build (Developer-ID-signed fire.7.1's AX entitlement is
+  silently invalidated when a re-signed binary lands at the same
+  path; the Ice toggle in Settings stays visually ON, but actual
+  permission isn't honored). SourcePIDCache uses `AXHelpers.isProcessTrusted()`
+  as a precondition, so it returns nil for every window.
+- ⚠️ No move event posted end-to-end. Without correct bundleID
+  resolution we can't reliably target a non-Ice item, so Mover.swift
+  remains untested in practice.
+
+Both are development-friction issues with the ad-hoc-signed install
+path, not code bugs. The right validation path is a Developer ID-signed
+CI build of fire.8-rc1, installed over fire.7.1 — TCC sees the same
+signed identity, AX permission carries over, SourcePIDCache populates,
+bundleIDs resolve correctly. Tag fire.8-rc1 from the feature branch
+when ready.
+
+Session cleanup done: `/Applications/Ice.app` restored to fire.7.1,
+Claude Desktop config rolled back to pre-fire-MCP state.
+
+### Original smoke test acceptance criteria
 
 The move logic compiles and the API is wired correctly, but no actual
 move event has been posted yet. A successful smoke test looks like:
