@@ -3,6 +3,42 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🔥 SHIPPED fire.9.6 - AI Quotas shows REMAINING %, not used % (2026-05-29 ~19:10)
+
+Owner feedback on the readout: showing *used* % made "Antigravity 0%"
+read like "nothing left / all spent" when it actually means "untouched,
+full headroom". Flipped the menu-bar number from `weeklyUsedPercent` to
+`weeklyLeftPercent` (one-line change in `AIQuotaMenuBuilder.attributedTitle`
++ doc comment). The color thresholds were ALREADY keyed on remaining
+headroom (red < 10% left, orange < 20%), so only the displayed value
+changed — a small red number now reads as "almost out", a big number as
+"plenty left". Dropdown already said "X% left", so the two are now
+consistent.
+
+Verified live via post-install screenshot (build 1142):
+- Antigravity 0% → **100%** (the headline example).
+- Ollama 43% → **57%** (exactly 100−43, confirms the flip).
+- Claude **87%** left (matches codexbar "87% left").
+- Codex showed "?" in that capture — a TRANSIENT codexbar-CLI fetch
+  miss on first launch (codexbar was contended: SessionStart hook +
+  manual probes ran it seconds earlier). NOT caused by this change:
+  `weeklyLeftPercent` is nil iff `weeklyUsedPercent` is nil, so used vs
+  left have identical "?" behavior. codex CLI returns valid data
+  (primary 6% used / 94% left; weekly ~23% used). Self-heals on the
+  next 5-min refresh / "Refresh Now".
+
+Latent follow-up (NOT done, out of scope): `CodexBarCLIQuotaBackend.runProcess`
+resumes its continuation in `terminationHandler` using `stdoutData.snapshot()`
+without guaranteeing the readabilityHandler flushed the final chunk —
+a possible flush race that could yield empty/truncated stdout → "?".
+Backend reads stdout only and correctly ignores stderr (the
+`[codex notify] remoteControl/status/changed` line lives on stderr, so
+it is NOT the cause). Harden as fire.9.7 if codex "?" recurs.
+
+Tag `v0.11.13-fire.9.6` (build 1142), commit `1aa592e`. CI built +
+signed + notarized; appcast updated (`pdurlej/fire-releases` `7e9159c`).
+Installed + verified locally.
+
 ## 🔥 SHIPPED fire.9.5 - AI Quotas brand icons + weekly % (2026-05-29 ~16:50)
 
 Dogfeeding feedback: the "Cx95 Cl51 Gm? Ag100 Ol98" text was cryptic.
