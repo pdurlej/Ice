@@ -3,6 +3,28 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🔥 SHIPPED fire.9.5 - AI Quotas brand icons + weekly % (2026-05-29 ~16:50)
+
+Dogfeeding feedback: the "Cx95 Cl51 Gm? Ag100 Ol98" text was cryptic.
+Redesigned the menu-bar readout, CodexBar-style. Verified live via
+screenshot: shows [Codex logo] 22% [Claude logo] 11% [Antigravity ▲] 0%
+[Ollama 🦙] 43%.
+
+- Brand icons loaded at runtime from the installed CodexBar.app's
+  `ProviderIcon-<provider>.svg` (same dependency as the CLI; not
+  vendored; falls back to 2-letter label if absent). Rendered as
+  NSAttributedString image attachments on the control-item button
+  (`AIQuotaProviderIcon.swift` + `AIQuotaMenuBuilder.attributedTitle`).
+- Shows WEEKLY usage % (secondary window's usedPercent), color-coded:
+  orange < 20% weekly left, red < 10%.
+- Dropped the standalone `gemini` provider enum case — Antigravity is
+  the Gemini-backed tool, so it already covers Gemini; gemini only ever
+  showed "?".
+- Per-provider toggles added to Settings → Advanced → AI Quotas.
+
+Note: AX position reads can be glitchy for this item (reported x=16937
+once); CGWindowList is authoritative (x=1757, w=127, onscreen=true).
+
 ## 🔥 SHIPPED fire.9.4 - AI Quotas FINALLY VISIBLE (2026-05-29 ~16:25)
 
 **The architectural fix.** Dogfooding revealed the AI Quotas item was
