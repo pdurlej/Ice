@@ -28,12 +28,16 @@ cross-MCP, then AI Quotas follow-ups.
   configured for this user; Antigravity is the real Gemini usage). User
   can disable gemini in settings if they want.
 
-**Cross-MCP** — wrote `docs/mcp/CROSS-MCP-LAYOUTS.md`: the calendar →
-apply_layout pattern (Fantastical MCP feeds context to an agent that
-calls Fire's apply_layout; no app-to-app code). The LIVE demo/screencast
-is still pending — needs Fantastical running (it wasn't; user in field)
-and screen recording. apply_layout works across all sections now
-(fire.8.4), so the demo is unblocked whenever Fantastical is up.
+**Cross-MCP** — DONE LIVE (2026-05-29 ~15:10, user home + Fantastical on).
+Wrote `docs/mcp/CROSS-MCP-LAYOUTS.md` (the pattern) AND ran the full loop
+end-to-end as the agent: queried Fantastical (`queryCalendarItems`) →
+saw 15:09 is between meetings (last "Ania x Piotr" 13-14, next "Kolacja"
+17:45) → built `Focus` (10 items) and `Meeting` (7, bg items hidden)
+layouts via the bridge → `apply_layout("Focus")` restored the full bar.
+Verified: ollama/ArqMonitor/FruitJuice hidden for Meeting, all back for
+Focus. Fantastical→agent→Fire, zero app-to-app code. Layouts `Focus`
+and `Meeting` left saved in the user's MCPLayouts. A screen-recording
+for content is the only remaining bit (the mechanism is proven).
 
 **AI Quotas follow-ups still open**: split mode (4 separate items),
 threshold styling (<20% warn / <10% crit), MCP `list_ai_quotas` opt-in,
