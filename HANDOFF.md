@@ -3,6 +3,47 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🔥 SHIPPED fire.9.4 - AI Quotas FINALLY VISIBLE (2026-05-29 ~16:25)
+
+**The architectural fix.** Dogfooding revealed the AI Quotas item was
+INVISIBLE (parked off-screen at x=-9501). Owner flagged this is the
+SAME problem CodexBar couldn't solve → architectural, not a placement
+bug. Directive: stop patching, rebuild from first principles with a
+different architecture.
+
+**Root cause (first principles):** Ice IS a menu-bar manager — its job
+is hiding/relocating third-party NSStatusItems. A naive AI Quotas
+NSStatusItem inevitably gets swept into Ice's hidden sections and parked
+off-screen amid Ice's 10000pt-wide section dividers. No "preferred
+position" survives. CodexBar hit the same wall.
+
+**The fix — make it an Ice-native control item.** The ONLY menu-bar
+elements that stay visible under Ice are Ice's own control items, for
+two concrete reasons, both now reproduced for AI Quotas:
+1. `ControlItem.preflightSetup` forces a LOW NSStatusItem "Preferred
+   Position" (0) into UserDefaults BEFORE the status item is created,
+   so macOS places it at the visible trailing edge (not leftmost/hidden).
+   Setting it AFTER creation does nothing (that was my failed earlier
+   attempt). `AIQuotaStatusItemController` now does this.
+2. The item's tag is registered in `MenuBarItemTag.controlItems` (new
+   `aiQuotasControlItem`, title "Ice.ControlItem.AIQuotas"), and the
+   status item is named to match — so the item manager never caches,
+   classifies, or moves it.
+
+**Verified live** (signed fire.9.4): CGWindowList shows the item at
+x=1689, w=195, onscreen=true; AX title "AI Cx99 Cl73 Gm? Ag100 Ol98";
+screenshot confirms it visible next to the clock. Removed the fire.9.3
+"Fire."/namespace exclusion hacks (control-item registration handles it
+cleanly). Data layer unchanged.
+
+**KEY LESSON for any future menu-bar UI in Fire/Ice:** never add a
+plain NSStatusItem — Ice will hide it. Always (a) force preferred
+position 0 before creation and (b) register its tag in controlItems.
+
+Open AI Quotas follow-ups (owner multi-selected, not yet done):
+threshold styling (<20% warn / <10% crit), per-provider toggle UI,
+cross-MCP as a real scheduled automation.
+
 ## 🔥 SHIPPED fire.9.2 - AI Quotas adds Antigravity + cross-MCP doc (2026-05-29 ~15:00)
 
 User ask (voice, from the field): add Antigravity to AI Quotas, then
