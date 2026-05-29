@@ -3,6 +3,44 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🔥 SHIPPED fire.9.8 - MCP write consent gate (confused-deputy stopgap) (2026-05-30 ~00:05)
+
+Closes the biggest security flaw GPT-5.5 Pro flagged in the architecture
+review (see `~/.oracle/sessions/fire-arch-review-9-7/artifacts/transcript.md`
+and the follow-up `fire-confused-deputy-fix`): the file write channel
+(`MCPWriteChannel`) was a **confused deputy** — any same-user process that
+dropped a valid `write-command.json` borrowed Ice's Accessibility (TCC)
+grant to mutate the menu bar; the bridge-side consent check was irrelevant
+because the privileged actor is the main app.
+
+Fix (GPT-5.5 Pro's rank-#2 same-day stopgap): the TCC-bearing main app now
+authorizes every MCP write in its OWN UI before acting.
+- New `Ice/Services/MCPWriteAuthorization.swift` (@MainActor): app-modal
+  NSAlert `[Deny (default)] [Allow Once] [Allow for 5 Minutes]`. "5 Minutes"
+  arms an **in-memory** lease (never UserDefaults/file — so no same-user
+  process can forge/extend it, and there's no persistent skip-approval knob).
+  The lease keeps a burst like `apply_layout` from being N prompts.
+- `MCPWriteCommandHandler.poll()` calls `authorize` before `execute`; on
+  deny it writes a denied Result. An `authorizationInFlight` flag stops
+  concurrent poll ticks from stacking a second modal.
+- `MCPWriteChannel` hygiene: mcp dir `0700`, command/result files `0600`,
+  reads require a regular file owned by this user, ≤16KB (blocks symlink
+  tricks / cross-user writes); stale-command window 30s → 10s.
+
+UX consequence (intended): MCP writes now require human approval; the file
+channel is a request queue, not an authorization boundary. Unattended
+automation through it is intentionally unsupported until the REAL fix —
+a peer-authenticated XPC service with a code-signing requirement
+(`NSXPCListener.setConnectionCodeSigningRequirement`, macOS 13+). That's
+the tracked follow-up (would also let trusted clients skip the prompt).
+
+Tag `v0.11.13-fire.9.8` (build 1144), commit `58e0eea`. CI signed +
+notarized; appcast updated (`pdurlej/fire-releases` `af6e90c`). Installed
++ verified: injecting a command JSON directly into the channel (i.e. a
+process that is NOT the legit bridge) pops the main-app consent prompt
+("Allow an AI assistant to change your menu bar?" — Deny default / Allow
+Once / Allow for 5 Minutes), proving the gate fires for ANY local writer.
+
 ## 🔥 SHIPPED fire.9.7 - AI Quotas left of system icons + codex fetch fix (2026-05-29 ~21:05)
 
 Owner wanted the usage readout on the LEFT and the macOS system icons
