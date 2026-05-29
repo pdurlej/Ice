@@ -97,8 +97,19 @@ final class MCPWriteCommandHandler {
             return fail("Unknown section '\(command.toSection)'")
         }
 
-        // Refresh the cache so we move against the current layout.
-        await appState.itemManager.cacheItemsIfNeeded()
+        // Expand ALL section dividers on-screen FIRST. Collapsed
+        // (hidden / alwaysHidden) dividers are parked off-screen and are
+        // therefore absent from the item cache — so we must show them
+        // before we can find their control items or drag toward them.
+        // Ice's normal auto-rehide collapses everything again once we
+        // restore the saved states in `defer`.
+        let expanded = expandSectionsForMove(to: section, appState: appState)
+        defer { restoreSections(expanded) }
+
+        // Let the dividers animate on-screen, then force a fresh cache so
+        // it includes the now-visible control items.
+        try? await Task.sleep(for: .milliseconds(350))
+        await appState.itemManager.cacheItemsRegardless()
         let cache = appState.itemManager.itemCache
 
         // Find the source item by bundle ID. Skip Ice's own control
@@ -121,31 +132,20 @@ final class MCPWriteCommandHandler {
         switch section {
         case .visible:
             guard let hiddenCI = cache.managedItems.first(matching: .hiddenControlItem) else {
-                return fail("Hidden control item not found (is the Hidden section enabled?)")
+                return fail(controlItemDiagnostic("hidden", cache))
             }
             destination = .rightOfItem(hiddenCI)
         case .hidden:
             guard let hiddenCI = cache.managedItems.first(matching: .hiddenControlItem) else {
-                return fail("Hidden control item not found (is the Hidden section enabled?)")
+                return fail(controlItemDiagnostic("hidden", cache))
             }
             destination = .leftOfItem(hiddenCI)
         case .alwaysHidden:
             guard let alwaysHiddenCI = cache.managedItems.first(matching: .alwaysHiddenControlItem) else {
-                return fail("Always-Hidden control item not found (is the Always-Hidden section enabled in Settings?)")
+                return fail(controlItemDiagnostic("alwaysHidden", cache))
             }
             destination = .leftOfItem(alwaysHiddenCI)
         }
-
-        // Expand the relevant section dividers so they're on-screen for
-        // the duration of the drag. Ice's normal auto-rehide collapses
-        // them again afterwards. Without this, a move targeting a
-        // collapsed section drags toward an off-screen divider and the
-        // window server may refuse the relocation.
-        let expanded = expandSectionsForMove(to: section, appState: appState)
-        defer { restoreSections(expanded) }
-
-        // Give the dividers a beat to settle on-screen before dragging.
-        try? await Task.sleep(for: .milliseconds(120))
 
         do {
             try await appState.itemManager.move(item: source, to: destination)
@@ -153,6 +153,17 @@ final class MCPWriteCommandHandler {
         } catch {
             return fail("\(error)")
         }
+    }
+
+    /// Builds a diagnostic message listing the control items present in
+    /// the cache, to make a missing-control-item failure debuggable from
+    /// the MCP client's error message.
+    private func controlItemDiagnostic(_ which: String, _ cache: MenuBarItemManager.ItemCache) -> String {
+        let controlTags = cache.managedItems
+            .filter { $0.isControlItem }
+            .map { "\($0.tag)" }
+            .joined(separator: ", ")
+        return "\(which) control item not found. Cache has \(cache.managedItems.count) items; control items present: [\(controlTags)]. Is the section enabled in Settings?"
     }
 
     /// Forces the section dividers needed for a move to be on-screen.
