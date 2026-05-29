@@ -108,12 +108,24 @@ extension MenuBarItemTag {
     }()
 
     /// An array of tags for items representing Ice's control items.
-    static let controlItems = ControlItem.Identifier.allCases.map { $0.tag }
+    ///
+    /// Includes the three section control items plus Fire's own
+    /// always-visible AI Quotas readout, which is created the same way a
+    /// control item is (low preferred position, pinned visible) and must
+    /// therefore be treated as a control item by the item manager so it
+    /// is never cached, classified into a section, or moved as if it
+    /// were a third-party menu bar item.
+    static let controlItems = ControlItem.Identifier.allCases.map { $0.tag } + [aiQuotasControlItem]
 
     // MARK: Control Items
 
     /// The tag for Ice's control item for the "Visible" section.
     static let visibleControlItem = MenuBarItemTag(controlItem: .visible)
+
+    /// The tag for Fire's always-visible AI Quotas readout. Its window
+    /// title (CGWindowName, derived from the status item autosave name)
+    /// is "Ice.ControlItem.AIQuotas", so this tag matches it.
+    static let aiQuotasControlItem = MenuBarItemTag(namespace: .ice, title: "Ice.ControlItem.AIQuotas")
 
     /// The tag for Ice's control item for the "Hidden" section.
     static let hiddenControlItem = MenuBarItemTag(controlItem: .hidden)

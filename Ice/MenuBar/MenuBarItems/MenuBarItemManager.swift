@@ -253,19 +253,11 @@ extension MenuBarItemManager {
             if item.isSystemClone {
                 return false
             }
+            // The AI Quotas readout is registered as a control item
+            // (see MenuBarItemTag.controlItems), so this exclusion also
+            // keeps it out of section caching/management — exactly the
+            // property that makes it stay put and visible.
             if item.isControlItem, item.tag != .visibleControlItem {
-                return false
-            }
-            // Fire's own non-control menu bar items (e.g. the AI Quotas
-            // status item) are owned by Ice but must NOT be managed or
-            // pushed into a hidden section as if they were third-party
-            // items. Identify defensively: by the window title we stamp
-            // on it, or as any .ice-namespace item that isn't one of
-            // Ice's three control items.
-            if item.tag.title.hasPrefix("Fire.") {
-                return false
-            }
-            if item.tag.namespace == .ice, !item.isControlItem {
                 return false
             }
             return true

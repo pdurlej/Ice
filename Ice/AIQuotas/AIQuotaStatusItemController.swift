@@ -2,10 +2,33 @@
 //  AIQuotaStatusItemController.swift
 //  Ice
 //
-//  Owns the single combined AI Quotas NSStatusItem. The status item is
-//  created once and never recreated during refresh — only its title and
-//  menu are updated. When disabled it is hidden (isVisible = false), not
-//  destroyed, so its menu-bar position is preserved.
+//  Owns the single AI Quotas menu-bar item.
+//
+//  ARCHITECTURE (rebuilt from first principles, fire.9.4)
+//  ------------------------------------------------------
+//  Ice is a menu-bar manager: its entire job is hiding and relocating
+//  third-party NSStatusItems. A naive AI Quotas NSStatusItem therefore
+//  gets swept into Ice's hidden sections and parked off-screen amid
+//  Ice's very wide (10 000pt) section-divider items — there is no stable
+//  "preferred position" that survives. (CodexBar hit the same wall; it's
+//  architectural, not a placement bug.)
+//
+//  The only menu-bar elements that stay reliably visible under Ice are
+//  Ice's OWN control items, and they work for two concrete reasons,
+//  both of which we reproduce here:
+//
+//   1. They force a LOW NSStatusItem "Preferred Position" (0) into
+//      UserDefaults BEFORE the status item is created, so macOS places
+//      them at the trailing/visible edge instead of leftmost (hidden).
+//      See ControlItem.preflightSetup. Setting the position AFTER
+//      creation does not work.
+//   2. Their tag is in MenuBarItemTag.controlItems, so the item manager
+//      never caches, classifies, or moves them as third-party items.
+//      We register `aiQuotasControlItem` there and name this item
+//      "Ice.ControlItem.AIQuotas" so its window title matches that tag.
+//
+//  Net effect: the AI Quotas item is a first-class, always-visible
+//  Ice-owned element — not a third-party item fighting Ice for a slot.
 //
 
 import AppKit
@@ -13,61 +36,55 @@ import OSLog
 
 @MainActor
 final class AIQuotaStatusItemController {
-    /// Stable autosave name so macOS remembers the item's position.
-    static let autosaveName = "Fire.AIQuotas.Combined"
+    /// Autosave name == the tag title in MenuBarItemTag.aiQuotasControlItem.
+    /// The "Ice.ControlItem." prefix keeps it grouped with Ice's own
+    /// control items and makes its window title recognizable.
+    static let autosaveName = "Ice.ControlItem.AIQuotas"
 
     private var statusItem: NSStatusItem?
     private let logger = Logger(category: "AIQuota.StatusItem")
 
-    /// Lazily creates the status item exactly once.
+    private var preferredPositionKey: String {
+        "NSStatusItem Preferred Position \(Self.autosaveName)"
+    }
+
+    /// Lazily creates the status item exactly once, reproducing Ice's
+    /// control-item recipe so it lands (and stays) in the visible area.
     private func ensureStatusItem() -> NSStatusItem {
         if let statusItem { return statusItem }
 
-        // Reset a stale autosaved position before creating. If Ice (or a
-        // prior build that didn't exclude this item) pushed it into a
-        // hidden section, macOS persisted a far-left "Preferred Position"
-        // and the item would re-appear off-screen. Clearing the key lets
-        // macOS place it fresh in the visible status area. Ice's
-        // isValidForCaching now excludes it, so it won't be pushed again.
-        Self.resetStaleAutosavePositionIfNeeded()
+        // STEP 1 — force a low preferred position BEFORE creation. macOS
+        // places items with a lower preferred position toward the
+        // trailing (visible, clock-adjacent) edge. Ice's visible control
+        // item uses 0 for exactly this reason. We set it if unset or if
+        // a previous build left it parked far left (a large value).
+        let defaults = UserDefaults.standard
+        let current = defaults.object(forKey: preferredPositionKey) as? Double
+        if current == nil || (current ?? 0) > 100 {
+            defaults.set(0.0, forKey: preferredPositionKey)
+            logger.debug("Forced AI Quotas preferred position to 0 (was \(String(describing: current)))")
+        }
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.autosaveName = Self.autosaveName
         item.button?.setAccessibilityIdentifier("Fire.AIQuotas.StatusItem")
         item.button?.toolTip = "AI Quotas"
-        // Stamp the window title so Ice's item manager can recognize this
-        // as a Fire-owned, non-managed item (see isValidForCaching).
+        // Stamp the window title so the item manager's control-item tag
+        // match (MenuBarItemTag.aiQuotasControlItem) is reliable even if
+        // macOS's autosave-derived title ever drifts.
         item.button?.window?.title = Self.autosaveName
+
         statusItem = item
         logger.debug("Created AI Quotas status item")
         return item
     }
 
-    /// The macOS-persisted preferred-position values for Ice's three
-    /// control items cluster well below ~7000; a value far above that
-    /// means the AI Quotas item was parked off-screen left. If so, drop
-    /// the key so the item is re-placed in the visible area.
-    private static func resetStaleAutosavePositionIfNeeded() {
-        let key = "NSStatusItem Preferred Position \(autosaveName)"
-        let pos = UserDefaults.standard.object(forKey: key) as? Double
-        if let pos, pos > 8000 {
-            UserDefaults.standard.removeObject(forKey: key)
-        }
-    }
-
-    /// Shows the item (creating it if needed) and updates its title.
+    /// Shows the item (creating it if needed) and updates its title/menu.
     func show(title: String, menu: NSMenu) {
         let item = ensureStatusItem()
         item.isVisible = true
         item.button?.title = title
         item.menu = menu
-    }
-
-    /// Updates only the title and menu of an already-visible item.
-    func update(title: String, menu: NSMenu) {
-        guard let statusItem else { return }
-        statusItem.button?.title = title
-        statusItem.menu = menu
     }
 
     /// Hides the item without destroying it (preserves position).
