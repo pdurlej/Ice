@@ -167,6 +167,13 @@ extension Defaults {
         case mcpAllowWrites = "MCPAllowWrites"
         case mcpNotifyOnWrite = "MCPNotifyOnWrite"
 
+        // MARK: AI Quotas Settings
+        case enableAIQuotas = "EnableAIQuotas"
+        case aiQuotaRefreshIntervalSeconds = "AIQuotaRefreshIntervalSeconds"
+        case aiQuotaEnabledProviders = "AIQuotaEnabledProviders"
+        case aiQuotaCompactTitle = "AIQuotaCompactTitle"
+        case aiQuotaCodexBarCLIPath = "AIQuotaCodexBarCLIPath"
+
         // MARK: Appearance Settings
         case menuBarAppearanceConfigurationV2 = "MenuBarAppearanceConfigurationV2"
 

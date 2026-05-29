@@ -40,6 +40,9 @@ final class AppState: ObservableObject {
     /// Handler for MCP write commands delegated from MCPBackend.xpc.
     let mcpWriteCommandHandler = MCPWriteCommandHandler()
 
+    /// Manager for the optional AI Quotas menu-bar feature.
+    let aiQuotaManager = AIQuotaManager()
+
     /// Global cache for menu bar item images.
     let imageCache = MenuBarItemImageCache()
 
@@ -82,6 +85,7 @@ final class AppState: ObservableObject {
         updatesManager.performSetup(with: self)
         userNotificationManager.performSetup(with: self)
         mcpWriteCommandHandler.performSetup(with: self)
+        aiQuotaManager.performSetup(with: self)
 
         configureCancellables()
     }
