@@ -3,6 +3,98 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🔥🔥🔥 SHIPPED fire.9 - AI Quotas + fire.8.4 write bridge (2026-05-29 ~14:30)
+
+Two features shipped, both verified live and pushed to the appcast:
+
+### fire.9 — AI Quotas (CodexBar-CLI-backed menu-bar usage readout)
+
+Mission from GPT-5.5-Pro spec. Optional, off-by-default, local-only
+menu-bar item showing LLM usage left for Codex/Claude/Gemini/Ollama.
+
+**Verified live**: enabled via `defaults write com.jordanbaird.Ice
+EnableAIQuotas -bool true`, the signed fire.9 build rendered the status
+item title `AI Cx99 Cl81 Gm? Ol100` — real data from `codexbar usage
+--provider X --json --json-only`, with gemini gracefully degrading to
+`?` (its CLI fetch returned non-zero). Read back via AX
+(`AXIdentifier == Fire.AIQuotas.StatusItem`).
+
+Code lives in `Ice/AIQuotas/` (9 files): AIQuotaProvider, AIQuotaSnapshot,
+AIQuotaBackend (protocol), CodexBarCLIQuotaBackend (Process + JSON parse),
+AIQuotaManager (NSObject+ObservableObject; 5-min refresh loop, single-
+flight guard, menu actions), AIQuotaStatusItemController (one NSStatusItem,
+autosave `Fire.AIQuotas.Combined`, never recreated), AIQuotaMenuBuilder
+(title + dropdown), AIQuotaSettings (+ AIQuotaSettingsContent SwiftUI in
+Advanced pane). Wired in `AppState.setupTask`. Defaults keys added.
+Real CLI command is `usage --provider X --json --json-only` (the spec's
+`--format json --json-only` was slightly off).
+
+Privacy: quota data stays in-memory + menu bar, never Sentry/MCP/network.
+
+**Known follow-ups** (not blockers): Ice's image cache treats the quota
+item as a managed menu-bar item (logs a capture warning) — harmless for
+MVP, spec lists excluding it as a follow-up. Unit tests for the parser
+were not added (no test target in the project; parser verified against
+real codex+ollama JSON instead). Split mode (4 items), threshold
+styling, MCP `list_ai_quotas` opt-in are spec follow-ups.
+
+### fire.8.2 → 8.4 — Ice-performs-writes bridge (hide works everywhere)
+
+The hard problem from fire.8.1: AI couldn't move an item INTO a
+collapsed/empty Hidden section, because that section's divider is parked
+off-screen and the MCPBackend.xpc helper can't reach it (and can't
+expand sections — that's an Ice-main-app-only op).
+
+**Solution** (`Shared/Services/MCPWriteChannel.swift` + `Ice/Services/
+MCPWriteCommandHandler.swift`): MCPBackend writes a JSON command to
+`~/Library/Application Support/com.jordanbaird.Ice/mcp/write-command.json`;
+Ice main app polls it (200ms), executes the move via its own
+`MenuBarItemManager.move`, writes `write-result.json`; MCPBackend polls
+the result. Files (not shared UserDefaults) because cross-process
+UserDefaults caching is unreliable for long-running readers.
+
+The key fix (fire.8.4): find control items via
+`MenuBarItem.getMenuBarItems(option: .activeSpace)` — the same call Ice's
+Layout editor uses — which omits the on-screen filter and therefore
+INCLUDES off-screen divider control items. Drag `.leftOfItem(hiddenCI)`
+etc.; the system relocates the item even toward an off-screen divider.
+No section expansion needed (fire.8.3's expand approach was wrong — the
+signed-build diagnostic proved only the Visible divider was ever in the
+on-screen-filtered cache).
+
+**Verified live** (signed fire.8.4 via Claude Code MCP): `hide_item
+com.electron.ollama` moved it from the visible row into the empty Hidden
+section (vanished from menu bar; alwaysVisible 9→8); `show_item` brought
+it straight back. Full round-trip.
+
+`MCPBackend/Mover.swift` (the in-process CGEvent drag from fire.8 W2) is
+now superseded by the bridge for moveItem, left in place but unused.
+
+### Hard-won lesson: local testing of Ice-main-app code needs a SIGNED build
+
+Ad-hoc re-signing the local Debug build invalidates Ice main app's
+Accessibility (TCC) grant, so Ice takes `performSetup(hasPermissions:
+false)` and never runs `setupTask` — meaning the bridge handler and AI
+Quotas manager never start. The only reliable local test path is a
+Developer-ID-signed CI build installed over a prior signed build (TCC
+inherits). That's why fire.8.2→8.4 each went through CI; appcast was only
+updated after the signed build verified. (MCPBackend.xpc reads still work
+ad-hoc because they don't gate on setupTask.)
+
+### Tags shipped today
+fire.8.1 (1132), fire.8.2 (1133, intermediate), fire.8.3 (1134,
+intermediate), fire.8.4 (1135, write bridge — appcast'd), fire.9 (1136,
+AI Quotas — appcast'd). 8.2/8.3 were unverified intermediates, never
+appcast'd, so users jump 8.1 → 8.4 → 9.
+
+### Still open / next
+- Cross-MCP demo screencast (Fantastical apply_layout → Fire) — apply_layout
+  now works across all sections, so this is unblocked.
+- AI Quotas follow-ups (split mode, thresholds, MCP opt-in, unit tests).
+- W5 starter presets / W6 Layouts settings UI (from the old fire.8 plan).
+
+---
+
 ## 🔥🔥🔥 SHIPPED fire.8.1 - moves verified end-to-end on macOS 26 (2026-05-29 ~10:17)
 
 **Tagged `v0.11.13-fire.8.1`** (build 1132). CI built + signed + notarized
