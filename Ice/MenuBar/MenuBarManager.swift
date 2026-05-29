@@ -73,6 +73,70 @@ final class MenuBarManager: ObservableObject {
         for section in sections {
             section.performSetup(with: appState)
         }
+        publishControlItemWindowIDsForMCPBackend()
+    }
+
+    /// Publishes the 3 ControlItem windowIDs to the Ice plist under the
+    /// key `IceControlItemWindowIDs` so MCPBackend.xpc can identify
+    /// section boundaries.
+    ///
+    /// Why this exists: on macOS 26 the menu bar items are reparented
+    /// to Control Center, so MCPBackend cannot distinguish Ice's
+    /// control items from Control Center's own widgets purely from
+    /// CGWindowList metadata. The 3 control items are also NOT exposed
+    /// as separate CG windows (they live inside Ice's NSStatusBar
+    /// status items, surfaced only as NSWindows whose CGWindowNumber
+    /// values stay stable). Publishing those numbers to a plist Ice
+    /// already owns lets MCPBackend look them up at zero IPC cost.
+    private func publishControlItemWindowIDsForMCPBackend() {
+        // Reactive path: subscribe to each ControlItem's window publisher
+        // so we re-flush when the underlying NSWindow rotates (which
+        // happens whenever the OS re-creates status items, e.g. on a
+        // display change).
+        let pubs = sections.map { section -> AnyPublisher<NSWindow?, Never> in
+            section.controlItem.$window.eraseToAnyPublisher()
+        }
+        Publishers.MergeMany(pubs)
+            .debounce(for: .milliseconds(150), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in self?.flushControlItemWindowIDs() }
+            .store(in: &cancellables)
+
+        // Fallback path: status item NSWindows may exist before our
+        // subscriber attaches, in which case Combine emits only the
+        // initial value once and we miss it. Also poll on a coarse
+        // timer for a few seconds after launch in case @Published
+        // never re-emits (observed on macOS 26 with reparented items).
+        Timer.publish(every: 1.0, on: .main, in: .common)
+            .autoconnect()
+            .prefix(8) // poll for ~8 seconds, then stop
+            .sink { [weak self] _ in self?.flushControlItemWindowIDs() }
+            .store(in: &cancellables)
+        flushControlItemWindowIDs()
+    }
+
+    /// Writes the current ControlItem minX positions to the Ice plist
+    /// as an ordered array [visible.minX, hidden.minX, alwaysHidden.minX].
+    /// MCPBackend reads this via
+    /// `UserDefaults(suiteName: "com.jordanbaird.Ice")` and treats the
+    /// three doubles as section-boundary x-coordinates.
+    ///
+    /// Why minX and not windowID: NSStatusBar status items expose an
+    /// NSWindow whose `windowNumber` is from a different namespace than
+    /// CGWindowList window IDs, so they cannot be cross-referenced. The
+    /// NSWindow.frame *is* in screen coordinates that match
+    /// `Bridging.getWindowBounds`, so position-based identification
+    /// works across the IPC boundary.
+    private func flushControlItemWindowIDs() {
+        let order: [MenuBarSection.Name] = [.visible, .hidden, .alwaysHidden]
+        let minXs = order.compactMap { name -> Double? in
+            guard
+                let section = section(withName: name),
+                let frame = section.controlItem.window?.frame
+            else { return nil }
+            return Double(frame.minX)
+        }
+        guard minXs.count == order.count else { return }
+        UserDefaults.standard.set(minXs, forKey: "IceControlItemMinX")
     }
 
     /// Configures the internal observers for the manager.

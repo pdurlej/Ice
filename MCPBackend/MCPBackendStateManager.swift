@@ -65,37 +65,68 @@ final class MCPBackendStateManager {
 
         var bucketed: [MenuBarItemService.ItemSection: [WindowInfo]] = [:]
 
+        // Read Ice's three section-divider minX positions, published by
+        // MenuBarManager.flushControlItemWindowIDs. Layout is
+        // [visible.minX, hidden.minX, alwaysHidden.minX] in screen
+        // coordinates. When a section is collapsed, Ice parks its
+        // divider far off-screen (large negative X), which leaves the
+        // section logically empty but its boundary still well-defined.
+        //
+        // Section membership rule:
+        //   x > visible.minX        -> Apple-managed (Control Center, clock); skip
+        //   hidden.minX < x <= visible.minX -> .alwaysVisible
+        //   alwaysHidden.minX < x <= hidden.minX -> .hidden
+        //   x <= alwaysHidden.minX -> .alwaysHidden
+        // After a cfprefsd roundtrip, the [Double] we wrote can come back
+        // as [NSNumber] (and "round" values may serialise as strings, so
+        // also handle that). Coalesce defensively.
+        let rawBoundaries = defaults.array(forKey: "IceControlItemMinX") ?? []
+        let publishedBoundaries: [Double] = rawBoundaries.compactMap { value in
+            if let n = value as? NSNumber { return n.doubleValue }
+            if let d = value as? Double { return d }
+            if let s = value as? String { return Double(s) }
+            return nil
+        }
+        let visibleBoundary = publishedBoundaries.indices.contains(0) ? publishedBoundaries[0] : nil
+        let hiddenBoundary = publishedBoundaries.indices.contains(1) ? publishedBoundaries[1] : nil
+        let alwaysHiddenBoundary = publishedBoundaries.indices.contains(2) ? publishedBoundaries[2] : nil
+        logger.debug("Boundaries published=\(publishedBoundaries.count) visible=\(String(describing: visibleBoundary)) hidden=\(String(describing: hiddenBoundary)) alwaysHidden=\(String(describing: alwaysHiddenBoundary))")
+
         for (displayIndex, displayID) in displays.enumerated() {
             let displayBounds = CGDisplayBounds(displayID)
             let displayWindows = allWindows.filter { window in
                 displayBounds.contains(CGPoint(x: window.bounds.midX, y: window.bounds.midY))
             }
 
-            let (iceControls, otherItems) = displayWindows.splitByPredicate { window in
-                window.owningApplication?.bundleIdentifier == Self.iceBundleID
-            }
-
-            let sortedControls = iceControls.sorted { $0.bounds.minX < $1.bounds.minX }
-            guard sortedControls.count >= 3 else {
+            guard let visibleBoundary,
+                  let hiddenBoundary,
+                  let alwaysHiddenBoundary
+            else {
                 logger.notice(
-                    "Display \(displayIndex) (id=\(displayID)): \(sortedControls.count) Ice control items found, fallback to alwaysVisible"
+                    "Display \(displayIndex) (id=\(displayID)): Ice has not published control-item boundaries yet, bucketing everything as alwaysVisible"
                 )
                 bucketed[.alwaysVisible, default: []].append(
-                    contentsOf: otherItems.sorted { $0.bounds.minX < $1.bounds.minX }
+                    contentsOf: displayWindows.sorted { $0.bounds.minX < $1.bounds.minX }
                 )
                 continue
             }
 
-            let alwaysHiddenBoundary = sortedControls[0].bounds.minX
-            let hiddenBoundary = sortedControls[1].bounds.minX
-            let visibleBoundary = sortedControls[2].bounds.minX
-
-            for window in otherItems.sorted(by: { $0.bounds.minX < $1.bounds.minX }) {
+            for window in displayWindows.sorted(by: { $0.bounds.minX < $1.bounds.minX }) {
+                // Drop Apple's built-in Control Center widgets by
+                // their stable window titles - they sit to the right
+                // of Ice's visible boundary but are not Ice-managed.
+                // Title check is cheap and bypasses the X-coordinate
+                // ambiguity for items that landed in the gap between
+                // Ice's visible divider and the first Apple widget.
+                if let title = window.title,
+                   title.hasPrefix("BentoBox") || title == "Clock" || title == "AudioVideoModule" || title == "FaceTime" || title == "MusicRecognition" {
+                    continue
+                }
                 let x = window.bounds.minX
                 let assigned: MenuBarItemService.ItemSection
-                if x > visibleBoundary {
+                if x > hiddenBoundary {
                     assigned = .alwaysVisible
-                } else if x > hiddenBoundary {
+                } else if x > alwaysHiddenBoundary {
                     assigned = .hidden
                 } else {
                     assigned = .alwaysHidden
@@ -147,19 +178,26 @@ final class MCPBackendStateManager {
     }
 
     /// Returns the IDs of all active displays, with the main display
-    /// first. Same helper as MenuBarItemService/MenuBarStateManager.
+    /// first. In an XPC service `CGGetActiveDisplayList` sometimes
+    /// returns zero displays because the process has no graphics
+    /// connection until something forces one (it isn't a window-owning
+    /// app). Fall back to `CGMainDisplayID()` in that case so list/move
+    /// still works on the primary display.
     private static func activeDisplayIDs() -> [CGDirectDisplayID] {
         var count: UInt32 = 0
         guard CGGetActiveDisplayList(0, nil, &count) == .success, count > 0 else {
-            return []
+            return [CGMainDisplayID()]
         }
         var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
         guard CGGetActiveDisplayList(count, &ids, &count) == .success else {
-            return []
+            return [CGMainDisplayID()]
         }
         let mainID = CGMainDisplayID()
         if let mainIndex = ids.firstIndex(of: mainID), mainIndex != 0 {
             ids.swapAt(0, mainIndex)
+        }
+        if ids.isEmpty {
+            return [CGMainDisplayID()]
         }
         return ids
     }
@@ -168,14 +206,12 @@ final class MCPBackendStateManager {
 
     /// Moves the item with the given bundle ID to the target section.
     ///
-    /// Implementation: find the source item in the menu bar, find Ice's
-    /// control item that bounds the destination section, dispatch a
-    /// `Mover.MoveDestination.rightOfItem(controlItem)` so the moved item
-    /// lands just inside the target section. `toIndex` is currently
-    /// ignored - the moved item lands at the start of the target section.
-    /// Refinement to land at a specific intra-section index is a future
-    /// pass (would require iterating siblings and picking left/right of
-    /// the right neighbour).
+    /// Implementation: find the source item, pick a "neighbour" item
+    /// already in the target section to drag relative to. If the target
+    /// section is empty, use the matching boundary control item by its
+    /// published minX (read from the Ice plist by `flushControlItemMinX`).
+    /// `toIndex` is currently ignored - the moved item lands at the
+    /// leftmost slot of the target section.
     func moveItem(
         bundleID: String,
         toSection: MenuBarItemService.ItemSection,
@@ -185,37 +221,32 @@ final class MCPBackendStateManager {
             "moveItem(\(bundleID), to: \(toSection.rawValue), index: \(String(describing: toIndex)))"
         )
 
-        // Find the source window for the bundle ID across all displays.
         let windowIDs = Bridging.getMenuBarWindowList(option: .itemsOnly)
         let allWindows = WindowInfo.createWindows(from: windowIDs)
         guard let sourceWindow = findWindow(for: bundleID, in: allWindows) else {
             return (false, "Item with bundle ID '\(bundleID)' not found in menu bar")
         }
 
-        // Find Ice control items for the same display as the source item.
-        // Falls back to main display if the source's display detection
-        // fails (e.g. item just off the menu bar's drawn region).
-        let displayID = displayContaining(sourceWindow.bounds) ?? CGMainDisplayID()
-        guard let controls = findIceControlItems(displayID: displayID, in: allWindows) else {
-            return (false, "Could not locate Ice's 3 control items on the current display - is Ice running with 'Hidden' section enabled?")
-        }
-
-        // Pick the control item that bounds the target section.
-        // See section detection algorithm in listItems above:
-        //   .alwaysHidden lies between controls[0] and controls[1]
-        //   .hidden       lies between controls[1] and controls[2]
-        //   .alwaysVisible lies to the right of controls[2]
-        // Posting "rightOf(controls[N])" lands the moved item just inside
-        // the target section's leftmost position.
-        let boundaryControl: WindowInfo
-        switch toSection {
-        case .alwaysHidden: boundaryControl = controls[0]
-        case .hidden:       boundaryControl = controls[1]
-        case .alwaysVisible: boundaryControl = controls[2]
+        // Pick a target window in the destination section:
+        // - The current items in `toSection` from listItems' bucketing.
+        // - Use the rightmost (largest minX) item in the destination so
+        //   moving "right of" it lands the moved item just past the
+        //   section's existing tail.
+        let items = await listItems(section: toSection)
+        guard let targetItemInfo = items.last,
+              let targetWindow = allWindows.first(where: { $0.windowID == targetItemInfo.windowID })
+        else {
+            return (
+                false,
+                "Target section '\(toSection.rawValue)' is empty; ensure Ice has at least one item there, or enable the section so its boundary control item appears in the menu bar"
+            )
         }
 
         let moveItem = makeMoveItem(window: sourceWindow, displayName: bundleID)
-        let targetItem = makeMoveItem(window: boundaryControl, displayName: "IceControl[\(toSection.rawValue)]")
+        let targetItem = makeMoveItem(
+            window: targetWindow,
+            displayName: "neighbour[\(toSection.rawValue)]"
+        )
 
         do {
             try await Mover.shared.move(
@@ -315,24 +346,6 @@ final class MCPBackendStateManager {
             }
             return false
         }
-    }
-
-    /// Finds Ice's 3 control items on the given display, sorted by X
-    /// position (leftmost first). Returns nil if fewer than 3 are
-    /// visible - that typically means Ice isn't running or all of
-    /// alwaysHidden + hidden are collapsed off-screen.
-    private func findIceControlItems(
-        displayID: CGDirectDisplayID,
-        in windows: [WindowInfo]
-    ) -> [WindowInfo]? {
-        let displayBounds = CGDisplayBounds(displayID)
-        let iceControls = windows.filter { window in
-            window.owningApplication?.bundleIdentifier == Self.iceBundleID &&
-            displayBounds.contains(CGPoint(x: window.bounds.midX, y: window.bounds.midY))
-        }
-        let sorted = iceControls.sorted { $0.bounds.minX < $1.bounds.minX }
-        guard sorted.count >= 3 else { return nil }
-        return Array(sorted.prefix(3))
     }
 
     /// Returns the active display whose bounds contain the given

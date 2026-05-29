@@ -21,5 +21,13 @@
 
 import Foundation
 
+// SourcePIDCache observes NSWorkspace.runningApplications and lazily
+// fills its (windowID -> sourcePID) map via AX scans. Without start()
+// the observer cancellable is never instantiated, so updates miss and
+// every lookup falls back to ownerPID -- which on macOS 26 collapses
+// to com.apple.controlcenter for every reparented item. MenuBarItemService
+// already does this in its own main.swift; MCPBackend needs the same.
+SourcePIDCache.shared.start()
+
 Listener.shared.activate()
 RunLoop.current.run()
