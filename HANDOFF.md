@@ -3,6 +3,47 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🔥 SHIPPED fire.9.2 - AI Quotas adds Antigravity + cross-MCP doc (2026-05-29 ~15:00)
+
+User ask (voice, from the field): add Antigravity to AI Quotas, then
+cross-MCP, then AI Quotas follow-ups.
+
+**fire.9.1 + fire.9.2 — Antigravity provider** (verified live, appcast'd):
+- Added `case antigravity` to AIQuotaProvider ("Ag" / "Antigravity").
+  CodexBar reads it via oauth (account p.durlej@gmail.com).
+- Antigravity's JSON shape differs: `primary` is null, secondary/tertiary
+  carry an aggregate usedPercent, and per-model limits live under
+  `extraRateWindows` (Gemini 2.5/3 Pro/Flash). Added `tertiary` +
+  `extraWindows: [AIQuotaExtraWindow]` to the snapshot; parser reads
+  `extraRateWindows`; dropdown lists per-model windows (capped 12);
+  `primaryLeftPercent` falls back primary→secondary→tertiary→min(extra)
+  so the title shows a number, not "Ag?".
+- **fire.9.2 fix**: fire.9 persisted the ENABLED provider set, so when
+  9.1 added antigravity, existing users (and the test) didn't see it —
+  the stale persisted list excluded it. Switched to persisting the
+  DISABLED set (`AIQuotaDisabledProviders`); absent = all on, so new
+  providers appear automatically. **Verified live**: title rendered
+  `AI Cx99 Cl73 Gm? Ag100 Ol100` (Ag100 = real Antigravity data).
+- Note: standalone "gemini" provider shows `Gm?` (its CLI/API isn't
+  configured for this user; Antigravity is the real Gemini usage). User
+  can disable gemini in settings if they want.
+
+**Cross-MCP** — wrote `docs/mcp/CROSS-MCP-LAYOUTS.md`: the calendar →
+apply_layout pattern (Fantastical MCP feeds context to an agent that
+calls Fire's apply_layout; no app-to-app code). The LIVE demo/screencast
+is still pending — needs Fantastical running (it wasn't; user in field)
+and screen recording. apply_layout works across all sections now
+(fire.8.4), so the demo is unblocked whenever Fantastical is up.
+
+**AI Quotas follow-ups still open**: split mode (4 separate items),
+threshold styling (<20% warn / <10% crit), MCP `list_ai_quotas` opt-in,
+per-provider settings UI (currently no per-provider toggle in the pane —
+the disabled-set is wired but only togglable via defaults), unit tests
+(no test target in project).
+
+Tags today (cont.): fire.9.1 (1137, intermediate), fire.9.2 (1138,
+Antigravity — appcast'd). Users go fire.9 → fire.9.2.
+
 ## 🔥🔥🔥 SHIPPED fire.9 - AI Quotas + fire.8.4 write bridge (2026-05-29 ~14:30)
 
 Two features shipped, both verified live and pushed to the appcast:
