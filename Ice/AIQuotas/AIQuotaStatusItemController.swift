@@ -22,13 +22,37 @@ final class AIQuotaStatusItemController {
     /// Lazily creates the status item exactly once.
     private func ensureStatusItem() -> NSStatusItem {
         if let statusItem { return statusItem }
+
+        // Reset a stale autosaved position before creating. If Ice (or a
+        // prior build that didn't exclude this item) pushed it into a
+        // hidden section, macOS persisted a far-left "Preferred Position"
+        // and the item would re-appear off-screen. Clearing the key lets
+        // macOS place it fresh in the visible status area. Ice's
+        // isValidForCaching now excludes it, so it won't be pushed again.
+        Self.resetStaleAutosavePositionIfNeeded()
+
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.autosaveName = Self.autosaveName
         item.button?.setAccessibilityIdentifier("Fire.AIQuotas.StatusItem")
         item.button?.toolTip = "AI Quotas"
+        // Stamp the window title so Ice's item manager can recognize this
+        // as a Fire-owned, non-managed item (see isValidForCaching).
+        item.button?.window?.title = Self.autosaveName
         statusItem = item
         logger.debug("Created AI Quotas status item")
         return item
+    }
+
+    /// The macOS-persisted preferred-position values for Ice's three
+    /// control items cluster well below ~7000; a value far above that
+    /// means the AI Quotas item was parked off-screen left. If so, drop
+    /// the key so the item is re-placed in the visible area.
+    private static func resetStaleAutosavePositionIfNeeded() {
+        let key = "NSStatusItem Preferred Position \(autosaveName)"
+        let pos = UserDefaults.standard.object(forKey: key) as? Double
+        if let pos, pos > 8000 {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
     }
 
     /// Shows the item (creating it if needed) and updates its title.
