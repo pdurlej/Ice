@@ -48,6 +48,9 @@ struct AdvancedSettingsPane: View {
                 mcpAllowWrites
                 mcpNotifyOnWrite
             }
+            IceSection("AI Quotas (experimental)") {
+                AIQuotaSettingsContent(settings: appState.aiQuotaManager.settings)
+            }
         }
     }
 
