@@ -33,15 +33,30 @@ SAME problem CodexBar couldn't solve → architectural, not a placement
 bug. Directive: stop patching, rebuild from first principles with a
 different architecture.
 
-**Root cause (first principles):** Ice IS a menu-bar manager — its job
-is hiding/relocating third-party NSStatusItems. A naive AI Quotas
-NSStatusItem inevitably gets swept into Ice's hidden sections and parked
-off-screen amid Ice's 10000pt-wide section dividers. No "preferred
-position" survives. CodexBar hit the same wall.
+**Root cause (first principles, sharpened by Codex's CodexBar data):**
+A FOREIGN/third-party NSStatusItem is fragile under a menu-bar manager
+(Ice) + macOS 26 Control Center reparenting — full stop. Ice's job is
+hiding/relocating third-party status items, so the AI Quotas item got
+swept into a hidden section and parked off-screen amid Ice's 10000pt
+section dividers; no "preferred position" survived.
 
-**The fix — make it an Ice-native control item.** The ONLY menu-bar
-elements that stay visible under Ice are Ice's own control items, for
-two concrete reasons, both now reproduced for AI Quotas:
+Crucial correction: this is NOT about "multiple provider fields
+colliding." Codex (who worked on CodexBar) confirmed CodexBar broke
+even with `mergeIcons=1` — a SINGLE merged status item (`CodexBar.StatusItem`)
+still failed. So the real thesis is broader: **don't let independent
+apps fight over the menu bar; the one owner of that strip must render
+the state as its own pinned control.** The minimal isolation test to
+prove it (NOT yet run): one plain NSStatusItem, one static text value,
+stable autosaveName — if it still vanishes, it's purely architectural;
+if it survives, complexity was a factor. Our fire.9.3→9.4 delta already
+points hard at architectural (plain item broke; Ice-native control item
+works) but doesn't cleanly isolate position-before-creation alone.
+
+**The fix — make it an Ice-native control item (== Codex's recommended
+direction: "one owner of the strip renders the state as its own pinned
+control").** The ONLY menu-bar elements that stay visible under Ice are
+Ice's own control items, for two concrete reasons, both now reproduced
+for AI Quotas:
 1. `ControlItem.preflightSetup` forces a LOW NSStatusItem "Preferred
    Position" (0) into UserDefaults BEFORE the status item is created,
    so macOS places it at the visible trailing edge (not leftmost/hidden).
