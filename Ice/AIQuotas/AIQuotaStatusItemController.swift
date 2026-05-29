@@ -41,6 +41,18 @@ final class AIQuotaStatusItemController {
     /// control items and makes its window title recognizable.
     static let autosaveName = "Ice.ControlItem.AIQuotas"
 
+    /// UserDefaults flag: set once we've moved the item to the leftmost
+    /// visible slot (fire.9.7). Older builds forced position 0 (far right,
+    /// right of Spotlight); this one-time migration relocates existing
+    /// installs, after which manual drags are respected.
+    private static let positionMigratedKey = "AIQuotasPositionLeftOfSystemV1"
+
+    /// UserDefaults key holding Ice's own Visible control item position —
+    /// the left edge of the always-visible zone. We read it to place AI
+    /// Quotas just inside it. (We run inside Ice, so it's our own domain.)
+    private static let visibleControlItemPositionKey =
+        "NSStatusItem Preferred Position Ice.ControlItem.Visible"
+
     private var statusItem: NSStatusItem?
     private let logger = Logger(category: "AIQuota.StatusItem")
 
@@ -53,16 +65,40 @@ final class AIQuotaStatusItemController {
     private func ensureStatusItem() -> NSStatusItem {
         if let statusItem { return statusItem }
 
-        // STEP 1 — force a low preferred position BEFORE creation. macOS
-        // places items with a lower preferred position toward the
-        // trailing (visible, clock-adjacent) edge. Ice's visible control
-        // item uses 0 for exactly this reason. We set it if unset or if
-        // a previous build left it parked far left (a large value).
+        // STEP 1 — choose the preferred position BEFORE creation (setting
+        // it afterward is a no-op). macOS places lower preferred positions
+        // toward the trailing/right (visible) edge, higher ones toward the
+        // leading/left edge.
+        //
+        // Goal: land AI Quotas as the LEFTMOST always-visible element, just
+        // inside Ice's Visible control item (the "•••"), so it sits to the
+        // LEFT of the system icons (Spotlight, Control Center, clock) yet
+        // stays on-screen. Left of the Visible control item is Ice's wide
+        // section divider, which pushes items off-screen — so this is as
+        // far left as a visible item can go.
         let defaults = UserDefaults.standard
+        let visiblePos = defaults.object(forKey: Self.visibleControlItemPositionKey) as? Double
+        // Just inside the Visible control item. Fall back to 0 (guaranteed
+        // visible, far right) only if Ice hasn't persisted its own position
+        // yet — the self-heal below corrects it on a later launch.
+        let target = visiblePos.map { $0 - 1 } ?? 0
         let current = defaults.object(forKey: preferredPositionKey) as? Double
-        if current == nil || (current ?? 0) > 100 {
-            defaults.set(0.0, forKey: preferredPositionKey)
-            logger.debug("Forced AI Quotas preferred position to 0 (was \(String(describing: current)))")
+
+        let needsPlacement: Bool
+        if !defaults.bool(forKey: Self.positionMigratedKey) {
+            needsPlacement = true                       // one-time migration
+            defaults.set(true, forKey: Self.positionMigratedKey)
+        } else if let current {
+            // Re-place only if parked off-screen (left of the Visible
+            // control item, behind Ice's divider). Otherwise respect the
+            // user's manual placement so drags stick.
+            needsPlacement = visiblePos.map { current > $0 } ?? false
+        } else {
+            needsPlacement = true                       // unset
+        }
+        if needsPlacement {
+            defaults.set(target, forKey: preferredPositionKey)
+            logger.debug("Set AI Quotas preferred position to \(target) (was \(String(describing: current)))")
         }
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)

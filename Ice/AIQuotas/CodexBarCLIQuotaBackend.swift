@@ -121,32 +121,23 @@ struct CodexBarCLIQuotaBackend: AIQuotaBackend {
         process.standardOutput = stdout
         process.standardError = stderr
 
-        // Read pipes on background queues to avoid a deadlock when the
-        // child writes more than a pipe buffer's worth before exit.
-        let stdoutData = LockedData()
-        stdout.fileHandleForReading.readabilityHandler = { handle in
-            let chunk = handle.availableData
-            if chunk.isEmpty {
-                handle.readabilityHandler = nil
-            } else {
-                stdoutData.append(chunk)
-            }
-        }
-        // Drain stderr so the child never blocks on a full stderr pipe.
-        stderr.fileHandleForReading.readabilityHandler = { handle in
-            if handle.availableData.isEmpty { handle.readabilityHandler = nil }
-        }
-
         return try await withThrowingTaskGroup(of: Data.self) { group in
             group.addTask {
-                try await withCheckedThrowingContinuation { continuation in
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
                     process.terminationHandler = { proc in
-                        // Give the readability handler a beat to flush.
-                        let status = proc.terminationStatus
-                        if status == 0 {
-                            continuation.resume(returning: stdoutData.snapshot())
+                        // Read stdout to EOF *after* the process exits, so we
+                        // never resume on a partially-flushed pipe. The old
+                        // readabilityHandler + snapshot path could race the
+                        // final chunk and resume with empty/truncated JSON →
+                        // a spurious "?" in the menu bar. codexbar's output is
+                        // a few KB, well under the 64KB pipe buffer, so reading
+                        // post-exit cannot deadlock.
+                        let out = stdout.fileHandleForReading.readDataToEndOfFile()
+                        _ = stderr.fileHandleForReading.readDataToEndOfFile()  // drain
+                        if proc.terminationStatus == 0 {
+                            continuation.resume(returning: out)
                         } else {
-                            continuation.resume(throwing: ProcessError.nonZeroExit(status))
+                            continuation.resume(throwing: ProcessError.nonZeroExit(proc.terminationStatus))
                         }
                     }
                     do {
@@ -172,25 +163,16 @@ struct CodexBarCLIQuotaBackend: AIQuotaBackend {
         }
     }
 
-    /// Thread-safe accumulator for piped stdout chunks.
-    private final class LockedData: @unchecked Sendable {
-        private let lock = NSLock()
-        private var data = Data()
-        func append(_ chunk: Data) {
-            lock.lock(); defer { lock.unlock() }
-            data.append(chunk)
-        }
-        func snapshot() -> Data {
-            lock.lock(); defer { lock.unlock() }
-            return data
-        }
-    }
-
     // MARK: Parsing (pure, unit-testable)
 
     /// Parses CodexBar CLI JSON (object or array) into a snapshot.
     /// Pure function: no I/O, so tests can feed it fixtures.
-    static func parse(data: Data, provider: AIQuotaProvider) -> AIQuotaSnapshot {
+    static func parse(data rawData: Data, provider: AIQuotaProvider) -> AIQuotaSnapshot {
+        // Defensive: trim any non-JSON noise before the first top-level
+        // opener. Status lines like "[codex notify] …" belong on stderr
+        // (which we drop), but if one ever lands on stdout this keeps the
+        // decode from failing.
+        let data = Self.jsonSlice(of: rawData)
         guard !data.isEmpty else {
             return .failure(provider, "empty CLI output")
         }
@@ -236,6 +218,32 @@ struct CodexBarCLIQuotaBackend: AIQuotaBackend {
             plan: usage.loginMethod ?? usage.identity?.loginMethod,
             error: nil
         )
+    }
+
+    /// Returns the data starting at the first byte that actually begins
+    /// JSON: a '[' or '{' whose next non-whitespace byte is JSON-structural
+    /// (so a log line such as "[codex notify] …", where '[' is followed by a
+    /// letter, is skipped). Returns the input unchanged if none is found.
+    static func jsonSlice(of data: Data) -> Data {
+        let bytes = [UInt8](data)
+        func isWS(_ b: UInt8) -> Bool { b == 0x20 || b == 0x09 || b == 0x0A || b == 0x0D }
+        func looksLikeJSONStart(after i: Int) -> Bool {
+            var j = i + 1
+            while j < bytes.count, isWS(bytes[j]) { j += 1 }
+            guard j < bytes.count else { return false }
+            let b = bytes[j]
+            return b == UInt8(ascii: "{") || b == UInt8(ascii: "[")
+                || b == UInt8(ascii: "\"") || b == UInt8(ascii: "}") || b == UInt8(ascii: "]")
+                || (b >= UInt8(ascii: "0") && b <= UInt8(ascii: "9")) || b == UInt8(ascii: "-")
+                || b == UInt8(ascii: "t") || b == UInt8(ascii: "f") || b == UInt8(ascii: "n")
+        }
+        for i in bytes.indices {
+            let b = bytes[i]
+            if (b == UInt8(ascii: "[") || b == UInt8(ascii: "{")), looksLikeJSONStart(after: i) {
+                return Data(bytes[i...])
+            }
+        }
+        return data
     }
 
     private static let isoFormatter = ISO8601DateFormatter()
