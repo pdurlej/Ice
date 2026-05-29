@@ -239,7 +239,8 @@ struct CodexBarCLIQuotaBackend: AIQuotaBackend {
         }
         for i in bytes.indices {
             let b = bytes[i]
-            if (b == UInt8(ascii: "[") || b == UInt8(ascii: "{")), looksLikeJSONStart(after: i) {
+            let isOpener = b == UInt8(ascii: "[") || b == UInt8(ascii: "{")
+            if isOpener, looksLikeJSONStart(after: i) {
                 return Data(bytes[i...])
             }
         }

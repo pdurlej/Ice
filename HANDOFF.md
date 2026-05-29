@@ -3,6 +3,51 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🔥 SHIPPED fire.9.7 - AI Quotas left of system icons + codex fetch fix (2026-05-29 ~21:05)
+
+Owner wanted the usage readout on the LEFT and the macOS system icons
+(Spotlight, Control Center, clock) grouped on the RIGHT. Verified live
+via CGWindowList probe + screenshot (build 1143).
+
+Ground truth (lower preferred position = further RIGHT/trailing):
+`Visible(•••)=410 x1614 | Spotlight=378 | AIQuotas(was 174) | ControlCenter=132 | Clock`.
+AIQuotas had been forced to preferred 0 → far right, RIGHT of Spotlight,
+wedged among the system icons.
+
+1. **Placement** (`AIQuotaStatusItemController`). Place AIQuotas just
+   inside Ice's Visible control item: `target = VisiblePos − 1` (= 409
+   here), the LEFTMOST always-visible slot. New order: `••• AIQuotas
+   Spotlight CC Clock` — AIQuotas x1647, Spotlight pushed to x1852, all
+   on-screen. **Architectural limit:** literally left of the ••• is
+   impossible — the Visible control item IS the left edge of the visible
+   zone; immediately left of it is Ice's 10 000pt divider → off-screen.
+   So "leftmost visible / left of every system icon" is the achievable
+   target. Explained to owner.
+2. **Drag stickiness (root cause of "couldn't move it").** Old controller
+   re-forced position 0 on every launch whenever the stored value was
+   `>100`, so any leftward drag snapped back to far right next launch.
+   Now a one-time migration (`AIQuotasPositionLeftOfSystemV1` flag) moves
+   existing installs to the leftmost slot, then manual drags are
+   respected; only an off-screen value (left of the Visible CI)
+   self-heals.
+3. **Codex "?" hardening (the "bug 9.7").** `CodexBarCLIQuotaBackend.runProcess`
+   resumed from the terminationHandler using a snapshot that could race
+   the readabilityHandler's final stdout chunk → empty/truncated JSON →
+   spurious "?". Now reads stdout to EOF after exit (codexbar output is a
+   few KB; no deadlock). Added defensive `jsonSlice()` that trims any
+   non-JSON prefix before decoding (the `[codex notify] …` line is on
+   stderr, which we drop — belt-and-suspenders). Verified: Codex shows
+   72% (was "?").
+
+Tag `v0.11.13-fire.9.7` (build 1143), commit `a2bafd2`. CI signed +
+notarized; appcast updated (`pdurlej/fire-releases` `92fef44`). Installed
++ verified.
+
+Lint note: `lint.yml` has been RED since ≥fire.9.4 (≈15 pre-existing
+swiftlint violations across 112 files: multiline_arguments, etc.). It is
+NOT a release gate — `build-dmg.yml` is — and shipping despite red lint is
+the established pattern. A full swiftlint cleanup is a separate task.
+
 ## 🔥 SHIPPED fire.9.6 - AI Quotas shows REMAINING %, not used % (2026-05-29 ~19:10)
 
 Owner feedback on the readout: showing *used* % made "Antigravity 0%"
