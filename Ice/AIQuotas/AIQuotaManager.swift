@@ -160,8 +160,8 @@ final class AIQuotaManager: NSObject, ObservableObject {
 
     private func render() {
         let providers = orderedEnabledProviders()
-        let title = AIQuotaMenuBuilder.title(
-            for: providers, snapshots: snapshots, compact: settings.compactTitle
+        let attributedTitle = AIQuotaMenuBuilder.attributedTitle(
+            for: providers, snapshots: snapshots
         )
         let menu = AIQuotaMenuBuilder.menu(
             for: providers,
@@ -172,7 +172,7 @@ final class AIQuotaManager: NSObject, ObservableObject {
             openSettingsAction: #selector(menuOpenSettings),
             installCLIAction: #selector(menuInstallCLI)
         )
-        statusItemController.show(title: title, menu: menu)
+        statusItemController.show(attributedTitle: attributedTitle, menu: menu)
     }
 
     // MARK: Menu actions

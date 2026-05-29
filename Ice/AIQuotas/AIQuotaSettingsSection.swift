@@ -14,7 +14,7 @@ struct AIQuotaSettingsContent: View {
     var body: some View {
         description
         enableToggle
-        compactToggle
+        providerToggles
         cliPathField
     }
 
@@ -22,10 +22,9 @@ struct AIQuotaSettingsContent: View {
     private var description: some View {
         Text(
             """
-            AI Quotas uses a local CodexBar CLI installation to read \
-            provider usage (Codex, Claude, Gemini, Ollama) and shows \
-            remaining limits in the menu bar. Fire does not send usage \
-            data anywhere. Default: off.
+            AI Quotas reads provider usage from a local CodexBar CLI \
+            installation and shows each provider's weekly usage in the \
+            menu bar. Fire does not send usage data anywhere. Default: off.
             """
         )
         .padding(.trailing, 75)
@@ -37,9 +36,28 @@ struct AIQuotaSettingsContent: View {
     }
 
     @ViewBuilder
-    private var compactToggle: some View {
-        Toggle("Compact title (hide the leading \"AI\")", isOn: $settings.compactTitle)
-            .disabled(!settings.enableAIQuotas)
+    private var providerToggles: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Providers")
+            ForEach(AIQuotaProvider.allCases) { provider in
+                Toggle(provider.displayName, isOn: binding(for: provider))
+                    .disabled(!settings.enableAIQuotas)
+            }
+        }
+    }
+
+    /// A Bool binding for whether a provider is in the enabled set.
+    private func binding(for provider: AIQuotaProvider) -> Binding<Bool> {
+        Binding(
+            get: { settings.enabledProviders.contains(provider) },
+            set: { isOn in
+                if isOn {
+                    settings.enabledProviders.insert(provider)
+                } else {
+                    settings.enabledProviders.remove(provider)
+                }
+            }
+        )
     }
 
     @ViewBuilder

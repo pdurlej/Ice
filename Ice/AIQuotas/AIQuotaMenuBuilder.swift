@@ -36,6 +36,60 @@ enum AIQuotaMenuBuilder {
         return compact ? body : "AI \(body)"
     }
 
+    /// Builds the rich menu-bar title: each provider's brand icon
+    /// followed by its weekly usage percent, e.g. [Cx] 21% [Cl] 38% …
+    /// The percent is color-coded by remaining weekly headroom
+    /// (orange < 20% left, red < 10% left). Providers without a brand
+    /// icon fall back to their two-letter short label.
+    static func attributedTitle(
+        for providers: [AIQuotaProvider],
+        snapshots: [AIQuotaProvider: AIQuotaSnapshot]
+    ) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .small))
+
+        for (index, provider) in providers.enumerated() {
+            if index > 0 {
+                result.append(NSAttributedString(string: "  "))
+            }
+
+            // Brand icon (or short-label fallback).
+            if let icon = AIQuotaProviderIcon.image(for: provider) {
+                let attachment = NSTextAttachment()
+                attachment.image = icon
+                // Nudge down so the icon centers on the text baseline.
+                attachment.bounds = CGRect(
+                    x: 0, y: (font.capHeight - icon.size.height) / 2,
+                    width: icon.size.width, height: icon.size.height
+                )
+                result.append(NSAttributedString(attachment: attachment))
+            } else {
+                result.append(NSAttributedString(
+                    string: provider.shortLabel,
+                    attributes: [.font: font, .foregroundColor: NSColor.labelColor]
+                ))
+            }
+
+            // Weekly usage percent, color-coded by remaining headroom.
+            let snapshot = snapshots[provider]
+            let usageText: String
+            let color: NSColor
+            if let snapshot, snapshot.isUsable, let used = snapshot.weeklyUsedPercent {
+                usageText = "\u{2009}\(Int(used.rounded()))%"
+                let left = snapshot.weeklyLeftPercent ?? (100 - used)
+                color = left < 10 ? .systemRed : (left < 20 ? .systemOrange : .labelColor)
+            } else {
+                usageText = "\u{2009}?"
+                color = .secondaryLabelColor
+            }
+            result.append(NSAttributedString(
+                string: usageText,
+                attributes: [.font: font, .foregroundColor: color]
+            ))
+        }
+        return result
+    }
+
     // MARK: Menu
 
     static func menu(

@@ -97,4 +97,26 @@ struct AIQuotaSnapshot: Equatable, Codable {
         if let t = left(of: tertiary) { return t }
         return extraWindows.compactMap(\.leftPercent).min()
     }
+
+    private func used(of window: AIQuotaWindow?) -> Double? {
+        guard let window else { return nil }
+        if let used = window.usedPercent { return used }
+        if let left = window.leftPercent { return 100 - left }
+        return nil
+    }
+
+    /// The weekly (secondary) usage percent shown in the menu-bar title.
+    /// Falls back to tertiary, then the busiest per-model window, then
+    /// primary, so every provider surfaces something meaningful.
+    var weeklyUsedPercent: Double? {
+        if let s = used(of: secondary) { return s }
+        if let t = used(of: tertiary) { return t }
+        if let m = extraWindows.compactMap(\.usedPercent).max() { return m }
+        return used(of: primary)
+    }
+
+    /// Remaining percent for the weekly window (drives threshold color).
+    var weeklyLeftPercent: Double? {
+        weeklyUsedPercent.map { 100 - $0 }
+    }
 }

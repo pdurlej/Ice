@@ -15,29 +15,29 @@ import Foundation
 enum AIQuotaProvider: String, CaseIterable, Identifiable, Codable {
     case codex
     case claude
-    case gemini
     case antigravity
     case ollama
+    // Note: standalone `gemini` was intentionally removed — Antigravity
+    // is Google's Gemini-backed tool, so it already covers Gemini usage,
+    // and the separate gemini provider only ever showed "?" here.
 
     var id: String { rawValue }
 
-    /// Two-letter label used in the combined menu-bar title.
+    /// Two-letter label used as a fallback when a brand icon is missing.
     var shortLabel: String {
         switch self {
         case .codex: "Cx"
         case .claude: "Cl"
-        case .gemini: "Gm"
         case .antigravity: "Ag"
         case .ollama: "Ol"
         }
     }
 
-    /// Human-readable name used in the dropdown menu.
+    /// Human-readable name used in the dropdown menu and settings.
     var displayName: String {
         switch self {
         case .codex: "Codex"
         case .claude: "Claude"
-        case .gemini: "Gemini"
         case .antigravity: "Antigravity"
         case .ollama: "Ollama"
         }

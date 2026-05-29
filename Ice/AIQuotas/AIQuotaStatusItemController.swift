@@ -79,11 +79,17 @@ final class AIQuotaStatusItemController {
         return item
     }
 
-    /// Shows the item (creating it if needed) and updates its title/menu.
-    func show(title: String, menu: NSMenu) {
+    /// Shows the item (creating it if needed) and updates its
+    /// rich (icon + percent) title and menu.
+    func show(attributedTitle: NSAttributedString, menu: NSMenu) {
         let item = ensureStatusItem()
         item.isVisible = true
-        item.button?.title = title
+        if let button = item.button {
+            button.attributedTitle = attributedTitle
+            // Let the icon attachments render at full color rather than
+            // being flattened to a template tint.
+            button.image = nil
+        }
         item.menu = menu
     }
 
