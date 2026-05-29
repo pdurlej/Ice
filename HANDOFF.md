@@ -3,6 +3,51 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🔥🔥🔥 SHIPPED fire.8.1 - moves verified end-to-end on macOS 26 (2026-05-29 ~10:17)
+
+**Tagged `v0.11.13-fire.8.1`** (build 1132). CI built + signed + notarized
+in ~4m. DMG at https://github.com/pdurlej/Ice/releases/tag/v0.11.13-fire.8.1.
+Sparkle appcast updated (`pdurlej/fire-releases` commit `27b9e7e`).
+fire.8 users will get the auto-update prompt.
+
+**Live verified through Claude Code MCP session**:
+- `list_items` returns 21 real menu bar items with correct bundle IDs
+- `move_item bundle_id=com.electron.ollama to_section=alwaysVisible`
+  physically slides the item; follow-up `list_items` confirms ollama
+  at `pos=19` (rightmost slot)
+
+**Two bugs fire.8.1 fixes** (both surfaced only on macOS 26):
+
+1. **MCPBackend never started SourcePIDCache** → `pid(for: window)`
+   always returned nil → every menu bar item resolved as
+   `com.apple.controlcenter` because Control Center reparenting moved
+   `ownerPID` to itself. Added `SourcePIDCache.shared.start()` to
+   `MCPBackend/main.swift`, mirroring what `MenuBarItemService/main.swift`
+   has always done.
+
+2. **Section detection always fell through to "everything alwaysVisible"** —
+   Ice's three control items live in NSStatusBar and are NOT exposed as
+   separate CG windows the way menu bar items are. The original detection
+   algorithm searched for them in `Bridging.getMenuBarWindowList`, never
+   found any, and bucketed everything into alwaysVisible. Fix:
+   - Ice main app publishes `[visible.minX, hidden.minX, alwaysHidden.minX]`
+     to its plist on every status-item-window rotation (see
+     `Ice/MenuBar/MenuBarManager.swift` `publishControlItemWindowIDsForMCPBackend`).
+   - MCPBackend reads those three doubles as section-boundary X coordinates
+     and classifies windows by `minX` falling between them.
+   - Apple's own Control Center widgets are dropped by stable window
+     titles (`BentoBox*`, `Clock`, `FaceTime`, `MusicRecognition`,
+     `AudioVideoModule`) so items that land in the gap between Ice's
+     visible divider and Apple's first widget still classify as
+     alwaysVisible.
+
+Also fixed: `CGGetActiveDisplayList` returning zero displays from an
+XPC service with no graphics connection — falls back to
+`CGMainDisplayID()`.
+
+The old `findIceControlItems` / `isOwnedByIce` helpers are gone (the
+minX-boundary approach makes them obsolete).
+
 ## 🔥🔥🔥 SHIPPED fire.8 - write ops live (2026-05-26 ~22:01)
 
 **Tagged `v0.11.13-fire.8`** (build 1131). CI built + signed + notarized
