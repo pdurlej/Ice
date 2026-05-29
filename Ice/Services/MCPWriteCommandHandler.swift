@@ -97,24 +97,19 @@ final class MCPWriteCommandHandler {
             return fail("Unknown section '\(command.toSection)'")
         }
 
-        // Expand ALL section dividers on-screen FIRST. Collapsed
-        // (hidden / alwaysHidden) dividers are parked off-screen and are
-        // therefore absent from the item cache — so we must show them
-        // before we can find their control items or drag toward them.
-        // Ice's normal auto-rehide collapses everything again once we
-        // restore the saved states in `defer`.
-        let expanded = expandSectionsForMove(to: section, appState: appState)
-        defer { restoreSections(expanded) }
-
-        // Let the dividers animate on-screen, then force a fresh cache so
-        // it includes the now-visible control items.
-        try? await Task.sleep(for: .milliseconds(350))
-        await appState.itemManager.cacheItemsRegardless()
-        let cache = appState.itemManager.itemCache
+        // Enumerate active-space menu bar items. Crucially this uses
+        // MenuBarItem.getMenuBarItems(option: .activeSpace) — the same
+        // call Ice's own Layout editor uses to move into an empty
+        // section — which does NOT apply the on-screen filter, so it
+        // includes the hidden / alwaysHidden divider control items even
+        // when they're collapsed and parked off-screen. (The itemCache,
+        // by contrast, is on-screen-filtered and omits them, which is
+        // why an earlier approach couldn't find them.)
+        let items = await MenuBarItem.getMenuBarItems(option: .activeSpace)
 
         // Find the source item by bundle ID. Skip Ice's own control
         // items (never user-movable) and match on the source/owning app.
-        guard let source = cache.managedItems.first(where: { item in
+        guard let source = items.first(where: { item in
             guard !item.isControlItem else { return false }
             let bundleID = item.sourceApplication?.bundleIdentifier
                 ?? item.owningApplication?.bundleIdentifier
@@ -124,25 +119,29 @@ final class MCPWriteCommandHandler {
         }
 
         // Map the target section to a MoveDestination relative to a
-        // control item, matching ItemCache.insert's canonical semantics:
+        // control item, matching the semantics Ice's Layout editor uses
+        // (LayoutBarPaddingView) and ItemCache.insert:
         //   alwaysVisible -> rightOf(hiddenControlItem)  (visible[0])
         //   hidden        -> leftOf(hiddenControlItem)   (append hidden)
         //   alwaysHidden  -> leftOf(alwaysHiddenControlItem)
+        // The control item may be off-screen (collapsed section); the
+        // drag posts events at its position and the window server
+        // relocates the item — no section expansion needed.
         let destination: MenuBarItemManager.MoveDestination
         switch section {
         case .visible:
-            guard let hiddenCI = cache.managedItems.first(matching: .hiddenControlItem) else {
-                return fail(controlItemDiagnostic("hidden", cache))
+            guard let hiddenCI = items.first(matching: .hiddenControlItem) else {
+                return fail(controlItemDiagnostic("hidden", items))
             }
             destination = .rightOfItem(hiddenCI)
         case .hidden:
-            guard let hiddenCI = cache.managedItems.first(matching: .hiddenControlItem) else {
-                return fail(controlItemDiagnostic("hidden", cache))
+            guard let hiddenCI = items.first(matching: .hiddenControlItem) else {
+                return fail(controlItemDiagnostic("hidden", items))
             }
             destination = .leftOfItem(hiddenCI)
         case .alwaysHidden:
-            guard let alwaysHiddenCI = cache.managedItems.first(matching: .alwaysHiddenControlItem) else {
-                return fail(controlItemDiagnostic("alwaysHidden", cache))
+            guard let alwaysHiddenCI = items.first(matching: .alwaysHiddenControlItem) else {
+                return fail(controlItemDiagnostic("alwaysHidden", items))
             }
             destination = .leftOfItem(alwaysHiddenCI)
         }
@@ -156,44 +155,16 @@ final class MCPWriteCommandHandler {
     }
 
     /// Builds a diagnostic message listing the control items present in
-    /// the cache, to make a missing-control-item failure debuggable from
-    /// the MCP client's error message.
-    private func controlItemDiagnostic(_ which: String, _ cache: MenuBarItemManager.ItemCache) -> String {
-        let controlTags = cache.managedItems
+    /// the enumerated set, to make a missing-control-item failure
+    /// debuggable straight from the MCP client's error message.
+    private func controlItemDiagnostic(_ which: String, _ items: [MenuBarItem]) -> String {
+        let controlTags = items
             .filter { $0.isControlItem }
             .map { "\($0.tag)" }
             .joined(separator: ", ")
-        return "\(which) control item not found. Cache has \(cache.managedItems.count) items; control items present: [\(controlTags)]. Is the section enabled in Settings?"
+        return "\(which) control item not found. Enumerated \(items.count) items; control items present: [\(controlTags)]. Is the section enabled in Settings?"
     }
 
-    /// Forces the section dividers needed for a move to be on-screen.
-    /// Returns the list of (section, previousState) to restore afterward.
-    private func expandSectionsForMove(
-        to target: MenuBarSection.Name, appState: AppState
-    ) -> [(MenuBarSection, ControlItem.HidingState)] {
-        // Moving into hidden needs the hidden divider on-screen; into
-        // alwaysHidden needs both hidden and alwaysHidden on-screen.
-        // Moving into visible only needs the hidden divider as a target,
-        // which is on-screen whenever the hidden section is shown.
-        let names: [MenuBarSection.Name]
-        switch target {
-        case .visible, .hidden: names = [.visible, .hidden]
-        case .alwaysHidden:     names = [.visible, .hidden, .alwaysHidden]
-        }
-        var saved: [(MenuBarSection, ControlItem.HidingState)] = []
-        for name in names {
-            guard let section = appState.menuBarManager.section(withName: name) else { continue }
-            saved.append((section, section.controlItem.state))
-            section.controlItem.state = .showSection
-        }
-        return saved
-    }
-
-    private func restoreSections(_ saved: [(MenuBarSection, ControlItem.HidingState)]) {
-        for (section, state) in saved {
-            section.controlItem.state = state
-        }
-    }
 }
 
 // MARK: - Section name <-> MCP raw value
