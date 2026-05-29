@@ -37,6 +37,9 @@ final class AppState: ObservableObject {
     /// Manager for menu bar items.
     let itemManager = MenuBarItemManager()
 
+    /// Handler for MCP write commands delegated from MCPBackend.xpc.
+    let mcpWriteCommandHandler = MCPWriteCommandHandler()
+
     /// Global cache for menu bar item images.
     let imageCache = MenuBarItemImageCache()
 
@@ -62,6 +65,12 @@ final class AppState: ObservableObject {
         settings.performSetup(with: self)
         menuBarManager.performSetup(with: self)
 
+        // Set up early — before any of the `await` calls below — because
+        // it only needs `appState` and starts an independent poll timer.
+        // (It was previously buried after itemManager.performSetup, which
+        // on some builds delayed/blocked reaching it.)
+        mcpWriteCommandHandler.performSetup(with: self)
+
         if #available(macOS 26.0, *) {
             await MenuBarItemService.Connection.shared.start()
         }
@@ -72,6 +81,7 @@ final class AppState: ObservableObject {
         imageCache.performSetup(with: self)
         updatesManager.performSetup(with: self)
         userNotificationManager.performSetup(with: self)
+        mcpWriteCommandHandler.performSetup(with: self)
 
         configureCancellables()
     }

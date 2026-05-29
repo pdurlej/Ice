@@ -202,63 +202,67 @@ final class MCPBackendStateManager {
         return ids
     }
 
-    // MARK: - Write (W2 - real implementation via Mover)
+    // MARK: - Write (fire.8.2 - delegated to Ice main app via MCPWriteChannel)
 
-    /// Moves the item with the given bundle ID to the target section.
+    /// Moves the item with the given bundle ID to the target section by
+    /// delegating to Ice main app through the file-based
+    /// `MCPWriteChannel`.
     ///
-    /// Implementation: find the source item, pick a "neighbour" item
-    /// already in the target section to drag relative to. If the target
-    /// section is empty, use the matching boundary control item by its
-    /// published minX (read from the Ice plist by `flushControlItemMinX`).
-    /// `toIndex` is currently ignored - the moved item lands at the
-    /// leftmost slot of the target section.
+    /// Why delegate rather than move here: MCPBackend.xpc can only reach
+    /// on-screen sections (its earlier in-process Mover worked for
+    /// alwaysVisible↔alwaysVisible but could not move into a collapsed
+    /// hidden / alwaysHidden section — those dividers are off-screen and
+    /// expanding a section is an Ice-main-app-only operation). Ice main
+    /// app owns the real control-item objects and `MenuBarItemManager.move`
+    /// (the Layout-editor code path), so it handles every section. See
+    /// Shared/Services/MCPWriteChannel.swift for the channel design.
     func moveItem(
         bundleID: String,
         toSection: MenuBarItemService.ItemSection,
         toIndex: Int?
     ) async -> (success: Bool, message: String?) {
         logger.debug(
-            "moveItem(\(bundleID), to: \(toSection.rawValue), index: \(String(describing: toIndex)))"
+            "moveItem(\(bundleID), to: \(toSection.rawValue), index: \(String(describing: toIndex))) via bridge"
         )
 
+        // Sanity: confirm the item is actually in the menu bar before
+        // round-tripping to Ice, so we can return a fast, clear error.
         let windowIDs = Bridging.getMenuBarWindowList(option: .itemsOnly)
         let allWindows = WindowInfo.createWindows(from: windowIDs)
-        guard let sourceWindow = findWindow(for: bundleID, in: allWindows) else {
+        guard findWindow(for: bundleID, in: allWindows) != nil else {
             return (false, "Item with bundle ID '\(bundleID)' not found in menu bar")
         }
 
-        // Pick a target window in the destination section:
-        // - The current items in `toSection` from listItems' bucketing.
-        // - Use the rightmost (largest minX) item in the destination so
-        //   moving "right of" it lands the moved item just past the
-        //   section's existing tail.
-        let items = await listItems(section: toSection)
-        guard let targetItemInfo = items.last,
-              let targetWindow = allWindows.first(where: { $0.windowID == targetItemInfo.windowID })
-        else {
-            return (
-                false,
-                "Target section '\(toSection.rawValue)' is empty; ensure Ice has at least one item there, or enable the section so its boundary control item appears in the menu bar"
-            )
-        }
-
-        let moveItem = makeMoveItem(window: sourceWindow, displayName: bundleID)
-        let targetItem = makeMoveItem(
-            window: targetWindow,
-            displayName: "neighbour[\(toSection.rawValue)]"
+        let id = UUID().uuidString
+        let command = MCPWriteChannel.Command(
+            id: id,
+            op: "move",
+            bundleID: bundleID,
+            toSection: toSection.rawValue,
+            toIndex: toIndex,
+            createdAt: Date().timeIntervalSince1970
         )
-
         do {
-            try await Mover.shared.move(
-                item: moveItem,
-                to: .rightOfItem(targetItem)
-            )
-            logger.info("moveItem succeeded for \(bundleID) → \(toSection.rawValue)")
-            return (true, nil)
+            try MCPWriteChannel.writeCommand(command)
         } catch {
-            logger.error("moveItem failed for \(bundleID): \(error)")
-            return (false, "\(error)")
+            return (false, "Failed to hand command to Ice: \(error)")
         }
+
+        // Poll for the matching result. Ice's handler polls every 200ms
+        // and a move takes up to a few seconds (8 attempts × timeout),
+        // so give it a generous window.
+        let deadline = Date().addingTimeInterval(15)
+        while Date() < deadline {
+            if let result = MCPWriteChannel.readResult(), result.id == id {
+                logger.info("moveItem bridge result for \(bundleID): success=\(result.success)")
+                return (result.success, result.message)
+            }
+            try? await Task.sleep(for: .milliseconds(150))
+        }
+        return (
+            false,
+            "Ice did not respond within 15s. Make sure Ice (Fire) is running and has Accessibility permission."
+        )
     }
 
     func hideItem(bundleID: String) async -> (success: Bool, message: String?) {
