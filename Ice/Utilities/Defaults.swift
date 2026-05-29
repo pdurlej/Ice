@@ -170,7 +170,8 @@ extension Defaults {
         // MARK: AI Quotas Settings
         case enableAIQuotas = "EnableAIQuotas"
         case aiQuotaRefreshIntervalSeconds = "AIQuotaRefreshIntervalSeconds"
-        case aiQuotaEnabledProviders = "AIQuotaEnabledProviders"
+        case aiQuotaEnabledProviders = "AIQuotaEnabledProviders" // deprecated, superseded by disabled set
+        case aiQuotaDisabledProviders = "AIQuotaDisabledProviders"
         case aiQuotaCompactTitle = "AIQuotaCompactTitle"
         case aiQuotaCodexBarCLIPath = "AIQuotaCodexBarCLIPath"
 

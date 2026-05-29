@@ -41,11 +41,14 @@ final class AIQuotaSettings: ObservableObject {
         Defaults.ifPresent(key: .aiQuotaRefreshIntervalSeconds, assign: &refreshIntervalSeconds)
         Defaults.ifPresent(key: .aiQuotaCompactTitle, assign: &compactTitle)
         Defaults.ifPresent(key: .aiQuotaCodexBarCLIPath, assign: &codexBarCLIPath)
-        if let raw = Defaults.array(forKey: .aiQuotaEnabledProviders) as? [String] {
-            let providers = raw.compactMap(AIQuotaProvider.init(rawValue:))
-            if !providers.isEmpty {
-                enabledProviders = Set(providers)
-            }
+        // Persist the DISABLED set, not the enabled set: an empty/absent
+        // disabled set means "all providers on", so a provider added in a
+        // later release (e.g. antigravity) shows up automatically for
+        // existing users instead of being silently excluded by a stale
+        // persisted enabled-list.
+        if let raw = Defaults.array(forKey: .aiQuotaDisabledProviders) as? [String] {
+            let disabled = Set(raw.compactMap(AIQuotaProvider.init(rawValue:)))
+            enabledProviders = Set(AIQuotaProvider.allCases).subtracting(disabled)
         }
     }
 
@@ -70,8 +73,8 @@ final class AIQuotaSettings: ObservableObject {
 
         $enabledProviders
             .sink { providers in
-                let raw = providers.map(\.rawValue).sorted()
-                Defaults.set(raw, forKey: .aiQuotaEnabledProviders)
+                let disabled = Set(AIQuotaProvider.allCases).subtracting(providers)
+                Defaults.set(disabled.map(\.rawValue).sorted(), forKey: .aiQuotaDisabledProviders)
             }
             .store(in: &c)
 
