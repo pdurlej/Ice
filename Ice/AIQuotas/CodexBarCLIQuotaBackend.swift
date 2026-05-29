@@ -216,12 +216,22 @@ struct CodexBarCLIQuotaBackend: AIQuotaBackend {
             return .failure(provider, "no usage data from CLI")
         }
 
+        let extraWindows = (usage.extraRateWindows ?? []).map { extra in
+            AIQuotaExtraWindow(
+                id: extra.id ?? extra.title ?? "?",
+                title: extra.title ?? extra.id ?? "?",
+                usedPercent: extra.window?.usedPercent
+            )
+        }
+
         return AIQuotaSnapshot(
             provider: provider,
             source: response.source,
             updatedAt: Self.parseDate(usage.updatedAt),
             primary: usage.primary.map { $0.toWindow(kind: .primary) },
             secondary: usage.secondary.map { $0.toWindow(kind: .secondary) },
+            tertiary: usage.tertiary.map { $0.toWindow(kind: .tertiary) },
+            extraWindows: extraWindows,
             account: usage.accountEmail ?? usage.identity?.accountEmail,
             plan: usage.loginMethod ?? usage.identity?.loginMethod,
             error: nil
@@ -246,15 +256,24 @@ struct CodexBarCLIQuotaBackend: AIQuotaBackend {
     private struct CLIUsage: Decodable {
         let primary: CLIWindow?
         let secondary: CLIWindow?
+        let tertiary: CLIWindow?
         let updatedAt: String?
         let accountEmail: String?
         let loginMethod: String?
         let identity: CLIIdentity?
+        let extraRateWindows: [CLIExtraWindow]?
     }
 
     private struct CLIIdentity: Decodable {
         let accountEmail: String?
         let loginMethod: String?
+    }
+
+    /// One entry of Antigravity's `extraRateWindows` (per-model usage).
+    private struct CLIExtraWindow: Decodable {
+        let id: String?
+        let title: String?
+        let window: CLIWindow?
     }
 
     private struct CLIWindow: Decodable {

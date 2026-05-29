@@ -29,6 +29,18 @@ struct AIQuotaWindow: Equatable, Codable {
     let resetsAt: Date?
 }
 
+/// A named per-model usage window (e.g. Antigravity exposes one per
+/// Gemini model under `extraRateWindows`).
+struct AIQuotaExtraWindow: Equatable, Codable {
+    let id: String
+    let title: String
+    let usedPercent: Double?
+
+    var leftPercent: Double? {
+        usedPercent.map { 100 - $0 }
+    }
+}
+
 /// A provider's full quota snapshot, including both windows, account
 /// metadata, and any fetch error.
 struct AIQuotaSnapshot: Equatable, Codable {
@@ -41,6 +53,11 @@ struct AIQuotaSnapshot: Equatable, Codable {
     let primary: AIQuotaWindow?
     /// The secondary / weekly window.
     let secondary: AIQuotaWindow?
+    /// A third window, when a provider exposes one.
+    let tertiary: AIQuotaWindow?
+    /// Per-model windows (e.g. Antigravity's Gemini models). Empty for
+    /// providers that don't break usage down by model.
+    let extraWindows: [AIQuotaExtraWindow]
     /// Account label (email) if available.
     let account: String?
     /// Plan / login method if available (e.g. "pro").
@@ -51,24 +68,33 @@ struct AIQuotaSnapshot: Equatable, Codable {
     /// True when the snapshot carries at least one usable window and no
     /// error.
     var isUsable: Bool {
-        error == nil && (primary != nil || secondary != nil)
+        error == nil && (primary != nil || secondary != nil || tertiary != nil || !extraWindows.isEmpty)
     }
 
     /// Convenience: an error-only snapshot for a provider.
     static func failure(_ provider: AIQuotaProvider, _ message: String) -> AIQuotaSnapshot {
         AIQuotaSnapshot(
             provider: provider, source: nil, updatedAt: nil,
-            primary: nil, secondary: nil, account: nil, plan: nil,
-            error: message
+            primary: nil, secondary: nil, tertiary: nil, extraWindows: [],
+            account: nil, plan: nil, error: message
         )
     }
 
-    /// The percent-left for the primary window, used for the compact
-    /// menu-bar title. Falls back to deriving from usedPercent.
-    var primaryLeftPercent: Double? {
-        guard let primary else { return nil }
-        if let left = primary.leftPercent { return left }
-        if let used = primary.usedPercent { return 100 - used }
+    private func left(of window: AIQuotaWindow?) -> Double? {
+        guard let window else { return nil }
+        if let left = window.leftPercent { return left }
+        if let used = window.usedPercent { return 100 - used }
         return nil
+    }
+
+    /// The percent-left shown in the compact menu-bar title. Prefers the
+    /// primary window, then secondary, then tertiary, then the lowest
+    /// remaining per-model window (so the title surfaces the tightest
+    /// limit for providers like Antigravity whose primary is null).
+    var primaryLeftPercent: Double? {
+        if let p = left(of: primary) { return p }
+        if let s = left(of: secondary) { return s }
+        if let t = left(of: tertiary) { return t }
+        return extraWindows.compactMap(\.leftPercent).min()
     }
 }

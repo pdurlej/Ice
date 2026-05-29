@@ -113,6 +113,19 @@ enum AIQuotaMenuBuilder {
                 detail("Resets: \(Self.resetFormatter.string(from: resets))")
             }
         }
+        if let tertiary = snapshot.tertiary {
+            detail("\(windowLabel(tertiary)): \(leftString(tertiary)) left")
+        }
+        // Per-model windows (e.g. Antigravity's Gemini models). Show the
+        // ones that have data; keep it readable by capping the list.
+        let extras = snapshot.extraWindows.filter { $0.usedPercent != nil }
+        for extra in extras.prefix(12) {
+            let left = extra.leftPercent.map { "\(Int($0.rounded()))%" } ?? "?"
+            detail("\(extra.title): \(left) left")
+        }
+        if extras.count > 12 {
+            detail("… and \(extras.count - 12) more")
+        }
         if let source = snapshot.source {
             detail("Source: \(source)")
         }

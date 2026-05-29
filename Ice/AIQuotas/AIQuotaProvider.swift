@@ -16,6 +16,7 @@ enum AIQuotaProvider: String, CaseIterable, Identifiable, Codable {
     case codex
     case claude
     case gemini
+    case antigravity
     case ollama
 
     var id: String { rawValue }
@@ -26,6 +27,7 @@ enum AIQuotaProvider: String, CaseIterable, Identifiable, Codable {
         case .codex: "Cx"
         case .claude: "Cl"
         case .gemini: "Gm"
+        case .antigravity: "Ag"
         case .ollama: "Ol"
         }
     }
@@ -36,6 +38,7 @@ enum AIQuotaProvider: String, CaseIterable, Identifiable, Codable {
         case .codex: "Codex"
         case .claude: "Claude"
         case .gemini: "Gemini"
+        case .antigravity: "Antigravity"
         case .ollama: "Ollama"
         }
     }
