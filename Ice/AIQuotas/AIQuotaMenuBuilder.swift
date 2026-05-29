@@ -37,10 +37,12 @@ enum AIQuotaMenuBuilder {
     }
 
     /// Builds the rich menu-bar title: each provider's brand icon
-    /// followed by its weekly usage percent, e.g. [Cx] 21% [Cl] 38% …
-    /// The percent is color-coded by remaining weekly headroom
-    /// (orange < 20% left, red < 10% left). Providers without a brand
-    /// icon fall back to their two-letter short label.
+    /// followed by its weekly *remaining* percent, e.g. [Cx] 79% [Cl] 62% …
+    /// — i.e. how much headroom is still available, not how much was
+    /// consumed. The percent is color-coded by that headroom (orange
+    /// < 20% left, red < 10% left), so a small red number reads as
+    /// "almost out". Providers without a brand icon fall back to their
+    /// two-letter short label.
     static func attributedTitle(
         for providers: [AIQuotaProvider],
         snapshots: [AIQuotaProvider: AIQuotaSnapshot]
@@ -70,13 +72,14 @@ enum AIQuotaMenuBuilder {
                 ))
             }
 
-            // Weekly usage percent, color-coded by remaining headroom.
+            // Weekly *remaining* percent, color-coded by that same
+            // headroom (low = running out = red). Shows what's still
+            // available rather than what was consumed.
             let snapshot = snapshots[provider]
             let usageText: String
             let color: NSColor
-            if let snapshot, snapshot.isUsable, let used = snapshot.weeklyUsedPercent {
-                usageText = "\u{2009}\(Int(used.rounded()))%"
-                let left = snapshot.weeklyLeftPercent ?? (100 - used)
+            if let snapshot, snapshot.isUsable, let left = snapshot.weeklyLeftPercent {
+                usageText = "\u{2009}\(Int(left.rounded()))%"
                 color = left < 10 ? .systemRed : (left < 20 ? .systemOrange : .labelColor)
             } else {
                 usageText = "\u{2009}?"
