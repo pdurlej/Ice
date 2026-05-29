@@ -28,6 +28,10 @@ final class MCPWriteCommandHandler {
     /// every poll tick.
     private var lastProcessedID: String?
 
+    /// True while a consent prompt is on screen, so concurrent poll ticks
+    /// don't stack a second modal alert.
+    private var authorizationInFlight = false
+
     private var cancellable: AnyCancellable?
 
     /// Performs setup: starts polling the shared command file.
@@ -47,6 +51,9 @@ final class MCPWriteCommandHandler {
     }
 
     private func poll() {
+        // Don't pick up new commands (or stack a second modal) while a
+        // consent prompt is already on screen.
+        guard !authorizationInFlight else { return }
         guard let command = MCPWriteChannel.readCommand() else { return }
         guard command.id != lastProcessedID else { return }
         logger.log("MCP write command received: \(command.id, privacy: .public)")
@@ -59,11 +66,28 @@ final class MCPWriteCommandHandler {
         }
 
         lastProcessedID = command.id
-        logger.log(
-            "Executing MCP write command \(command.id, privacy: .public): \(command.op, privacy: .public) \(command.bundleID, privacy: .public) -> \(command.toSection, privacy: .public)"
-        )
+        authorizationInFlight = true
 
         Task {
+            defer { authorizationInFlight = false }
+
+            // fire.9.8 confused-deputy stopgap: the TCC-bearing main app
+            // authorizes every write in its own UI before using its
+            // Accessibility power. The file channel is only a request
+            // queue, never the authorization boundary.
+            guard MCPWriteAuthorization.shared.authorize(command) else {
+                let denied = MCPWriteChannel.Result(
+                    id: command.id, success: false,
+                    message: "Denied: this menu bar change was not approved in Fire.",
+                    completedAt: Date().timeIntervalSince1970
+                )
+                try? MCPWriteChannel.writeResult(denied)
+                return
+            }
+
+            logger.log(
+                "Executing MCP write command \(command.id, privacy: .public): \(command.op, privacy: .public) \(command.bundleID, privacy: .public) -> \(command.toSection, privacy: .public)"
+            )
             let result = await execute(command)
             do {
                 try MCPWriteChannel.writeResult(result)

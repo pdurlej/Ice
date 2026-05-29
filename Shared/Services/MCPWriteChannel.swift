@@ -82,13 +82,37 @@ enum MCPWriteChannel {
         let completedAt: Double
     }
 
-    /// Commands older than this (seconds) are ignored by Ice.
-    static let staleAfter: TimeInterval = 30
+    /// Commands older than this (seconds) are ignored by Ice. Kept tight
+    /// so a stale/poison command can't be replayed long after it was
+    /// written (the handler polls every 200ms, so legit pickup is
+    /// effectively immediate). The consent prompt can take longer than
+    /// this, but staleness is checked at pickup — before the prompt — so a
+    /// slow human approval still executes.
+    static let staleAfter: TimeInterval = 10
 
     private static func ensureDirectory() {
-        try? FileManager.default.createDirectory(
-            at: directory, withIntermediateDirectories: true
+        let fm = FileManager.default
+        try? fm.createDirectory(
+            at: directory, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
         )
+        // Tighten an already-existing directory too (idempotent): owner-only,
+        // so other users on the machine can't read or drop channel files.
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+    }
+
+    /// Defense-in-depth: only trust a channel file that is a regular file
+    /// (not a symlink), owned by THIS user, and of sane size. Blocks
+    /// symlink tricks and cross-user writes. It does NOT stop a same-user
+    /// attacker — the main app's `MCPWriteAuthorization` consent gate is
+    /// the actual authorization boundary; this is hygiene.
+    private static func isTrustedLocalFile(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        guard let attrs = try? fm.attributesOfItem(atPath: url.path) else { return false }
+        guard (attrs[.type] as? FileAttributeType) == .typeRegular else { return false }
+        guard let owner = attrs[.ownerAccountID] as? NSNumber, owner.uint32Value == getuid() else { return false }
+        guard let size = attrs[.size] as? NSNumber, size.intValue <= 16 * 1024 else { return false }
+        return true
     }
 
     // MARK: Command (MCPBackend writes, Ice reads)
@@ -97,9 +121,14 @@ enum MCPWriteChannel {
         ensureDirectory()
         let data = try JSONEncoder().encode(command)
         try data.write(to: commandURL, options: .atomic)
+        // Owner-only regardless of umask.
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o600], ofItemAtPath: commandURL.path
+        )
     }
 
     static func readCommand() -> Command? {
+        guard isTrustedLocalFile(commandURL) else { return nil }
         guard let data = try? Data(contentsOf: commandURL) else { return nil }
         return try? JSONDecoder().decode(Command.self, from: data)
     }
@@ -110,9 +139,13 @@ enum MCPWriteChannel {
         ensureDirectory()
         let data = try JSONEncoder().encode(result)
         try data.write(to: resultURL, options: .atomic)
+        try? FileManager.default.setAttributes(
+            [.posixPermissions: 0o600], ofItemAtPath: resultURL.path
+        )
     }
 
     static func readResult() -> Result? {
+        guard isTrustedLocalFile(resultURL) else { return nil }
         guard let data = try? Data(contentsOf: resultURL) else { return nil }
         return try? JSONDecoder().decode(Result.self, from: data)
     }
