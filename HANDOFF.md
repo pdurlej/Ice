@@ -41,6 +41,36 @@ process that is NOT the legit bridge) pops the main-app consent prompt
 ("Allow an AI assistant to change your menu bar?" — Deny default / Allow
 Once / Allow for 5 Minutes), proving the gate fires for ANY local writer.
 
+## 🧪 KNOWN: Ice menu-bar churn-fragility (debugged 2026-05-30 ~23:00)
+
+Not a fire regression — an upstream Ice weakness, surfaced after heavy
+stress-testing (many manual Cmd-drags + MCP moves + a consent-prompt test).
+Symptom: some items that belong in hidden/always-hidden **leak on-screen to
+the LEFT of the Ice control item (•••)** and won't re-collapse. This is
+exactly GPT-5.5 Pro's critique #3 (moves aren't transactional → section
+state desyncs). `log show`/`log stream` are NOT readable from the agent's
+sandboxed shell (returns 0 lines for everything), so debug via the
+CGWindowList swift probe + `defaults read com.jordanbaird.Ice`, not logs.
+
+Recovery that worked (when a plain Ice restart did NOT):
+1. Quit Ice.
+2. `defaults delete com.jordanbaird.Ice "NSStatusItem Preferred Position Ice.ControlItem.Visible"` (and `…Hidden`, `…AlwaysHidden`, and `IceControlItemMinX`).
+3. Relaunch. Ice rebuilds clean dividers and re-collapses the leak.
+
+Caveats:
+- The rebuild crams the dividers far-right (Visible CI → preferred 0), so
+  it can also hide previously-visible system items (Spotlight's icon went
+  hidden; Cmd-Space still works). Re-tidy precisely via Ice Settings →
+  Menu Bar → Layout (the reliable, user-driven re-assign).
+- `AudioVideoModule` is a macOS-26 Control Center module — Ice can't
+  relocate it regardless (system reparenting).
+- Minor: with Visible CI at preferred 0, the fire.9.7 AI Quotas self-heal
+  computes `target = visiblePos − 1 = −1`. Harmless (negative preferred =
+  rightmost, so AI Quotas still renders right of the Visible CI and stays
+  visible), and un-triggerable in normal use (Visible CI is normally ~410).
+  If ever bothered, clamp `target = max(0, visiblePos − 1)` in
+  `AIQuotaStatusItemController`.
+
 ## 🔥 SHIPPED fire.9.7 - AI Quotas left of system icons + codex fetch fix (2026-05-29 ~21:05)
 
 Owner wanted the usage readout on the LEFT and the macOS system icons
