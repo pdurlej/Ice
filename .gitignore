@@ -12,3 +12,6 @@ xcuserdata/
 # but ignore the per-checkout copies SwiftPM may create elsewhere
 Bridge/Package.resolved.local
 
+# Serena MCP project cache (tool artifact, not project source)
+.serena/
+
