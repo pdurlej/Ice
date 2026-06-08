@@ -3,12 +3,21 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
-## ✅ MACHINERY COMPLETE — AI-Native Triggers P1 (fire.10) — awaiting ship (2026-06-08 ~21:00)
+## 🔥 SHIPPED fire.10.0 — AI-Native Triggers P1 (2026-06-08 ~22:55)
+
+CI run `27165435645` **success** (signed + notarized); release published
+`v0.11.13-fire.10.0` (DMG attached, notarized Developer ID); appcast updated
+(`pdurlej/fire-releases` `7d0ce61`); installed locally and **smoke-tested
+end-to-end on the signed binary** — all three new MCP tools green:
+`tools/list` registers them; `list_triggers` empty round-trips through the new
+channel; `set_trigger` showed the Fire-generated consent prompt → approved →
+sealed grant + persisted (id `713EE462…`); `list_triggers` returned it with
+correct Fire-generated descriptions; `remove_trigger` confirm → removed; list
+empty again. Both consent gates fired as designed. (Build 1145→1146.)
 
 Hardened P1 from `docs/mcp/AI-NATIVE-TRIGGERS.md §0` (GPT-5.5 Pro review:
-`~/.oracle/sessions/fire-triggers-design-review/`). **All six waves A–F done,
-compile-gated (swift build Bridge + xcodebuild -scheme Ice both green),
-committed + pushed to `fire/main`.** NO version bump / release yet.
+`~/.oracle/sessions/fire-triggers-design-review/`). All six waves A–F,
+compile-gated (swift build Bridge + xcodebuild -scheme Ice), on `fire/main`.
 
 DONE (compiles end-to-end):
 - **Wave A** (`22360a0`): `TriggerModels.swift` + `MenuBarMutationCoordinator.swift`
@@ -42,17 +51,15 @@ DONE (compiles end-to-end):
   (@Published rules) + `hasValidGrant`/`recordFired`/`disableAll`; `TriggerEngine`
   records a fire timestamp (lastFiredAt only — digest unchanged, grant stays valid).
 
-REMAINING (ship):
-- Bump **fire.10.0** (`project.pbxproj` MARKETING_VERSION + CURRENT_PROJECT_VERSION),
-  tag, push → CI build-dmg.yml signs+notarizes (CI signing inherits TCC AX, ad-hoc
-  local does NOT — so the real end-to-end smoke test needs the SIGNED build).
-- Install signed DMG, smoke test: `set_trigger` via MCP → see consent prompt →
-  approve → `list_triggers` shows it → flip Slack frontmost → watch it fire →
-  Settings ▸ Automations shows last-ran. Then appcast (sign_update = Keychain
-  Allow, manual) + push.
-- NOTE: the live `mcp__fire__*` tools in a session point at the INSTALLED app's
-  bridge — set_trigger/list_triggers/remove_trigger won't appear until the new
-  build is installed.
+FOLLOW-UPS (P2/P3, not shipped):
+- Watch Sentry for any fire.10.0 regressions (real users auto-update via appcast).
+- The live `mcp__fire__*` tools in a session bind to the INSTALLED app's bridge,
+  so a session started before the install won't see the trigger tools until the
+  MCP server reconnects (restart Claude / `/mcp`). New sessions are fine.
+- P2 ideas: applyLayoutSnapshot action surfaced in UI (digest-bound); exit-edge
+  reversion; more conditions (focusMode/wifi/calendar) once authenticated XPC
+  replaces the file channel; per-fire notifications.
+- Smoke harness kept at `/tmp/fire_mcp_smoke.py` (stdio MCP driver: list/set/remove).
 
 KEY INVARIANT (keep): every menu-bar mutation goes through
 `MenuBarMutationCoordinator.shared`; a trigger is a sealed capability, not a
