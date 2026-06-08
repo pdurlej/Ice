@@ -3,6 +3,47 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🔥 SHIPPED fire.9.9 - IceBar screen capture off the main thread (App-Hang fix) (2026-06-08 ~07:30)
+
+Found via Sentry (`sentry issue list` — org `pdurlej`, project `fire`). NINE
+unresolved issues, all the SAME: "App Hanging for at least 2000 ms"
+(`mach_msg2_trap`), across releases incl. fire.9.8, hitting ≥2 real users
+(FIRE-5/FIRE-8 show 2 users; FIRE-9 = 14 events/1 user on 9.8). **Hangs, not
+crashes** — the app freezes ≥2s and recovers.
+
+Root cause (confirmed from the blocked-thread stack in event
+`7e5ebdf3…`): `Combine .sink → SwiftUI withAnimation → CGContextDrawImage →
+CGSCaptureImageProviderBytePointer (SkyLight) → mach_msg`. That's
+`IceBarColorManager` color-matching the IceBar to the desktop by capturing the
+menu-bar + wallpaper image via `ScreenCapture.captureWindows` **synchronously
+on the main thread**. On macOS 26 the window-server capture can block for
+seconds → whole-app freeze whenever the IceBar shows/moves or on its 5s timer.
+Upstream Ice code, NOT our MCP/consent/triggers.
+
+Fix (`Ice/MenuBar/IceBar/IceBarColorManager.swift`): capture on a
+`userInitiated` background queue; hop back to main only for the @Published
+`colorInfo` update (still `withAnimation`). `isCapturing` flag coalesces an
+event storm. `updateColorInfo` unchanged (CPU-only crop + averageColor on the
+cached image). Callers that needed image-then-recolor now chain via a
+completion.
+
+How to re-check Sentry: `sentry issue list --query "is:unresolved"`,
+`sentry issue view FIRE-9 --json`, `sentry issue events <id>` →
+`sentry event view pdurlej/fire/<eventid> --json | jq` the thread frames.
+Sentry CLI (`sentry`, v0.34, authed at `~/.sentry/cli.db`) auto-detects the
+project from the DSN in `AppDelegate.swift`. After 9.9 verifies, resolve the
+9 issues "in next release".
+
+Tag `v0.11.13-fire.9.9` (build 1145), commit `bcbdc1e`. CI: attempt 1 failed on
+a flaky SwiftPM artifact-cache error ("Sparkle/Sentry … already exists in file
+system → fatalError" — NOT our code; no actions/cache in build-dmg.yml, so a
+`gh run rerun --failed` on a fresh runner fixed it). Signed + notarized;
+appcast updated (`pdurlej/fire-releases` `b79b92a`). Installed 9.9; main thread
+no longer blocked in capture. Positive off-main proof needs the IceBar OPEN
+(when hidden, `iceBarPanel.screen` is nil so the capture guard bails) — owner
+to confirm the hidden-bar no longer beachballs. After confirming, Sentry
+FIRE-3..B resolved in release `0.11.13-fire.9.9`.
+
 ## 🔥 SHIPPED fire.9.8 - MCP write consent gate (confused-deputy stopgap) (2026-05-30 ~00:05)
 
 Closes the biggest security flaw GPT-5.5 Pro flagged in the architecture
