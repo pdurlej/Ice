@@ -15,7 +15,7 @@ import Foundation
 import OSLog
 
 @MainActor
-final class TriggerStore {
+final class TriggerStore: ObservableObject {
     static let shared = TriggerStore()
 
     private let rulesKey = "Triggers"
@@ -25,8 +25,9 @@ final class TriggerStore {
     private init() {}
 
     /// The current rules. Mutated only through this store so persistence and
-    /// grant validation stay in lockstep.
-    private(set) var rules: [TriggerRule] = []
+    /// grant validation stay in lockstep. `@Published` so the Automations
+    /// settings pane reflects installs / removals / fires live.
+    @Published private(set) var rules: [TriggerRule] = []
 
     /// Loads rules from defaults and validates each enabled rule's sealed
     /// grant, disabling any that fail.
@@ -100,6 +101,45 @@ final class TriggerStore {
     func sealedGrant(for id: UUID) -> SealedGrant? {
         let all = decode([SealedGrant].self, key: grantsKey) ?? []
         return all.first { $0.grant.triggerID == id }
+    }
+
+    /// Whether `rule` currently has a sealed grant that matches its content and
+    /// generation. The Automations UI uses this to show whether a disabled rule
+    /// can be turned on, or needs re-approval.
+    func hasValidGrant(for rule: TriggerRule) -> Bool {
+        guard
+            let sealed = sealedGrant(for: rule.id),
+            sealed.grant.generation == rule.generation,
+            AutomationGrantStore.shared.validates(sealed)
+        else {
+            return false
+        }
+        return true
+    }
+
+    /// Records a successful auto-fire's timestamp (audit trail in the UI). Only
+    /// touches `lastFiredAt`, so it never changes the canonical digest and the
+    /// sealed grant stays valid.
+    func recordFired(id: UUID, at date: Date = Date()) {
+        guard let index = rules.firstIndex(where: { $0.id == id }) else { return }
+        rules[index].lastFiredAt = date
+        persistRules()
+    }
+
+    /// Global kill switch: disables every enabled rule. Returns the number
+    /// disabled. The engine should `reload()` afterward.
+    @discardableResult
+    func disableAll() -> Int {
+        var count = 0
+        for index in rules.indices where rules[index].enabled {
+            rules[index].enabled = false
+            count += 1
+        }
+        if count > 0 {
+            persistRules()
+            logger.log("Disabled all (\(count, privacy: .public)) trigger(s)")
+        }
+        return count
     }
 
     // MARK: Persistence

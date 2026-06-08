@@ -137,6 +137,8 @@ struct SettingsView: View {
             MenuBarAppearanceSettingsPane(appearanceManager: appState.appearanceManager)
         case .hotkeys:
             HotkeysSettingsPane(settings: appState.settings.hotkeys)
+        case .automations:
+            AutomationsSettingsPane()
         case .advanced:
             AdvancedSettingsPane(settings: appState.settings.advanced)
         case .about:

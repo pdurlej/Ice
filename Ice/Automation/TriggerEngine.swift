@@ -81,6 +81,7 @@ final class TriggerEngine {
             return
         }
         lastFired[rule.id] = Date()
+        TriggerStore.shared.recordFired(id: rule.id)  // audit trail for the UI
 
         let job = MutationJob(
             source: .trigger,
