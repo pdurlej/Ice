@@ -3,48 +3,60 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
-## 🚧 IN PROGRESS — AI-Native Triggers P1 (fire.10) (2026-06-08 ~18:30)
+## ✅ MACHINERY COMPLETE — AI-Native Triggers P1 (fire.10) — awaiting ship (2026-06-08 ~21:00)
 
-Building the hardened P1 from `docs/mcp/AI-NATIVE-TRIGGERS.md §0` (GPT-5.5 Pro
-review: `~/.oracle/sessions/fire-triggers-design-review/`). All in
-`Ice/Automation/`. Compile-gated, committed per wave; NO version bump yet (no
-user-facing way to create a trigger until Wave E/F).
+Hardened P1 from `docs/mcp/AI-NATIVE-TRIGGERS.md §0` (GPT-5.5 Pro review:
+`~/.oracle/sessions/fire-triggers-design-review/`). **All six waves A–F done,
+compile-gated (swift build Bridge + xcodebuild -scheme Ice both green),
+committed + pushed to `fire/main`.** NO version bump / release yet.
 
 DONE (compiles end-to-end):
-- **Wave A** (`22360a0`): `TriggerModels.swift` (TriggerRule, TriggerCondition
-  appFocus/batteryBelow/timeWindow, TriggerAction setSection/applyLayoutSnapshot
-  with `writeSet`, ApprovedAutomationGrant, MutationJob/MutationResult) +
-  `MenuBarMutationCoordinator.swift` (the ONE @MainActor FIFO non-reentrant
-  authority every mutation passes through). MCPWriteCommandHandler refactored to
-  enqueue jobs through it.
-- **Wave B** (`f077513`): `AutomationGrant.swift` (TriggerCanonicalizer SHA-256;
-  AutomationGrantStore — HMAC-SHA256 seal/validate, key in Keychain) +
-  `TriggerStore.swift` (rules=config, sealed grants=authority; load() disables
-  any enabled rule with a missing/stale/tampered grant).
+- **Wave A** (`22360a0`): `TriggerModels.swift` + `MenuBarMutationCoordinator.swift`
+  (the ONE @MainActor FIFO non-reentrant authority every mutation passes through).
+- **Wave B** (`f077513`): `AutomationGrant.swift` (SHA-256 canonicalizer; HMAC
+  seal/validate, Keychain key) + `TriggerStore.swift` (rules=config, sealed
+  grants=authority; load() disables any rule with a missing/stale/tampered grant).
 - **Wave C** (`50d8e1a`): `AutomationAuthorization.swift` (install consent gate,
-  separate from MCPWriteAuthorization, no lease; Fire-generated prompt Deny/
-  Install Disabled/Install and Enable; mints+seals the grant; validateForFire()).
-- **Wave D** (`96b0f7b`): `TriggerEngine.swift` (edge-on-enter eval of the 3
-  conditions, battery hysteresis, cooldown, grant re-validate → enqueue);
-  coordinator is now a shared singleton; `AppState.setupTask` wires
-  `triggerEngine.performSetup()`.
+  no lease; Fire-generated prompt; mints+seals grant; validateForFire()).
+- **Wave D** (`96b0f7b`): `TriggerEngine.swift` (edge-on-enter eval, battery
+  hysteresis, cooldown, grant re-validate → enqueue); coordinator singleton;
+  `AppState` wires `triggerEngine.performSetup()`.
+- **Wave E** (`75baf56`): the agent-facing create surface. Wire DTOs
+  `TriggerSpec`/`TriggerSummary` + `Request.setTrigger/listTriggers/removeTrigger`
+  in `Shared/Services/MenuBarItemService.swift` (Bridge inherits via symlink).
+  New `Shared/Services/MCPTriggerChannel.swift` (dedicated install/remove/list
+  file-channel, separate from the move channel so persistent-capability
+  authority ≠ single-move lease). New `Ice/Services/MCPTriggerCommandHandler.swift`
+  (polls proposals → install via `authorizeInstall`, remove via new
+  `authorizeRemoval`, list authoritative → upsert + `triggerEngine.reload()`).
+  New `TriggerSpecTranslator` (the single trust boundary: validate/clamp the
+  agent spec, mint id + gen 1) + `TriggerNarrator` (one source of truth for the
+  never-agent-supplied descriptions; AutomationAuthorization refactored onto it).
+  MCPBackend relays the 3 ops; Bridge exposes 3 tools w/ full condition/action
+  schemas. `set_trigger`/`remove_trigger` return only after the user decides in
+  Fire → success == approved.
+- **Wave F** (`cf2a6f2`): Settings ▸ Automations tab (`AutomationsSettingsPane`).
+  Lists each automation (Fire-generated condition+action text, enable/disable
+  switch, last-ran audit time, delete-with-confirm), global "Disable All", and a
+  "Re-approve…" flow for expired grants. `TriggerStore` is now an ObservableObject
+  (@Published rules) + `hasValidGrant`/`recordFired`/`disableAll`; `TriggerEngine`
+  records a fire timestamp (lastFiredAt only — digest unchanged, grant stays valid).
 
-REMAINING:
-- **Wave E — MCP tools** `set_trigger` / `list_triggers` / `remove_trigger`.
-  The create surface. Route an install proposal from the bridge → main app →
-  `AutomationAuthorization.authorizeInstall(rule:)` (shows the prompt) →
-  `TriggerStore.upsert(rule, grant:)` → `appState.triggerEngine.reload()`.
-  Likely needs a new write-channel command kind (like the move channel) since
-  the prompt + store live in the main app. set_trigger MUST go through the
-  consent gate; do NOT reuse the MCPWriteAuthorization 5-min lease.
-- **Wave F — Settings UI**: Settings → Automations (list rules + enable/disable
-  + delete via TriggerStore; audit history; a global "disable all" switch).
-- Then: bump fire.10.0, ship, test (set a trigger via MCP, see the consent
-  prompt, watch it fire on appFocus).
+REMAINING (ship):
+- Bump **fire.10.0** (`project.pbxproj` MARKETING_VERSION + CURRENT_PROJECT_VERSION),
+  tag, push → CI build-dmg.yml signs+notarizes (CI signing inherits TCC AX, ad-hoc
+  local does NOT — so the real end-to-end smoke test needs the SIGNED build).
+- Install signed DMG, smoke test: `set_trigger` via MCP → see consent prompt →
+  approve → `list_triggers` shows it → flip Slack frontmost → watch it fire →
+  Settings ▸ Automations shows last-ran. Then appcast (sign_update = Keychain
+  Allow, manual) + push.
+- NOTE: the live `mcp__fire__*` tools in a session point at the INSTALLED app's
+  bridge — set_trigger/list_triggers/remove_trigger won't appear until the new
+  build is installed.
 
 KEY INVARIANT (keep): every menu-bar mutation goes through
 `MenuBarMutationCoordinator.shared`; a trigger is a sealed capability, not a
-stored command.
+stored command; Fire (never the agent) generates all consent/description text.
 
 ## 🔥 SHIPPED fire.9.9 - IceBar screen capture off the main thread (App-Hang fix) (2026-06-08 ~07:30)
 
