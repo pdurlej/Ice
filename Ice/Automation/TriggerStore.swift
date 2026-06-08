@@ -95,6 +95,13 @@ final class TriggerStore {
         return true
     }
 
+    /// The sealed grant for a trigger, if any. The engine re-validates this
+    /// immediately before each auto-fire.
+    func sealedGrant(for id: UUID) -> SealedGrant? {
+        let all = decode([SealedGrant].self, key: grantsKey) ?? []
+        return all.first { $0.grant.triggerID == id }
+    }
+
     // MARK: Persistence
 
     private func persistRules() {

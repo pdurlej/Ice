@@ -37,7 +37,7 @@ final class MCPWriteCommandHandler {
     /// The single serialized mutation authority. fire.10 routes every menu-bar
     /// mutation (MCP writes, triggers, UI) through one coordinator so they
     /// never interleave; this handler no longer touches `itemManager.move`.
-    private let mutationCoordinator = MenuBarMutationCoordinator()
+    private let mutationCoordinator = MenuBarMutationCoordinator.shared
 
     /// Performs setup: starts polling the shared command file.
     func performSetup(with appState: AppState) {

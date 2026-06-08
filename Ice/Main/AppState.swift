@@ -43,6 +43,10 @@ final class AppState: ObservableObject {
     /// Manager for the optional AI Quotas menu-bar feature.
     let aiQuotaManager = AIQuotaManager()
 
+    /// AI-Native Triggers engine (fire.10 P1): evaluates conditions and fires
+    /// user-approved automations through the shared mutation coordinator.
+    let triggerEngine = TriggerEngine()
+
     /// Global cache for menu bar item images.
     let imageCache = MenuBarItemImageCache()
 
@@ -86,6 +90,7 @@ final class AppState: ObservableObject {
         userNotificationManager.performSetup(with: self)
         mcpWriteCommandHandler.performSetup(with: self)
         aiQuotaManager.performSetup(with: self)
+        triggerEngine.performSetup()
 
         configureCancellables()
     }

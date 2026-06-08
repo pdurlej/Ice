@@ -18,12 +18,17 @@ import OSLog
 
 @MainActor
 final class MenuBarMutationCoordinator {
+    /// The single instance every mutation source shares (MCP, triggers, UI).
+    static let shared = MenuBarMutationCoordinator()
+
     private weak var appState: AppState?
 
     private var queue: [(job: MutationJob, completion: (MutationResult) -> Void)] = []
     private var isExecuting = false
 
     private let logger = Logger(category: "MenuBarMutationCoordinator")
+
+    private init() {}
 
     func performSetup(with appState: AppState) {
         self.appState = appState
