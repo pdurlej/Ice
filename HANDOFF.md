@@ -3,6 +3,49 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🚧 IN PROGRESS — AI-Native Triggers P1 (fire.10) (2026-06-08 ~18:30)
+
+Building the hardened P1 from `docs/mcp/AI-NATIVE-TRIGGERS.md §0` (GPT-5.5 Pro
+review: `~/.oracle/sessions/fire-triggers-design-review/`). All in
+`Ice/Automation/`. Compile-gated, committed per wave; NO version bump yet (no
+user-facing way to create a trigger until Wave E/F).
+
+DONE (compiles end-to-end):
+- **Wave A** (`22360a0`): `TriggerModels.swift` (TriggerRule, TriggerCondition
+  appFocus/batteryBelow/timeWindow, TriggerAction setSection/applyLayoutSnapshot
+  with `writeSet`, ApprovedAutomationGrant, MutationJob/MutationResult) +
+  `MenuBarMutationCoordinator.swift` (the ONE @MainActor FIFO non-reentrant
+  authority every mutation passes through). MCPWriteCommandHandler refactored to
+  enqueue jobs through it.
+- **Wave B** (`f077513`): `AutomationGrant.swift` (TriggerCanonicalizer SHA-256;
+  AutomationGrantStore — HMAC-SHA256 seal/validate, key in Keychain) +
+  `TriggerStore.swift` (rules=config, sealed grants=authority; load() disables
+  any enabled rule with a missing/stale/tampered grant).
+- **Wave C** (`50d8e1a`): `AutomationAuthorization.swift` (install consent gate,
+  separate from MCPWriteAuthorization, no lease; Fire-generated prompt Deny/
+  Install Disabled/Install and Enable; mints+seals the grant; validateForFire()).
+- **Wave D** (`96b0f7b`): `TriggerEngine.swift` (edge-on-enter eval of the 3
+  conditions, battery hysteresis, cooldown, grant re-validate → enqueue);
+  coordinator is now a shared singleton; `AppState.setupTask` wires
+  `triggerEngine.performSetup()`.
+
+REMAINING:
+- **Wave E — MCP tools** `set_trigger` / `list_triggers` / `remove_trigger`.
+  The create surface. Route an install proposal from the bridge → main app →
+  `AutomationAuthorization.authorizeInstall(rule:)` (shows the prompt) →
+  `TriggerStore.upsert(rule, grant:)` → `appState.triggerEngine.reload()`.
+  Likely needs a new write-channel command kind (like the move channel) since
+  the prompt + store live in the main app. set_trigger MUST go through the
+  consent gate; do NOT reuse the MCPWriteAuthorization 5-min lease.
+- **Wave F — Settings UI**: Settings → Automations (list rules + enable/disable
+  + delete via TriggerStore; audit history; a global "disable all" switch).
+- Then: bump fire.10.0, ship, test (set a trigger via MCP, see the consent
+  prompt, watch it fire on appFocus).
+
+KEY INVARIANT (keep): every menu-bar mutation goes through
+`MenuBarMutationCoordinator.shared`; a trigger is a sealed capability, not a
+stored command.
+
 ## 🔥 SHIPPED fire.9.9 - IceBar screen capture off the main thread (App-Hang fix) (2026-06-08 ~07:30)
 
 Found via Sentry (`sentry issue list` — org `pdurlej`, project `fire`). NINE
