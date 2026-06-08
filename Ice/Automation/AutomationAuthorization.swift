@@ -44,7 +44,7 @@ final class AutomationAuthorization {
         alert.informativeText = """
         \(rule.name)
 
-        When \(Self.describe(rule.condition)), Fire will \(Self.describe(writeSet)).
+        When \(TriggerNarrator.describe(rule.condition)), Fire will \(TriggerNarrator.describe(writeSet)).
 
         This automation can then run without asking again. Any change to its \
         condition, items, or destination requires your approval again.
@@ -97,53 +97,28 @@ final class AutomationAuthorization {
         return true
     }
 
-    // MARK: Fire-generated descriptions (never agent-supplied)
+    /// Confirms removing an automation. Removal is de-escalating (less
+    /// automation), but an agent silently deleting a user's carefully-built
+    /// triggers is still a surprise, so Fire confirms in its own UI. Returns
+    /// `true` only if the user approves. The prompt text is Fire-generated.
+    func authorizeRemoval(rule: TriggerRule) -> Bool {
+        NSApp.activate(ignoringOtherApps: true)
 
-    private static func describe(_ condition: TriggerCondition) -> String {
-        switch condition {
-        case .appFocus(let bundleID, let state):
-            return state == .active
-                ? "“\(bundleID)” becomes the frontmost app"
-                : "“\(bundleID)” stops being the frontmost app"
-        case .batteryBelow(let percent, _):
-            return "battery drops below \(percent)%"
-        case .timeWindow(let days, let start, let end, _):
-            let dayList = days.sorted { $0.rawValue < $1.rawValue }.map(Self.short).joined(separator: ", ")
-            return String(
-                format: "the time is %02d:%02d–%02d:%02d on %@",
-                start.hour, start.minute, end.hour, end.minute,
-                dayList.isEmpty ? "any day" : dayList
-            )
-        }
-    }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Remove menu-bar automation?"
+        alert.informativeText = """
+        \(rule.name)
 
-    private static func describe(_ moves: [MovePlan]) -> String {
-        guard !moves.isEmpty else { return "make no changes" }
-        let grouped = Dictionary(grouping: moves, by: { $0.toSection })
-        let parts = grouped.map { section, items -> String in
-            let names = items.map { "“\($0.bundleID)”" }.joined(separator: ", ")
-            return "move \(names) to \(Self.sectionName(section))"
-        }
-        return parts.sorted().joined(separator: "; ")
-    }
+        This automation (when \(TriggerNarrator.describe(rule.condition)), \
+        \(TriggerNarrator.describe(rule.onEnter))) will be deleted. You can \
+        re-create it later, but its approval will need to be granted again.
+        """
+        alert.addButton(withTitle: "Cancel")  // .alertFirstButtonReturn → default
+        alert.addButton(withTitle: "Remove")   // .alertSecondButtonReturn
 
-    private static func sectionName(_ section: TriggerSection) -> String {
-        switch section {
-        case .alwaysVisible: return "the always-visible area"
-        case .hidden:        return "the hidden section"
-        case .alwaysHidden:  return "the always-hidden section"
-        }
-    }
-
-    private static func short(_ weekday: Weekday) -> String {
-        switch weekday {
-        case .sunday: return "Sun"
-        case .monday: return "Mon"
-        case .tuesday: return "Tue"
-        case .wednesday: return "Wed"
-        case .thursday: return "Thu"
-        case .friday: return "Fri"
-        case .saturday: return "Sat"
-        }
+        let approved = alert.runModal() == .alertSecondButtonReturn
+        logger.log("Automation removal \(approved ? "approved" : "cancelled") for \(rule.id, privacy: .public)")
+        return approved
     }
 }

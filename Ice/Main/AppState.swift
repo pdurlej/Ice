@@ -47,6 +47,11 @@ final class AppState: ObservableObject {
     /// user-approved automations through the shared mutation coordinator.
     let triggerEngine = TriggerEngine()
 
+    /// Handler for the AI-Native Triggers create/manage surface (fire.10 P1):
+    /// fulfills `set_trigger` / `list_triggers` / `remove_trigger` proposals
+    /// relayed from MCPBackend through its own consent gate.
+    let mcpTriggerCommandHandler = MCPTriggerCommandHandler()
+
     /// Global cache for menu bar item images.
     let imageCache = MenuBarItemImageCache()
 
@@ -91,6 +96,7 @@ final class AppState: ObservableObject {
         mcpWriteCommandHandler.performSetup(with: self)
         aiQuotaManager.performSetup(with: self)
         triggerEngine.performSetup()
+        mcpTriggerCommandHandler.performSetup(with: self)
 
         configureCancellables()
     }

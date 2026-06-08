@@ -95,6 +95,53 @@ private func parseOptionalInt(_ value: Value?) -> Int? {
     return nil
 }
 
+/// Parses an agent-supplied `set_trigger` payload into the wire `TriggerSpec`.
+/// Shape validation (presence of `type`) happens here; semantic validation
+/// (ranges, enum values, hysteresis) is the main app's job in
+/// `TriggerSpecTranslator` — the single trust boundary.
+private func parseTriggerSpec(_ arguments: [String: Value]?) throws -> MenuBarItemService.TriggerSpec {
+    let name = try parseRequiredString(arguments?["name"], name: "name")
+
+    guard let conditionObj = arguments?["condition"]?.objectValue else {
+        throw ToolError.invalidArgument("condition is required (an object with a \"type\")")
+    }
+    guard let conditionType = conditionObj["type"]?.stringValue else {
+        throw ToolError.invalidArgument("condition.type is required")
+    }
+    let condition = MenuBarItemService.TriggerSpec.ConditionSpec(
+        type: conditionType,
+        bundleID: conditionObj["bundle_id"]?.stringValue,
+        focusState: conditionObj["focus_state"]?.stringValue,
+        percent: parseOptionalInt(conditionObj["percent"]),
+        resetAbove: parseOptionalInt(conditionObj["reset_above"]),
+        days: conditionObj["days"]?.arrayValue?.compactMap { parseOptionalInt($0) },
+        startHour: parseOptionalInt(conditionObj["start_hour"]),
+        startMinute: parseOptionalInt(conditionObj["start_minute"]),
+        endHour: parseOptionalInt(conditionObj["end_hour"]),
+        endMinute: parseOptionalInt(conditionObj["end_minute"]),
+        timeZoneID: conditionObj["time_zone"]?.stringValue
+    )
+
+    guard let actionObj = arguments?["action"]?.objectValue else {
+        throw ToolError.invalidArgument("action is required (an object with a \"type\")")
+    }
+    guard let actionType = actionObj["type"]?.stringValue else {
+        throw ToolError.invalidArgument("action.type is required")
+    }
+    let action = MenuBarItemService.TriggerSpec.ActionSpec(
+        type: actionType,
+        bundleIDs: actionObj["bundle_ids"]?.arrayValue?.compactMap { $0.stringValue },
+        section: actionObj["section"]?.stringValue
+    )
+
+    return MenuBarItemService.TriggerSpec(
+        name: name,
+        condition: condition,
+        action: action,
+        cooldownSeconds: arguments?["cooldown_seconds"]?.doubleValue
+    )
+}
+
 // MARK: - Errors
 
 private enum ToolError: Swift.Error, CustomStringConvertible {
@@ -205,6 +252,13 @@ private struct LayoutSavedPayload: Encodable {
     let itemCount: Int
 }
 
+private struct TriggerResultPayload: Encodable {
+    let success: Bool
+    let id: String?
+    let enabled: Bool
+    let message: String?
+}
+
 // MARK: - Tool dispatch
 
 /// Builds one `Tool` descriptor with sensible defaults for the
@@ -295,6 +349,103 @@ private func buildToolList() -> [Tool] {
         "additionalProperties": .bool(false),
     ])
 
+    // MARK: Trigger (automation) schemas — fire.10 P1
+
+    let conditionSchema: Value = .object([
+        "type": .string("object"),
+        "description": .string(
+            "When the automation fires. Provide exactly one condition type and only its fields."
+        ),
+        "properties": .object([
+            "type": .object([
+                "type": .string("string"),
+                "enum": .array([.string("appFocus"), .string("batteryBelow"), .string("timeWindow")]),
+                "description": .string("appFocus: an app gains/loses focus. batteryBelow: battery crosses a threshold. timeWindow: a recurring weekly time range."),
+            ]),
+            "bundle_id": .object([
+                "type": .string("string"),
+                "description": .string("appFocus only: the app to watch (e.g. com.tinyspeck.slackmacgap)."),
+            ]),
+            "focus_state": .object([
+                "type": .string("string"),
+                "enum": .array([.string("active"), .string("inactive")]),
+                "description": .string("appFocus only: fire when the app becomes frontmost (active) or stops being frontmost (inactive). Default active."),
+            ]),
+            "percent": .object([
+                "type": .string("integer"),
+                "minimum": .int(1), "maximum": .int(99),
+                "description": .string("batteryBelow only: fire when battery drops below this percent."),
+            ]),
+            "reset_above": .object([
+                "type": .string("integer"),
+                "minimum": .int(2), "maximum": .int(100),
+                "description": .string("batteryBelow only: re-arm only once battery rises above this (hysteresis; must exceed percent). Defaults to percent+10."),
+            ]),
+            "days": .object([
+                "type": .string("array"),
+                "items": .object(["type": .string("integer"), "minimum": .int(1), "maximum": .int(7)]),
+                "description": .string("timeWindow only: weekdays, 1=Sunday … 7=Saturday."),
+            ]),
+            "start_hour": .object(["type": .string("integer"), "minimum": .int(0), "maximum": .int(23), "description": .string("timeWindow only: window start hour (0–23).")]),
+            "start_minute": .object(["type": .string("integer"), "minimum": .int(0), "maximum": .int(59), "description": .string("timeWindow only: window start minute (0–59). Default 0.")]),
+            "end_hour": .object(["type": .string("integer"), "minimum": .int(0), "maximum": .int(23), "description": .string("timeWindow only: window end hour (0–23).")]),
+            "end_minute": .object(["type": .string("integer"), "minimum": .int(0), "maximum": .int(59), "description": .string("timeWindow only: window end minute (0–59). Default 0.")]),
+            "time_zone": .object(["type": .string("string"), "description": .string("timeWindow only: IANA tz id (e.g. Europe/Warsaw). Defaults to the user's current zone.")]),
+        ]),
+        "required": .array([.string("type")]),
+    ])
+
+    let actionSchema: Value = .object([
+        "type": .string("object"),
+        "description": .string("What the automation does when its condition becomes true."),
+        "properties": .object([
+            "type": .object([
+                "type": .string("string"),
+                "enum": .array([.string("setSection")]),
+                "description": .string("P1 supports setSection: move one or more items to a section."),
+            ]),
+            "bundle_ids": .object([
+                "type": .string("array"),
+                "items": .object(["type": .string("string")]),
+                "description": .string("Bundle ids to move. Use list_items to discover them."),
+            ]),
+            "section": sectionEnum,
+        ]),
+        "required": .array([.string("type"), .string("bundle_ids"), .string("section")]),
+    ])
+
+    let setTriggerSchema: Value = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "name": .object([
+                "type": .string("string"),
+                "minLength": .int(1),
+                "description": .string("Short human name for the automation (shown in the consent prompt and Fire's Automations settings)."),
+            ]),
+            "condition": conditionSchema,
+            "action": actionSchema,
+            "cooldown_seconds": .object([
+                "type": .string("number"),
+                "minimum": .int(1),
+                "description": .string("Minimum seconds between fires. Optional; Fire clamps to 1–3600. Default 5."),
+            ]),
+        ]),
+        "required": .array([.string("name"), .string("condition"), .string("action")]),
+        "additionalProperties": .bool(false),
+    ])
+
+    let removeTriggerSchema: Value = .object([
+        "type": .string("object"),
+        "properties": .object([
+            "id": .object([
+                "type": .string("string"),
+                "description": .string("Trigger id (UUID) from list_triggers."),
+            ]),
+        ]),
+        "required": .array([.string("id")]),
+        "additionalProperties": .bool(false),
+    ])
+
     return [
         makeTool(
             name: "list_items",
@@ -347,6 +498,34 @@ private func buildToolList() -> [Tool] {
             readOnly: true,
             idempotent: true
         ),
+        // AI-Native Triggers (fire.10 P1). set_trigger / remove_trigger are
+        // gated: Fire shows its own consent prompt and binds approval to the
+        // exact write set — the tool returns only after the user decides, so a
+        // success means the user approved in Fire.
+        makeTool(
+            name: "set_trigger",
+            description: "Propose a menu-bar automation: when a condition becomes true (an app gains/loses focus, battery drops below a threshold, or a weekly time window), move items to a section. Fire shows the user a consent prompt describing exactly what will happen; nothing is installed unless they approve. On success returns {success, id, enabled, message}. Use list_items first to find bundle ids.",
+            inputSchema: setTriggerSchema,
+            destructive: false
+        ),
+        makeTool(
+            name: "list_triggers",
+            description: "List the user's installed menu-bar automations. Returns a JSON array of {id, name, enabled, conditionDescription, actionDescription}. Use the id with remove_trigger.",
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([:]),
+                "additionalProperties": .bool(false),
+            ]),
+            readOnly: true,
+            idempotent: true
+        ),
+        makeTool(
+            name: "remove_trigger",
+            description: "Remove an installed automation by id (from list_triggers). Fire asks the user to confirm before deleting. Returns {success, id, message}.",
+            inputSchema: removeTriggerSchema,
+            destructive: true,
+            idempotent: true
+        ),
     ]
 }
 
@@ -394,6 +573,17 @@ private func dispatch(
 
         case "list_layouts":
             request = .listLayouts
+
+        case "set_trigger":
+            let spec = try parseTriggerSpec(arguments)
+            request = .setTrigger(spec: spec)
+
+        case "list_triggers":
+            request = .listTriggers
+
+        case "remove_trigger":
+            let id = try parseRequiredString(arguments?["id"], name: "id")
+            request = .removeTrigger(id: id)
 
         default:
             throw ToolError.invalidArgument("unknown tool: \(name)")
@@ -449,6 +639,19 @@ private func encode(
         // decide which layout to apply_layout next.
         return CallTool.Result(
             content: [.text(text: jsonString(names), annotations: nil, _meta: nil)],
+            isError: false
+        )
+
+    case .triggerResult(let success, let id, let enabled, let message):
+        let payload = TriggerResultPayload(success: success, id: id, enabled: enabled, message: message)
+        return CallTool.Result(
+            content: [.text(text: jsonString(payload), annotations: nil, _meta: nil)],
+            isError: !success
+        )
+
+    case .triggers(let summaries):
+        return CallTool.Result(
+            content: [.text(text: jsonString(summaries), annotations: nil, _meta: nil)],
             isError: false
         )
 

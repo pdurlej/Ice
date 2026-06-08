@@ -126,6 +126,36 @@ final class Listener {
             case .listLayouts:
                 let names = MCPBackendStateManager.shared.listLayouts()
                 return .layouts(names)
+
+            // MARK: - AI-Native Triggers (fire.10 P1)
+
+            case .setTrigger(let spec):
+                let result = syncWait {
+                    await MCPBackendStateManager.shared.setTrigger(spec: spec)
+                }
+                return .triggerResult(
+                    success: result.success,
+                    id: result.triggerID,
+                    enabled: result.enabled,
+                    message: result.message
+                )
+
+            case .listTriggers:
+                let summaries = syncWait {
+                    await MCPBackendStateManager.shared.listTriggers()
+                }
+                return .triggers(summaries)
+
+            case .removeTrigger(let id):
+                let result = syncWait {
+                    await MCPBackendStateManager.shared.removeTrigger(id: id)
+                }
+                return .triggerResult(
+                    success: result.success,
+                    id: result.triggerID,
+                    enabled: false,
+                    message: result.message
+                )
             }
         } catch {
             logger.error("Failed to handle message: \(error)")

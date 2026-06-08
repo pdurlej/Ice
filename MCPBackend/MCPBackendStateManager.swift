@@ -422,6 +422,91 @@ final class MCPBackendStateManager {
         let layouts = defaults.dictionary(forKey: Self.layoutsKey) ?? [:]
         return layouts.keys.sorted()
     }
+
+    // MARK: - AI-Native Triggers (fire.10 P1 - delegated to Ice main app)
+
+    /// Proposes installing a trigger. Relays the spec to Ice main app over the
+    /// `MCPTriggerChannel`; the main app shows the install consent prompt, mints
+    /// a sealed grant, and persists the rule. The agent never gets authority —
+    /// only a yes/no plus the new id. The deadline is generous because a human
+    /// must read and approve the prompt.
+    func setTrigger(
+        spec: MenuBarItemService.TriggerSpec
+    ) async -> (success: Bool, triggerID: String?, enabled: Bool, message: String?) {
+        logger.debug("setTrigger(name: \(spec.name)) via bridge")
+        let proposal = MCPTriggerChannel.Proposal(
+            id: UUID().uuidString,
+            op: .install,
+            spec: spec,
+            triggerID: nil,
+            createdAt: Date().timeIntervalSince1970
+        )
+        guard let result = await sendTriggerProposal(proposal, timeout: 120) else {
+            return (false, nil, false,
+                    "Ice did not respond. Make sure Fire is running, then approve the prompt within two minutes.")
+        }
+        return (result.success, result.triggerID, result.enabled, result.message)
+    }
+
+    /// Lists installed triggers by asking Ice main app (the authoritative
+    /// `TriggerStore` owner). Read-only; short deadline.
+    func listTriggers() async -> [MenuBarItemService.TriggerSummary] {
+        logger.debug("listTriggers() via bridge")
+        let proposal = MCPTriggerChannel.Proposal(
+            id: UUID().uuidString,
+            op: .list,
+            spec: nil,
+            triggerID: nil,
+            createdAt: Date().timeIntervalSince1970
+        )
+        guard let result = await sendTriggerProposal(proposal, timeout: 10) else {
+            return []
+        }
+        return result.triggers ?? []
+    }
+
+    /// Proposes removing a trigger by id. The main app confirms before deleting.
+    func removeTrigger(
+        id: String
+    ) async -> (success: Bool, triggerID: String?, message: String?) {
+        logger.debug("removeTrigger(\(id)) via bridge")
+        let proposal = MCPTriggerChannel.Proposal(
+            id: UUID().uuidString,
+            op: .remove,
+            spec: nil,
+            triggerID: id,
+            createdAt: Date().timeIntervalSince1970
+        )
+        guard let result = await sendTriggerProposal(proposal, timeout: 60) else {
+            return (false, nil,
+                    "Ice did not respond. Make sure Fire is running, then confirm the removal prompt.")
+        }
+        return (result.success, result.triggerID, result.message)
+    }
+
+    /// Writes a proposal to the trigger channel and polls for the matching
+    /// result up to `timeout` seconds. Returns nil on write failure or timeout.
+    private func sendTriggerProposal(
+        _ proposal: MCPTriggerChannel.Proposal,
+        timeout: TimeInterval
+    ) async -> MCPTriggerChannel.Result? {
+        do {
+            try MCPTriggerChannel.writeProposal(proposal)
+        } catch {
+            logger.error("Failed to write trigger proposal: \(error)")
+            return nil
+        }
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let result = MCPTriggerChannel.readResult(), result.id == proposal.id {
+                logger.info("trigger proposal \(proposal.id) result success=\(result.success)")
+                return result
+            }
+            try? await Task.sleep(for: .milliseconds(150))
+        }
+        logger.notice("trigger proposal \(proposal.id) timed out after \(timeout)s")
+        return nil
+    }
 }
 
 // MARK: - Sequence Helpers

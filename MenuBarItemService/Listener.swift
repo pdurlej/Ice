@@ -93,6 +93,25 @@ final class Listener {
             case .listLayouts:
                 let names = MenuBarStateManager.shared.listLayouts()
                 return .layouts(names)
+
+            // MARK: - AI-Native Triggers (fire.10 P1)
+            //
+            // Triggers are owned by MCPBackend.xpc (which relays to the main
+            // app's consent gate). This legacy service never handles them; if a
+            // misrouted client sends one, reject it explicitly.
+
+            case .setTrigger, .removeTrigger:
+                Logger.default.notice("Received trigger request - not supported on MenuBarItemService, route to MCPBackend")
+                return .triggerResult(
+                    success: false,
+                    id: nil,
+                    enabled: false,
+                    message: "Triggers are not handled by this service."
+                )
+
+            case .listTriggers:
+                Logger.default.notice("Received listTriggers - not supported on MenuBarItemService, route to MCPBackend")
+                return .triggers([])
             }
         } catch {
             Logger.default.error("Listener failed to handle message with error \(error)")
