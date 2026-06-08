@@ -15,6 +15,22 @@ final class IceBarColorManager: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
 
+    /// Serial queue for the window-server image capture. On macOS 26 the
+    /// capture (ScreenCapture.captureWindows → SkyLight) can block for
+    /// seconds; running it on the main run loop froze the app (Sentry:
+    /// repeated "App Hanging ≥ 2000 ms" in this exact path). The capture is
+    /// CoreGraphics / CGWindowList and safe off-main — only the @Published
+    /// `colorInfo` update must hop back to the main thread.
+    private let captureQueue = DispatchQueue(
+        label: "com.jordanbaird.Ice.IceBarColorManager.capture",
+        qos: .userInitiated
+    )
+
+    /// Coalesces capture requests: while one capture is in flight, further
+    /// requests are skipped (the latest state is captured by the in-flight run
+    /// or the next trigger), so an event storm can't queue up captures.
+    private var isCapturing = false
+
     func performSetup(with iceBarPanel: IceBarPanel) {
         self.iceBarPanel = iceBarPanel
         configureCancellables()
@@ -96,8 +112,14 @@ final class IceBarColorManager: ObservableObject {
                 else {
                     return
                 }
-                updateWindowImage(for: screen)
-                if iceBarPanel.isVisible {
+                updateWindowImage(for: screen) { [weak self, weak iceBarPanel] in
+                    guard
+                        let self,
+                        let iceBarPanel,
+                        iceBarPanel.isVisible
+                    else {
+                        return
+                    }
                     withAnimation {
                         self.updateColorInfo(with: iceBarPanel.frame, screen: screen)
                     }
@@ -109,26 +131,47 @@ final class IceBarColorManager: ObservableObject {
         cancellables = c
     }
 
-    private func updateWindowImage(for screen: NSScreen) {
-        let windows = WindowInfo.createWindows(option: .onScreen)
+    /// Refreshes `windowImage` by capturing the menu-bar + wallpaper image
+    /// OFF the main thread, then runs `completion` on the main thread once the
+    /// new image is stored. Never blocks the main run loop.
+    private func updateWindowImage(for screen: NSScreen, completion: (() -> Void)? = nil) {
+        guard !isCapturing else {
+            // A capture is already running; don't queue another. Still let the
+            // caller proceed (e.g. recolor from the previously captured image).
+            completion?()
+            return
+        }
+        isCapturing = true
         let displayID = screen.displayID
+        captureQueue.async { [weak self] in
+            let image = Self.captureWindowImage(displayID: displayID)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.isCapturing = false
+                if let image {
+                    self.windowImage = image
+                }
+                completion?()
+            }
+        }
+    }
 
+    /// Pure capture step: enumerates windows and captures the menu-bar +
+    /// wallpaper image for `displayID`. No side effects; safe off the main
+    /// thread (CGWindowList + the CoreGraphics capture are thread-safe).
+    private static func captureWindowImage(displayID: CGDirectDisplayID) -> CGImage? {
+        let windows = WindowInfo.createWindows(option: .onScreen)
         guard
             let menuBarWindow = WindowInfo.menuBarWindow(from: windows, for: displayID),
             let wallpaperWindow = WindowInfo.wallpaperWindow(from: windows, for: displayID)
         else {
-            return
+            return nil
         }
-
-        guard let image = ScreenCapture.captureWindows(
+        return ScreenCapture.captureWindows(
             with: [menuBarWindow.windowID, wallpaperWindow.windowID],
             screenBounds: withMutableCopy(of: wallpaperWindow.bounds) { $0.size.height = 1 },
             option: .nominalResolution
-        ) else {
-            return
-        }
-
-        windowImage = image
+        )
     }
 
     private func updateColorInfo(with frame: CGRect, screen: NSScreen) {
@@ -158,7 +201,8 @@ final class IceBarColorManager: ObservableObject {
     }
 
     func updateAllProperties(with frame: CGRect, screen: NSScreen) {
-        updateWindowImage(for: screen)
-        updateColorInfo(with: frame, screen: screen)
+        updateWindowImage(for: screen) { [weak self] in
+            self?.updateColorInfo(with: frame, screen: screen)
+        }
     }
 }
