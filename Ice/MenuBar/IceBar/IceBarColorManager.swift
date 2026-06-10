@@ -82,9 +82,7 @@ final class IceBarColorManager: ObservableObject {
                     else {
                         return
                     }
-                    withAnimation(.interactiveSpring) {
-                        self.updateColorInfo(with: frame, screen: screen)
-                    }
+                    self.updateColorInfo(with: frame, screen: screen, animation: .interactiveSpring)
                 }
                 .store(in: &c)
 
@@ -120,9 +118,7 @@ final class IceBarColorManager: ObservableObject {
                     else {
                         return
                     }
-                    withAnimation {
-                        self.updateColorInfo(with: iceBarPanel.frame, screen: screen)
-                    }
+                    self.updateColorInfo(with: iceBarPanel.frame, screen: screen, animation: .default)
                 }
             }
             .store(in: &c)
@@ -228,30 +224,50 @@ final class IceBarColorManager: ObservableObject {
         return context.makeImage()
     }
 
-    private func updateColorInfo(with frame: CGRect, screen: NSScreen) {
+    private func updateColorInfo(with frame: CGRect, screen: NSScreen, animation: Animation? = nil) {
         guard let image = windowImage else {
             return
         }
+        let screenFrame = screen.frame
 
-        let imageBounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        // Crop + pixel averaging run on the capture queue: even on a resident
+        // bitmap this is image work, and the main thread should only ever
+        // receive the finished color (follow-up to the fire.10.1
+        // materialization fix). The CGImage is immutable, so reading it off
+        // the main thread is safe; the @Published write hops back to main,
+        // applying the caller's animation there so it actually wraps the
+        // mutation.
+        captureQueue.async { [weak self] in
+            let imageBounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
 
-        let insetScreenFrame = screen.frame.insetBy(dx: frame.width / 2, dy: 0)
-        let percentage = ((frame.midX - insetScreenFrame.minX) / insetScreenFrame.width).clamped(to: 0...1)
+            let insetScreenFrame = screenFrame.insetBy(dx: frame.width / 2, dy: 0)
+            let percentage = ((frame.midX - insetScreenFrame.minX) / insetScreenFrame.width).clamped(to: 0...1)
 
-        let cropRect = CGRect(x: imageBounds.width * percentage, y: 0, width: 0, height: 1)
-            .insetBy(dx: -150, dy: 0)
-            .intersection(imageBounds)
+            let cropRect = CGRect(x: imageBounds.width * percentage, y: 0, width: 0, height: 1)
+                .insetBy(dx: -150, dy: 0)
+                .intersection(imageBounds)
 
-        guard
-            let croppedImage = image.cropping(to: cropRect),
-            let averageColor = croppedImage.averageColor()
-        else {
-            return
+            guard
+                let croppedImage = image.cropping(to: cropRect),
+                let averageColor = croppedImage.averageColor()
+            else {
+                return
+            }
+
+            DispatchQueue.main.async {
+                guard let self else { return }
+                // Just use `menuBarWindow` as the source for now, regardless
+                // of whether its image contributed to the average.
+                let info = MenuBarAverageColorInfo(color: averageColor, source: .menuBarWindow)
+                if let animation {
+                    withAnimation(animation) {
+                        self.colorInfo = info
+                    }
+                } else {
+                    self.colorInfo = info
+                }
+            }
         }
-
-        // Just use `menuBarWindow` as the source for now, regardless
-        // of whether its image contributed to the average.
-        colorInfo = MenuBarAverageColorInfo(color: averageColor, source: .menuBarWindow)
     }
 
     func updateAllProperties(with frame: CGRect, screen: NSScreen) {
