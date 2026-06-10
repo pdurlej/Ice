@@ -167,11 +167,65 @@ final class IceBarColorManager: ObservableObject {
         else {
             return nil
         }
-        return ScreenCapture.captureWindows(
+        let captured = ScreenCapture.captureWindows(
             with: [menuBarWindow.windowID, wallpaperWindow.windowID],
             screenBounds: withMutableCopy(of: wallpaperWindow.bounds) { $0.size.height = 1 },
             option: .nominalResolution
         )
+        // CRITICAL (fire.10.1): CGWindowList images are LAZY — their pixels are
+        // fetched from the window server only when first DRAWN
+        // (CGSCaptureImageProviderBytePointer). fire.9.9 moved the capture call
+        // off-main but handed this lazy image to the main thread, so the slow
+        // macOS-26 fetch still happened inside `averageColor()`'s draw on the
+        // main run loop → residual "App Hanging ≥ 2000 ms" (Sentry FIRE-D, on
+        // fire.10.0). Force materialization HERE, on the capture queue, so the
+        // main thread only ever sees a resident bitmap. FAIL CLOSED: if
+        // materialization fails we return nil (caller keeps the previous
+        // resident image) rather than leak a lazy image back to main — that
+        // silent fallback is exactly what made the 9.9 fix a half-fix
+        // (GPT-5.5 Pro review, ~/.oracle/sessions/fire-icebar-anr-materializ-review).
+        return captured.flatMap(materialized)
+    }
+
+    /// Draws a (possibly window-server-backed, lazy) CGImage into a detached
+    /// RGBA bitmap and returns the RESIDENT copy. The expensive window-server
+    /// pixel fetch happens at THIS draw — so it must be called off the main
+    /// thread. Returns `nil` (fail closed) if a context can't be made or the
+    /// bitmap can't be realized: the caller then keeps the last good resident
+    /// image, so a lazy image is NEVER handed to the main thread.
+    private static func materialized(_ image: CGImage) -> CGImage? {
+        let width = image.width
+        let height = image.height
+        guard width > 0, height > 0 else {
+            return nil
+        }
+        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+        let preferredSpace: CGColorSpace? = {
+            if let space = image.colorSpace, space.model == .rgb {
+                return space
+            }
+            return CGColorSpace(name: CGColorSpace.displayP3)
+        }()
+        let fallbackSpace = CGColorSpaceCreateDeviceRGB()
+
+        func makeContext(_ space: CGColorSpace) -> CGContext? {
+            CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: space,
+                bitmapInfo: bitmapInfo
+            )
+        }
+
+        guard let context = (preferredSpace.flatMap(makeContext)) ?? makeContext(fallbackSpace) else {
+            return nil
+        }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        // No `?? image` fallback: makeImage() failure returns nil (fail closed).
+        return context.makeImage()
     }
 
     private func updateColorInfo(with frame: CGRect, screen: NSScreen) {
