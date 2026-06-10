@@ -66,6 +66,29 @@ final class MenuBarMutationCoordinator {
             return MutationResult(jobID: job.id, success: false, movedCount: 0, message: "Ice app state unavailable")
         }
 
+        // Defense-in-depth: a trigger-sourced job re-proves its authority at
+        // EXECUTION time, not just at enqueue — the rule must still exist,
+        // be enabled, match the job's generation, the job's moves must be
+        // exactly the approved write set, and the sealed grant must still
+        // validate. `MutationJob.triggerID/triggerGeneration` exist for
+        // precisely this check.
+        if job.source == .trigger {
+            guard
+                let triggerID = job.triggerID,
+                let rule = TriggerStore.shared.rules.first(where: { $0.id == triggerID }),
+                rule.enabled,
+                rule.generation == job.triggerGeneration,
+                job.moves == rule.onEnter.writeSet,
+                AutomationAuthorization.shared.validateForFire(
+                    rule: rule,
+                    sealed: TriggerStore.shared.sealedGrant(for: triggerID)
+                )
+            else {
+                logger.warning("Refusing trigger job \(job.id, privacy: .public): authorization no longer valid at execution time")
+                return MutationResult(jobID: job.id, success: false, movedCount: 0, message: "Trigger authorization no longer valid")
+            }
+        }
+
         var moved = 0
         var firstFailure: String?
         for move in job.moves {

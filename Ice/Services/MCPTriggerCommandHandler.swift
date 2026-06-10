@@ -37,6 +37,18 @@ final class MCPTriggerCommandHandler {
     /// stack a second modal.
     private var inFlight = false
 
+    /// True while a channel read is in flight on the IO queue, so a slow
+    /// filesystem can't stack reads behind itself.
+    private var readInFlight = false
+
+    /// Channel file IO (stat + read + decode + result writes) runs here,
+    /// never on the main thread. Polling with a synchronous stat on main at
+    /// 5 Hz blocks ≥2s under disk pressure (Sentry FIRE-E).
+    private static let ioQueue = DispatchQueue(
+        label: "com.jordanbaird.Ice.MCPTriggerCommandHandler.io",
+        qos: .utility
+    )
+
     private var cancellable: AnyCancellable?
 
     func performSetup(with appState: AppState) {
@@ -53,8 +65,22 @@ final class MCPTriggerCommandHandler {
     }
 
     private func poll() {
-        guard !inFlight else { return }
-        guard let proposal = MCPTriggerChannel.readProposal() else { return }
+        // No new proposals while a consent prompt is up, and no stacked
+        // channel reads while one is still running on the IO queue.
+        guard !inFlight, !readInFlight else { return }
+        readInFlight = true
+        Self.ioQueue.async { [weak self] in
+            let proposal = MCPTriggerChannel.readProposal()
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.readInFlight = false
+                guard let proposal, !self.inFlight else { return }
+                self.handle(proposal)
+            }
+        }
+    }
+
+    private func handle(_ proposal: MCPTriggerChannel.Proposal) {
         guard proposal.id != lastProcessedID else { return }
         logger.log("MCP trigger proposal received: \(proposal.id, privacy: .public) op=\(proposal.op.rawValue, privacy: .public)")
 
@@ -73,6 +99,14 @@ final class MCPTriggerCommandHandler {
         Task { @MainActor in
             defer { inFlight = false }
             let result = fulfill(proposal)
+            Self.writeResult(result, logger: logger)
+        }
+    }
+
+    /// Result writes share the IO queue: channel file IO never runs on the
+    /// main thread.
+    private static func writeResult(_ result: MCPTriggerChannel.Result, logger: Logger) {
+        ioQueue.async {
             do {
                 try MCPTriggerChannel.writeResult(result)
             } catch {

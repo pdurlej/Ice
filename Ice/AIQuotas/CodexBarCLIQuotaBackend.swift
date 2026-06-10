@@ -149,15 +149,21 @@ struct CodexBarCLIQuotaBackend: AIQuotaBackend {
             }
             group.addTask { [timeout] in
                 try await Task.sleep(for: .seconds(timeout))
+                // Terminate HERE, before throwing — not after group.next().
+                // When this child throws first, group.next() rethrows and the
+                // task group still awaits the continuation child, which only
+                // resumes once the process exits. Without the kill, a wedged
+                // CLI keeps this call (and, through the refresh guard, every
+                // future quota refresh) hanging forever. isRunning also guards
+                // the never-launched case, where terminate() would raise.
+                if process.isRunning {
+                    process.terminate()
+                }
                 throw ProcessError.timedOut
             }
             defer { group.cancelAll() }
             guard let result = try await group.next() else {
                 throw ProcessError.timedOut
-            }
-            // If the timeout won, kill the still-running process.
-            if process.isRunning {
-                process.terminate()
             }
             return result
         }

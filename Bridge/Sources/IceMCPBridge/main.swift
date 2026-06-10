@@ -95,6 +95,15 @@ private func parseOptionalInt(_ value: Value?) -> Int? {
     return nil
 }
 
+/// MCP `Value.doubleValue` is a strict case-match — a JSON `30` arrives as
+/// `.int` and would silently read as nil. Accept both numeric shapes.
+private func parseOptionalDouble(_ value: Value?) -> Double? {
+    guard let value = value else { return nil }
+    if let d = value.doubleValue { return d }
+    if let i = value.intValue { return Double(i) }
+    return nil
+}
+
 /// Parses an agent-supplied `set_trigger` payload into the wire `TriggerSpec`.
 /// Shape validation (presence of `type`) happens here; semantic validation
 /// (ranges, enum values, hysteresis) is the main app's job in
@@ -138,7 +147,7 @@ private func parseTriggerSpec(_ arguments: [String: Value]?) throws -> MenuBarIt
         name: name,
         condition: condition,
         action: action,
-        cooldownSeconds: arguments?["cooldown_seconds"]?.doubleValue
+        cooldownSeconds: parseOptionalDouble(arguments?["cooldown_seconds"])
     )
 }
 

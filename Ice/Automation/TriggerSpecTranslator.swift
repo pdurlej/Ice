@@ -99,6 +99,11 @@ enum TriggerSpecTranslator {
             }
             let start = try makeTime(hour: spec.startHour, minute: spec.startMinute, label: "start")
             let end = try makeTime(hour: spec.endHour, minute: spec.endMinute, label: "end")
+            guard start != end else {
+                throw TranslationError(
+                    message: "timeWindow start and end are identical — the window would never be active (for all day use 00:00–23:59)"
+                )
+            }
             let tzID = nonEmpty(spec.timeZoneID).flatMap { TimeZone(identifier: $0) != nil ? $0 : nil }
                 ?? TimeZone.current.identifier
             return .timeWindow(days: days, start: start, end: end, timeZoneID: tzID)

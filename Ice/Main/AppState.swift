@@ -93,7 +93,6 @@ final class AppState: ObservableObject {
         imageCache.performSetup(with: self)
         updatesManager.performSetup(with: self)
         userNotificationManager.performSetup(with: self)
-        mcpWriteCommandHandler.performSetup(with: self)
         aiQuotaManager.performSetup(with: self)
         triggerEngine.performSetup()
         mcpTriggerCommandHandler.performSetup(with: self)

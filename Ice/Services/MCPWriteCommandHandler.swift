@@ -32,6 +32,19 @@ final class MCPWriteCommandHandler {
     /// don't stack a second modal alert.
     private var authorizationInFlight = false
 
+    /// True while a channel read is in flight on the IO queue, so a slow
+    /// filesystem can't stack reads behind itself.
+    private var readInFlight = false
+
+    /// Channel file IO (stat + read + decode + result writes) runs here,
+    /// never on the main thread. The 5 Hz poll used to do a synchronous
+    /// stat (`isTrustedLocalFile` → attributesOfItem) on main, which can
+    /// block ≥2s under disk pressure — a real user App Hang (Sentry FIRE-E).
+    private static let ioQueue = DispatchQueue(
+        label: "com.jordanbaird.Ice.MCPWriteCommandHandler.io",
+        qos: .utility
+    )
+
     private var cancellable: AnyCancellable?
 
     /// The single serialized mutation authority. fire.10 routes every menu-bar
@@ -58,9 +71,22 @@ final class MCPWriteCommandHandler {
 
     private func poll() {
         // Don't pick up new commands (or stack a second modal) while a
-        // consent prompt is already on screen.
-        guard !authorizationInFlight else { return }
-        guard let command = MCPWriteChannel.readCommand() else { return }
+        // consent prompt is already on screen, and don't stack channel
+        // reads while one is still running.
+        guard !authorizationInFlight, !readInFlight else { return }
+        readInFlight = true
+        Self.ioQueue.async { [weak self] in
+            let command = MCPWriteChannel.readCommand()
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.readInFlight = false
+                guard let command, !self.authorizationInFlight else { return }
+                self.handle(command)
+            }
+        }
+    }
+
+    private func handle(_ command: MCPWriteChannel.Command) {
         guard command.id != lastProcessedID else { return }
         logger.log("MCP write command received: \(command.id, privacy: .public)")
 
@@ -87,7 +113,7 @@ final class MCPWriteCommandHandler {
                     message: "Denied: this menu bar change was not approved in Fire.",
                     completedAt: Date().timeIntervalSince1970
                 )
-                try? MCPWriteChannel.writeResult(denied)
+                Self.writeResult(denied, logger: logger)
                 return
             }
 
@@ -95,6 +121,14 @@ final class MCPWriteCommandHandler {
                 "Executing MCP write command \(command.id, privacy: .public): \(command.op, privacy: .public) \(command.bundleID, privacy: .public) -> \(command.toSection, privacy: .public)"
             )
             let result = await execute(command)
+            Self.writeResult(result, logger: logger)
+        }
+    }
+
+    /// Result writes share the IO queue: channel file IO never runs on the
+    /// main thread.
+    private static func writeResult(_ result: MCPWriteChannel.Result, logger: Logger) {
+        ioQueue.async {
             do {
                 try MCPWriteChannel.writeResult(result)
             } catch {
