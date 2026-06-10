@@ -208,45 +208,6 @@ final class MenuBarStateManager {
         )
     }
 
-    // MARK: - Write (deferred to fire.7)
-
-    /// Returns the friendly fire.7-deferral message. fire.7 implements
-    /// real moves via Option D (Ice.app hosts MCP backend with direct
-    /// access to MenuBarItemManager.shared).
-    func moveItem(
-        bundleID: String,
-        toSection: MenuBarItemService.ItemSection,
-        toIndex: Int?
-    ) -> (success: Bool, message: String?) {
-        Logger.default.debug(
-            "MenuBarStateManager.moveItem(\(bundleID), to: \(toSection.rawValue), index: \(String(describing: toIndex))) — deferred"
-        )
-        return (
-            false,
-            "Write operations land in fire.7. fire.6 supports list_items and save_layout for inspection workflows."
-        )
-    }
-
-    /// Convenience wrapper — currently deferred per `moveItem`.
-    func hideItem(bundleID: String) -> (success: Bool, message: String?) {
-        moveItem(bundleID: bundleID, toSection: .hidden, toIndex: nil)
-    }
-
-    /// Convenience wrapper — currently deferred per `moveItem`.
-    func showItem(bundleID: String) -> (success: Bool, message: String?) {
-        moveItem(bundleID: bundleID, toSection: .alwaysVisible, toIndex: nil)
-    }
-
-    /// Layout application deferred — needs the same write path that
-    /// `moveItem` is waiting on.
-    func applyLayout(name: String) -> (success: Bool, message: String?) {
-        Logger.default.debug("MenuBarStateManager.applyLayout(\(name)) — deferred")
-        return (
-            false,
-            "Layout application lands in fire.7 alongside the other write ops. fire.6 supports save_layout for snapshotting state."
-        )
-    }
-
     // MARK: - List Layouts (W4 - read-only, ships independently)
 
     /// Returns the names of all saved layouts, in stable

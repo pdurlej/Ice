@@ -106,8 +106,6 @@ struct TriggerRule: Codable, Identifiable, Equatable {
     var exitPolicy: ExitPolicy
     var priority: Int
     var cooldown: TimeInterval
-    /// Last evaluated level (for edge detection across launches).
-    var lastState: Bool?
     var lastFiredAt: Date?
 
     init(
@@ -120,7 +118,6 @@ struct TriggerRule: Codable, Identifiable, Equatable {
         exitPolicy: ExitPolicy = .none,
         priority: Int = 0,
         cooldown: TimeInterval = 5,
-        lastState: Bool? = nil,
         lastFiredAt: Date? = nil
     ) {
         self.id = id
@@ -132,7 +129,6 @@ struct TriggerRule: Codable, Identifiable, Equatable {
         self.exitPolicy = exitPolicy
         self.priority = priority
         self.cooldown = cooldown
-        self.lastState = lastState
         self.lastFiredAt = lastFiredAt
     }
 }

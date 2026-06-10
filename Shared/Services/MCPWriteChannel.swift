@@ -8,8 +8,7 @@
 //  Why this exists
 //  ---------------
 //  MCPBackend.xpc can READ the menu bar layout fine (CGWindowList +
-//  SourcePIDCache), and it can move items WITHIN an on-screen section
-//  via Mover.swift. But it cannot move an item INTO a collapsed
+//  SourcePIDCache), but it cannot move an item INTO a collapsed
 //  section (hidden / alwaysHidden): those sections' divider control
 //  items are parked off-screen and aren't enumerable from the XPC
 //  service, and expanding a section is an Ice-main-app-only operation.

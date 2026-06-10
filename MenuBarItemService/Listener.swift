@@ -43,40 +43,17 @@ final class Listener {
                 let items = MenuBarStateManager.shared.listItems(section: section)
                 return .items(items)
 
-            case .moveItem(let bundleID, let toSection, let toIndex):
-                let result = MenuBarStateManager.shared.moveItem(
-                    bundleID: bundleID,
-                    toSection: toSection,
-                    toIndex: toIndex
-                )
+            // Write ops belong to MCPBackend.xpc, which delegates to the Ice
+            // main app's consent gate + mutation coordinator. This legacy
+            // service never mutates the bar; a request landing here is a
+            // misrouted client. (The fire.6-era "deferred" stubs were removed
+            // in the fire.10.2 dead-code sweep.)
+            case .moveItem, .hideItem, .showItem, .applyLayout:
+                Logger.default.notice("Received write op - not supported on MenuBarItemService, route to MCPBackend")
                 return .mutationResult(
-                    success: result.success,
-                    undoToken: nil,         // Phase 5 wires this
-                    message: result.message
-                )
-
-            case .hideItem(let bundleID):
-                let result = MenuBarStateManager.shared.hideItem(bundleID: bundleID)
-                return .mutationResult(
-                    success: result.success,
+                    success: false,
                     undoToken: nil,
-                    message: result.message
-                )
-
-            case .showItem(let bundleID):
-                let result = MenuBarStateManager.shared.showItem(bundleID: bundleID)
-                return .mutationResult(
-                    success: result.success,
-                    undoToken: nil,
-                    message: result.message
-                )
-
-            case .applyLayout(let name):
-                let result = MenuBarStateManager.shared.applyLayout(name: name)
-                return .mutationResult(
-                    success: result.success,
-                    undoToken: nil,
-                    message: result.message
+                    message: "Write operations are not handled by this service."
                 )
 
             case .saveLayout(let name):

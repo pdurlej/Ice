@@ -352,38 +352,6 @@ final class MCPBackendStateManager {
         }
     }
 
-    /// Returns the active display whose bounds contain the given
-    /// rectangle's midpoint, or nil if no active display contains it.
-    private func displayContaining(_ rect: CGRect) -> CGDirectDisplayID? {
-        let mid = CGPoint(x: rect.midX, y: rect.midY)
-        for displayID in Self.activeDisplayIDs() {
-            if CGDisplayBounds(displayID).contains(mid) {
-                return displayID
-            }
-        }
-        return nil
-    }
-
-    /// Builds a Mover.MoveItem snapshot from a WindowInfo. Resolves
-    /// sourcePID via SourcePIDCache so Mover can target the original
-    /// creating process (Control Center on macOS 26) rather than the
-    /// reparented owner.
-    private func makeMoveItem(
-        window: WindowInfo, displayName: String
-    ) -> Mover.MoveItem {
-        let sourcePID = SourcePIDCache.shared.pid(for: window)
-        let ownerApp = NSRunningApplication(processIdentifier: window.ownerPID)
-        let isBento = ownerApp?.bundleIdentifier == "com.apple.controlcenter"
-        return Mover.MoveItem(
-            windowID: window.windowID,
-            ownerPID: window.ownerPID,
-            sourcePID: sourcePID,
-            bounds: window.bounds,
-            isBentoBox: isBento,
-            displayName: displayName
-        )
-    }
-
     // MARK: - Save Layout / List Layouts (read-side write - implemented)
 
     func saveLayout(name: String) async -> Int? {
@@ -509,20 +477,3 @@ final class MCPBackendStateManager {
     }
 }
 
-// MARK: - Sequence Helpers
-
-private extension Sequence {
-    /// Splits the sequence into two arrays based on a predicate.
-    func splitByPredicate(_ predicate: (Element) -> Bool) -> (matching: [Element], nonMatching: [Element]) {
-        var matching: [Element] = []
-        var nonMatching: [Element] = []
-        for element in self {
-            if predicate(element) {
-                matching.append(element)
-            } else {
-                nonMatching.append(element)
-            }
-        }
-        return (matching, nonMatching)
-    }
-}
