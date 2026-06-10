@@ -20,7 +20,28 @@ approach confirmed; the fail-closed correction was its one required change.
 LESSON: with window-server CGImages, moving the capture is not enough — the
 fetch happens at draw time; materialize off-main or compute results off-main.
 
-## 📋 AUDIT (Fable 5, 2026-06-10) — wave plan W1–W5 pending
+## 📋 AUDIT (Fable 5, 2026-06-10) — W1–W4 DONE, W5 pending
+
+**Executed 2026-06-10 (all compile-gated, committed per wave, pushed):**
+- **W1** (`ec31134`) correctness pack: codexbar timeout now actually
+  terminates the process (was unreachable on the throw path → wedge);
+  FIRE-E fix — ALL channel file IO (reads + result writes) off-main on
+  per-handler utility queues with readInFlight coalescing; Bridge
+  parseOptionalDouble for cooldown_seconds; coordinator re-validates
+  trigger jobs at execution time (rule+generation+writeSet+seal); AppState
+  duplicate performSetup dropped; timeWindow start==end rejected.
+- **W2** (`d356a25`): averageColor crop+averaging on captureQueue, main
+  receives only the finished color; animation applied at the main hop.
+- **W3** (`fcb4b8f`): dead-code sweep, net −715 lines (Mover.swift,
+  makeMoveItem/displayContaining, unused splitByPredicate copy, fire.6
+  write stubs — Listener answers those cases directly, TriggerRule.lastState).
+- **W4** (`9b1b78b`): CLIENT-SETUP 10-tool list + Automations section;
+  README un-staled (was still describing fire.6 status); ROADMAP marked
+  historical.
+- **NOT shipped yet**: fire.10.2 release would close FIRE-E (left
+  unresolved in Sentry as the tracker). **W5 (authenticated XPC) awaits
+  the user switching thinking to Max** (their explicit instruction) — do
+  not start it without that signal.
 
 Full-fork audit (me + 2 Explore agents + Sentry). Confirmed findings → waves:
 - **W1 Correctness** (→ fire.10.2): (a) `CodexBarCLIQuotaBackend.runProcess`
