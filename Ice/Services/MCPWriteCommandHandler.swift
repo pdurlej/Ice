@@ -2,12 +2,12 @@
 //  MCPWriteCommandHandler.swift
 //  Ice
 //
-//  Ice-main-app side of the MCP write bridge. Polls for write commands
-//  that MCPBackend.xpc drops into the shared file channel
-//  (`MCPWriteChannel`) and executes them with Ice's own
-//  `MenuBarItemManager.move` — the exact code path the Layout editor
-//  uses, which can reach collapsed (off-screen) sections because Ice
-//  owns the real control-item MenuBarItem objects.
+//  Fulfiller for agent-initiated menu-bar WRITE commands (relayed from
+//  MCPBackend.xpc by `MCPRelayPump` since fire.10.2; a polled file channel
+//  before that). Executes them with Ice's own `MenuBarItemManager.move`
+//  via the mutation coordinator — the exact code path the Layout editor
+//  uses, which can reach collapsed (off-screen) sections because Ice owns
+//  the real control-item MenuBarItem objects.
 //
 //  MCPBackend cannot do this itself: the hidden / alwaysHidden divider
 //  control items are parked off-screen when collapsed and aren't
@@ -15,7 +15,6 @@
 //  main-app-only operation.
 //
 
-import Combine
 import Foundation
 import OSLog
 
@@ -24,117 +23,52 @@ final class MCPWriteCommandHandler {
     private weak var appState: AppState?
     private let logger = Logger(category: "MCPWriteCommandHandler")
 
-    /// The id of the last command we processed, so we don't re-run it on
-    /// every poll tick.
-    private var lastProcessedID: String?
-
-    /// True while a consent prompt is on screen, so concurrent poll ticks
-    /// don't stack a second modal alert.
-    private var authorizationInFlight = false
-
-    /// True while a channel read is in flight on the IO queue, so a slow
-    /// filesystem can't stack reads behind itself.
-    private var readInFlight = false
-
-    /// Channel file IO (stat + read + decode + result writes) runs here,
-    /// never on the main thread. The 5 Hz poll used to do a synchronous
-    /// stat (`isTrustedLocalFile` → attributesOfItem) on main, which can
-    /// block ≥2s under disk pressure — a real user App Hang (Sentry FIRE-E).
-    private static let ioQueue = DispatchQueue(
-        label: "com.jordanbaird.Ice.MCPWriteCommandHandler.io",
-        qos: .utility
-    )
-
-    private var cancellable: AnyCancellable?
-
     /// The single serialized mutation authority. fire.10 routes every menu-bar
     /// mutation (MCP writes, triggers, UI) through one coordinator so they
-    /// never interleave; this handler no longer touches `itemManager.move`.
+    /// never interleave; this handler never touches `itemManager.move`.
     private let mutationCoordinator = MenuBarMutationCoordinator.shared
 
-    /// Performs setup: starts polling the shared command file.
     func performSetup(with appState: AppState) {
         self.appState = appState
         mutationCoordinator.performSetup(with: appState)
-
-        // Cross-process change notifications on files are possible via
-        // DispatchSource, but a coarse poll is simpler and plenty
-        // responsive for interactive AI-driven moves. 200ms keeps a
-        // move feeling immediate without busy-spinning.
-        cancellable = Timer.publish(every: 0.2, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                self?.poll()
-            }
-        logger.debug("MCP write command handler active")
+        logger.debug("MCP write command handler active (relay fulfiller)")
     }
 
-    private func poll() {
-        // Don't pick up new commands (or stack a second modal) while a
-        // consent prompt is already on screen, and don't stack channel
-        // reads while one is still running.
-        guard !authorizationInFlight, !readInFlight else { return }
-        readInFlight = true
-        Self.ioQueue.async { [weak self] in
-            let command = MCPWriteChannel.readCommand()
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                self.readInFlight = false
-                guard let command, !self.authorizationInFlight else { return }
-                self.handle(command)
-            }
-        }
-    }
-
-    private func handle(_ command: MCPWriteChannel.Command) {
-        guard command.id != lastProcessedID else { return }
+    /// Fulfills one relayed write command end-to-end: staleness check →
+    /// consent → serialized execution → result. Called by `MCPRelayPump`,
+    /// which processes one item at a time, so consent prompts never stack.
+    func fulfill(_ command: MCPWriteChannel.Command) async -> MCPWriteChannel.Result {
         logger.log("MCP write command received: \(command.id, privacy: .public)")
 
-        // Ignore poison/stale commands left by a crashed MCPBackend.
+        func failure(_ message: String) -> MCPWriteChannel.Result {
+            MCPWriteChannel.Result(
+                id: command.id, success: false, message: message,
+                completedAt: Date().timeIntervalSince1970
+            )
+        }
+
+        // Refuse items that sat queued past their shelf life (e.g. across a
+        // sleep/wake) — the requesting bridge call has long timed out.
+        // Checked BEFORE the prompt, so a slow human approval still executes.
         let age = Date().timeIntervalSince1970 - command.createdAt
         guard age <= MCPWriteChannel.staleAfter else {
-            lastProcessedID = command.id
-            return
+            logger.notice("Dropping stale write command \(command.id, privacy: .public) (age \(age, format: .fixed(precision: 1))s)")
+            return failure("Command expired before Fire could process it.")
         }
 
-        lastProcessedID = command.id
-        authorizationInFlight = true
-
-        Task {
-            defer { authorizationInFlight = false }
-
-            // fire.9.8 confused-deputy stopgap: the TCC-bearing main app
-            // authorizes every write in its own UI before using its
-            // Accessibility power. The file channel is only a request
-            // queue, never the authorization boundary.
-            guard MCPWriteAuthorization.shared.authorize(command) else {
-                let denied = MCPWriteChannel.Result(
-                    id: command.id, success: false,
-                    message: "Denied: this menu bar change was not approved in Fire.",
-                    completedAt: Date().timeIntervalSince1970
-                )
-                Self.writeResult(denied, logger: logger)
-                return
-            }
-
-            logger.log(
-                "Executing MCP write command \(command.id, privacy: .public): \(command.op, privacy: .public) \(command.bundleID, privacy: .public) -> \(command.toSection, privacy: .public)"
-            )
-            let result = await execute(command)
-            Self.writeResult(result, logger: logger)
+        // fire.9.8 confused-deputy gate: the TCC-bearing main app authorizes
+        // every write in its own UI before using its Accessibility power.
+        // Since fire.10.2 the relay underneath is authenticated (same-team
+        // XPC), making this prompt defense-in-depth rather than the only
+        // boundary — it stays regardless.
+        guard MCPWriteAuthorization.shared.authorize(command) else {
+            return failure("Denied: this menu bar change was not approved in Fire.")
         }
-    }
 
-    /// Result writes share the IO queue: channel file IO never runs on the
-    /// main thread.
-    private static func writeResult(_ result: MCPWriteChannel.Result, logger: Logger) {
-        ioQueue.async {
-            do {
-                try MCPWriteChannel.writeResult(result)
-            } catch {
-                logger.error("Failed to write MCP result: \(error, privacy: .public)")
-            }
-        }
+        logger.log(
+            "Executing MCP write command \(command.id, privacy: .public): \(command.op, privacy: .public) \(command.bundleID, privacy: .public) -> \(command.toSection, privacy: .public)"
+        )
+        return await execute(command)
     }
 
     /// Translates a write command into a coordinator job. Only "move" is

@@ -52,9 +52,14 @@ struct SealedGrant: Codable, Equatable {
 /// valid seal without that key.
 ///
 /// NOTE (P1 limitation): on ad-hoc-signed builds (no Apple team), Keychain
-/// isolation is weaker. The stronger boundary — a Keychain access policy tied
-/// to Fire's code signature, and peer-authenticated XPC — is the tracked
-/// follow-up.
+/// isolation is weaker. fire.10.2 closed the transport half of the follow-up:
+/// the MCP path is peer-authenticated XPC end-to-end, so a forged grant can
+/// no longer reach the mutation path from outside the app. The remaining
+/// half — moving this key to the DataProtection keychain (signature-bound
+/// ACL) — needs an app-identifier entitlement in the CI signing step first
+/// (the app currently signs with no entitlements file, so
+/// kSecUseDataProtectionKeychain would fail with errSecMissingEntitlement);
+/// tracked, deliberately not shipped as dead code.
 final class AutomationGrantStore {
     static let shared = AutomationGrantStore()
 

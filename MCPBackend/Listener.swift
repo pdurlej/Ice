@@ -156,6 +156,20 @@ final class Listener {
                     enabled: false,
                     message: result.message
                 )
+
+            // MARK: - Main-app relay (fire.10.2)
+            //
+            // The Ice main app pulls queued agent work and pushes results
+            // back over its own authenticated XPCSession. Same peer gating
+            // as every other message on this listener.
+
+            case .relayFetch:
+                let work = syncWait { await RelayQueue.shared.dequeue() }
+                return .relayWork(work)
+
+            case .relayComplete(let result):
+                syncWait { await RelayQueue.shared.complete(result) }
+                return .relayAck
             }
         } catch {
             logger.error("Failed to handle message: \(error)")

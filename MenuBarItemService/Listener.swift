@@ -89,6 +89,10 @@ final class Listener {
             case .listTriggers:
                 Logger.default.notice("Received listTriggers - not supported on MenuBarItemService, route to MCPBackend")
                 return .triggers([])
+
+            case .relayFetch, .relayComplete:
+                Logger.default.notice("Received relay request - not supported on MenuBarItemService, route to MCPBackend")
+                return .relayWork(nil)
             }
         } catch {
             Logger.default.error("Listener failed to handle message with error \(error)")

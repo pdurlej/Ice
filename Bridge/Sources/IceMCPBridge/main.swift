@@ -664,10 +664,10 @@ private func encode(
             isError: false
         )
 
-    case .start, .sourcePID:
-        // These cases belong to Ice's own pre-existing usage of the
-        // service and shouldn't surface from any MCP tool. Treat as
-        // a wire-protocol bug.
+    case .start, .sourcePID, .relayWork, .relayAck:
+        // These cases belong to Ice's own usage of the service (legacy
+        // handshake + the fire.10.2 main-app relay) and shouldn't surface
+        // from any MCP tool. Treat as a wire-protocol bug.
         log.error("unexpected XPC response for tool \(toolName, privacy: .public): \(String(describing: response), privacy: .public)")
         return CallTool.Result(
             content: [.text(text: "error: unexpected response from XPC service", annotations: nil, _meta: nil)],

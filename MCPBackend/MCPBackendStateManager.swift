@@ -202,11 +202,11 @@ final class MCPBackendStateManager {
         return ids
     }
 
-    // MARK: - Write (fire.8.2 - delegated to Ice main app via MCPWriteChannel)
+    // MARK: - Write (delegated to Ice main app via the XPC relay)
 
     /// Moves the item with the given bundle ID to the target section by
-    /// delegating to Ice main app through the file-based
-    /// `MCPWriteChannel`.
+    /// delegating to Ice main app through the relay queue (fire.10.2; the
+    /// fire.8.2 file channel before that).
     ///
     /// Why delegate rather than move here: MCPBackend.xpc can only reach
     /// on-screen sections (its earlier in-process Mover worked for
@@ -214,15 +214,14 @@ final class MCPBackendStateManager {
     /// hidden / alwaysHidden section — those dividers are off-screen and
     /// expanding a section is an Ice-main-app-only operation). Ice main
     /// app owns the real control-item objects and `MenuBarItemManager.move`
-    /// (the Layout-editor code path), so it handles every section. See
-    /// Shared/Services/MCPWriteChannel.swift for the channel design.
+    /// (the Layout-editor code path), so it handles every section.
     func moveItem(
         bundleID: String,
         toSection: MenuBarItemService.ItemSection,
         toIndex: Int?
     ) async -> (success: Bool, message: String?) {
         logger.debug(
-            "moveItem(\(bundleID), to: \(toSection.rawValue), index: \(String(describing: toIndex))) via bridge"
+            "moveItem(\(bundleID), to: \(toSection.rawValue), index: \(String(describing: toIndex))) via relay"
         )
 
         // Sanity: confirm the item is actually in the menu bar before
@@ -233,36 +232,24 @@ final class MCPBackendStateManager {
             return (false, "Item with bundle ID '\(bundleID)' not found in menu bar")
         }
 
-        let id = UUID().uuidString
         let command = MCPWriteChannel.Command(
-            id: id,
+            id: UUID().uuidString,
             op: "move",
             bundleID: bundleID,
             toSection: toSection.rawValue,
             toIndex: toIndex,
             createdAt: Date().timeIntervalSince1970
         )
-        do {
-            try MCPWriteChannel.writeCommand(command)
-        } catch {
-            return (false, "Failed to hand command to Ice: \(error)")
+        // 15s covers the main app's fetch latency (≤200ms), the consent
+        // prompt fast path (active lease), and an AX move retry burst.
+        guard case .move(let result)? = await RelayQueue.shared.submitAndWait(.move(command), timeout: 15) else {
+            return (
+                false,
+                "Ice did not respond within 15s. Make sure Ice (Fire) is running and has Accessibility permission."
+            )
         }
-
-        // Poll for the matching result. Ice's handler polls every 200ms
-        // and a move takes up to a few seconds (8 attempts × timeout),
-        // so give it a generous window.
-        let deadline = Date().addingTimeInterval(15)
-        while Date() < deadline {
-            if let result = MCPWriteChannel.readResult(), result.id == id {
-                logger.info("moveItem bridge result for \(bundleID): success=\(result.success)")
-                return (result.success, result.message)
-            }
-            try? await Task.sleep(for: .milliseconds(150))
-        }
-        return (
-            false,
-            "Ice did not respond within 15s. Make sure Ice (Fire) is running and has Accessibility permission."
-        )
+        logger.info("moveItem relay result for \(bundleID): success=\(result.success)")
+        return (result.success, result.message)
     }
 
     func hideItem(bundleID: String) async -> (success: Bool, message: String?) {
@@ -452,28 +439,18 @@ final class MCPBackendStateManager {
         return (result.success, result.triggerID, result.message)
     }
 
-    /// Writes a proposal to the trigger channel and polls for the matching
-    /// result up to `timeout` seconds. Returns nil on write failure or timeout.
+    /// Submits a proposal to the relay queue and suspends until the main app
+    /// posts the result, up to `timeout` seconds. Returns nil on timeout.
     private func sendTriggerProposal(
         _ proposal: MCPTriggerChannel.Proposal,
         timeout: TimeInterval
     ) async -> MCPTriggerChannel.Result? {
-        do {
-            try MCPTriggerChannel.writeProposal(proposal)
-        } catch {
-            logger.error("Failed to write trigger proposal: \(error)")
+        guard case .trigger(let result)? = await RelayQueue.shared.submitAndWait(.trigger(proposal), timeout: timeout) else {
+            logger.notice("trigger proposal \(proposal.id) got no result within \(timeout)s")
             return nil
         }
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if let result = MCPTriggerChannel.readResult(), result.id == proposal.id {
-                logger.info("trigger proposal \(proposal.id) result success=\(result.success)")
-                return result
-            }
-            try? await Task.sleep(for: .milliseconds(150))
-        }
-        logger.notice("trigger proposal \(proposal.id) timed out after \(timeout)s")
-        return nil
+        logger.info("trigger proposal \(proposal.id) result success=\(result.success)")
+        return result
     }
 }
 

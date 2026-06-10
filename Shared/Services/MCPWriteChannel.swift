@@ -2,61 +2,31 @@
 //  MCPWriteChannel.swift
 //  Shared
 //
-//  A tiny file-based command/result channel between the MCPBackend.xpc
-//  service and the Ice main app.
+//  Wire model for agent-initiated menu-bar WRITE commands.
 //
-//  Why this exists
-//  ---------------
-//  MCPBackend.xpc can READ the menu bar layout fine (CGWindowList +
-//  SourcePIDCache), but it cannot move an item INTO a collapsed
-//  section (hidden / alwaysHidden): those sections' divider control
-//  items are parked off-screen and aren't enumerable from the XPC
-//  service, and expanding a section is an Ice-main-app-only operation.
+//  History: fire.8.2–fire.10.1 transported these over single-slot JSON files
+//  in Application Support, because the Ice main app cannot host a launchd
+//  Mach service (GUI apps are refused MachServices registration — the
+//  documented "Option D" failure). fire.10.2 replaced the files with the XPC
+//  relay: MCPBackend.xpc queues agent requests (`RelayQueue`) and the main
+//  app pulls them over its own XPCSession (`MCPRelayPump`), peer-gated to
+//  the same team on signed builds. That makes the channel AUTHENTICATED — a
+//  same-user process can no longer inject commands or forge results — and
+//  per-request replies remove the old single-slot overwrite race.
 //
-//  So write operations are delegated to Ice main app, which owns the
-//  real control-item MenuBarItem objects and `MenuBarItemManager.move`
-//  (the exact code path Ice's own Layout editor uses). MCPBackend
-//  writes a Command file; Ice polls for it, executes the move, and
-//  writes a Result file; MCPBackend polls for the matching result.
-//
-//  Why files and not the shared UserDefaults suite
-//  -----------------------------------------------
-//  Cross-process UserDefaults change propagation through cfprefsd is
-//  unreliable for long-running readers (the value gets cached in the
-//  reader process and there is no public "re-read from disk" API).
-//  The minX publish works only because MCPBackend is a fresh process
-//  per bridge connection. Here BOTH Ice (long-running) and
-//  MCPBackend.xpc (lives across calls) are long-running, so we use
-//  plain JSON files: `Data(contentsOf:)` always reads fresh bytes,
-//  and `.atomic` writes give us tear-free swaps.
-//
-//  Both Ice.app and its .xpc services run unsandboxed (ENABLE_APP_SANDBOX
-//  = NO), so they share the real `~/Library/Application Support`.
+//  Only the model types remain here; the namespace keeps its historical
+//  name. The consent prompt in the main app (`MCPWriteAuthorization`) stays
+//  the user-facing authorization step; the authenticated relay is the
+//  transport boundary underneath it.
 //
 
 import Foundation
 
 enum MCPWriteChannel {
-    /// Shared directory under the user's Application Support. Created on
-    /// first write. Same resolved path in Ice main app and the XPC
-    /// service because both are unsandboxed.
-    static let directory: URL = {
-        let base = FileManager.default.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask
-        ).first ?? URL(fileURLWithPath: NSHomeDirectory())
-            .appendingPathComponent("Library/Application Support")
-        return base
-            .appendingPathComponent("com.jordanbaird.Ice", isDirectory: true)
-            .appendingPathComponent("mcp", isDirectory: true)
-    }()
-
-    static let commandURL = directory.appendingPathComponent("write-command.json")
-    static let resultURL = directory.appendingPathComponent("write-result.json")
-
-    /// A write command issued by MCPBackend, executed by Ice main app.
-    struct Command: Codable {
-        /// Unique per command, so the result can be matched and stale
-        /// results ignored.
+    /// A write command issued by MCPBackend on behalf of an agent, executed
+    /// by the Ice main app.
+    struct Command: Codable, Sendable {
+        /// Unique per command, so the result can be correlated.
         let id: String
         /// Operation discriminator. Currently only "move".
         let op: String
@@ -67,85 +37,22 @@ enum MCPWriteChannel {
         /// Optional intra-section index (currently advisory; Ice lands
         /// the item at the section edge).
         let toIndex: Int?
-        /// Epoch seconds the command was created. Ice ignores commands
-        /// older than `staleAfter` so a crashed/quit MCPBackend doesn't
-        /// leave a poison command on disk.
+        /// Epoch seconds the command was created. The main app refuses
+        /// commands older than `staleAfter` at fetch time.
         let createdAt: Double
     }
 
-    /// The result of executing a `Command`, written by Ice main app.
-    struct Result: Codable {
+    /// The result of executing a `Command`, produced by the Ice main app.
+    struct Result: Codable, Sendable {
         let id: String
         let success: Bool
         let message: String?
         let completedAt: Double
     }
 
-    /// Commands older than this (seconds) are ignored by Ice. Kept tight
-    /// so a stale/poison command can't be replayed long after it was
-    /// written (the handler polls every 200ms, so legit pickup is
-    /// effectively immediate). The consent prompt can take longer than
-    /// this, but staleness is checked at pickup — before the prompt — so a
-    /// slow human approval still executes.
+    /// Commands older than this (seconds) are refused by the main app at
+    /// fetch time — e.g. items that sat queued across a sleep/wake while the
+    /// requesting bridge call long since timed out. Staleness is checked
+    /// BEFORE the consent prompt, so a slow human approval still executes.
     static let staleAfter: TimeInterval = 10
-
-    private static func ensureDirectory() {
-        let fm = FileManager.default
-        try? fm.createDirectory(
-            at: directory, withIntermediateDirectories: true,
-            attributes: [.posixPermissions: 0o700]
-        )
-        // Tighten an already-existing directory too (idempotent): owner-only,
-        // so other users on the machine can't read or drop channel files.
-        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
-    }
-
-    /// Defense-in-depth: only trust a channel file that is a regular file
-    /// (not a symlink), owned by THIS user, and of sane size. Blocks
-    /// symlink tricks and cross-user writes. It does NOT stop a same-user
-    /// attacker — the main app's `MCPWriteAuthorization` consent gate is
-    /// the actual authorization boundary; this is hygiene.
-    private static func isTrustedLocalFile(_ url: URL) -> Bool {
-        let fm = FileManager.default
-        guard let attrs = try? fm.attributesOfItem(atPath: url.path) else { return false }
-        guard (attrs[.type] as? FileAttributeType) == .typeRegular else { return false }
-        guard let owner = attrs[.ownerAccountID] as? NSNumber, owner.uint32Value == getuid() else { return false }
-        guard let size = attrs[.size] as? NSNumber, size.intValue <= 16 * 1024 else { return false }
-        return true
-    }
-
-    // MARK: Command (MCPBackend writes, Ice reads)
-
-    static func writeCommand(_ command: Command) throws {
-        ensureDirectory()
-        let data = try JSONEncoder().encode(command)
-        try data.write(to: commandURL, options: .atomic)
-        // Owner-only regardless of umask.
-        try? FileManager.default.setAttributes(
-            [.posixPermissions: 0o600], ofItemAtPath: commandURL.path
-        )
-    }
-
-    static func readCommand() -> Command? {
-        guard isTrustedLocalFile(commandURL) else { return nil }
-        guard let data = try? Data(contentsOf: commandURL) else { return nil }
-        return try? JSONDecoder().decode(Command.self, from: data)
-    }
-
-    // MARK: Result (Ice writes, MCPBackend reads)
-
-    static func writeResult(_ result: Result) throws {
-        ensureDirectory()
-        let data = try JSONEncoder().encode(result)
-        try data.write(to: resultURL, options: .atomic)
-        try? FileManager.default.setAttributes(
-            [.posixPermissions: 0o600], ofItemAtPath: resultURL.path
-        )
-    }
-
-    static func readResult() -> Result? {
-        guard isTrustedLocalFile(resultURL) else { return nil }
-        guard let data = try? Data(contentsOf: resultURL) else { return nil }
-        return try? JSONDecoder().decode(Result.self, from: data)
-    }
 }

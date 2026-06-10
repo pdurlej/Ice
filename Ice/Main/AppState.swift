@@ -97,6 +97,13 @@ final class AppState: ObservableObject {
         triggerEngine.performSetup()
         mcpTriggerCommandHandler.performSetup(with: self)
 
+        // fire.10.2: the authenticated XPC relay that feeds both MCP
+        // fulfillers above. macOS 26-only, like the rest of the MCP surface
+        // (XPCSession). Must start after the fulfillers it dispatches to.
+        if #available(macOS 26.0, *) {
+            MCPRelayPump.shared.performSetup(with: self)
+        }
+
         configureCancellables()
     }
 

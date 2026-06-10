@@ -119,6 +119,21 @@ extension MenuBarItemService {
         /// Proposes removing an automation by id. The main app confirms before
         /// removing. Maps to MCP `remove_trigger`.
         case removeTrigger(id: String)
+
+        // MARK: - Main-app relay (fire.10.2)
+        //
+        // The Ice main app PULLS agent-originated work from MCPBackend.xpc and
+        // pushes results back over its own XPCSession — peer-gated to the same
+        // team on signed builds. This replaced the fire.8.2 file channels: no
+        // same-user process can inject or observe channel traffic anymore, and
+        // per-request replies remove the single-slot overwrite race. Only
+        // MCPBackend.xpc answers these; MenuBarItemService.xpc rejects them.
+
+        /// Main app → MCPBackend: hand over the next queued agent request.
+        case relayFetch
+
+        /// Main app → MCPBackend: the result for a previously fetched request.
+        case relayComplete(RelayResult)
     }
 
     enum Response: Codable {
@@ -154,6 +169,14 @@ extension MenuBarItemService {
 
         /// Response to `.listTriggers` — the user's installed automations.
         case triggers([TriggerSummary])
+
+        // MARK: - Main-app relay (fire.10.2)
+
+        /// Reply to `.relayFetch` — the next queued agent request, if any.
+        case relayWork(RelayWork?)
+
+        /// Reply to `.relayComplete`.
+        case relayAck
     }
 
     // MARK: - Shared Model Types
@@ -252,5 +275,35 @@ extension MenuBarItemService {
         let conditionDescription: String
         /// Fire-generated, e.g. "move “com.bitwarden.desktop” to the hidden section".
         let actionDescription: String
+    }
+
+    // MARK: - Relay payloads (fire.10.2)
+
+    /// One queued, agent-originated request awaiting main-app fulfillment.
+    enum RelayWork: Codable, Sendable {
+        case move(MCPWriteChannel.Command)
+        case trigger(MCPTriggerChannel.Proposal)
+
+        /// Correlates the queued item with the bridge call awaiting it.
+        var id: String {
+            switch self {
+            case .move(let command): command.id
+            case .trigger(let proposal): proposal.id
+            }
+        }
+    }
+
+    /// The main app's result for a fetched `RelayWork`.
+    enum RelayResult: Codable, Sendable {
+        case move(MCPWriteChannel.Result)
+        case trigger(MCPTriggerChannel.Result)
+
+        /// Matches a result back to the bridge call awaiting it.
+        var id: String {
+            switch self {
+            case .move(let result): result.id
+            case .trigger(let result): result.id
+            }
+        }
     }
 }
