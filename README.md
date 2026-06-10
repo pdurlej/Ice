@@ -95,9 +95,9 @@ The resulting `Ice.app` is unsigned (`ad-hoc`) and will need `tccutil reset` on 
 
 ## MCP Server
 
-Fire ships an embedded MCP server so you can ask an AI assistant to manage your menu bar. Wire Claude Desktop, Claude Code, Cursor, or Codex to `/Applications/Ice.app/Contents/MacOS/IceMCPBridge` and the 6 tools (`list_items`, `hide_item`, `show_item`, `move_item`, `save_layout`, `apply_layout`) become available. See [docs/mcp/CLIENT-SETUP.md](docs/mcp/CLIENT-SETUP.md) for setup.
+Fire ships an embedded MCP server so you can ask an AI assistant to manage your menu bar. Wire Claude Desktop, Claude Code, Cursor, or Codex to `/Applications/Ice.app/Contents/MacOS/IceMCPBridge` and 10 tools become available: layout (`list_items`, `hide_item`, `show_item`, `move_item`, `save_layout`, `apply_layout`, `list_layouts`) and automations (`set_trigger`, `list_triggers`, `remove_trigger`). Every write is consent-gated in Fire itself. See [docs/mcp/CLIENT-SETUP.md](docs/mcp/CLIENT-SETUP.md) for setup.
 
-**fire.6 status:** `list_items` and `save_layout` ship working - the LLM can inspect your current layout and persist named snapshots. The four write operations (`move_item`, `hide_item`, `show_item`, `apply_layout`) currently return "Coming in fire.7" - they require a cross-process architectural change that's planned for the next release.
+**Automations (fire.10+):** ask your assistant for *"when Slack is frontmost, hide my password manager"*, approve the change once in Fire's consent prompt, and it runs on its own from then on - on app focus, low battery, or a weekly schedule. An automation is a sealed, user-approved capability bound to the exact items and destination you saw in the prompt; manage them in Settings → Automations.
 
 ## Privacy & Diagnostics
 
@@ -149,7 +149,7 @@ This is a Fire-fork-specific addition; upstream Ice has no crash reporting becau
 - [x] Show/hide section divider icons
 - [x] Toggle application menus
 
-See [ROADMAP.md](ROADMAP.md) for fork-specific planned features (profiles, trigger conditions, layout import/export, sensible defaults for new-icon placement, per-display configuration).
+See [ROADMAP.md](ROADMAP.md) for fork-specific planned features (profiles, layout import/export, sensible defaults for new-icon placement, per-display configuration). Trigger conditions shipped in fire.10 as [AI-Native Automations](docs/mcp/CLIENT-SETUP.md).
 
 ## Contributing
 

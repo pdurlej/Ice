@@ -3,6 +3,8 @@
 Owner: pdurlej (solo). Repo: github.com/pdurlej/Ice. Local: `/Users/pd/Developer/fire`. Branch: `fire/main` (based on `upstream/macos-26`).
 Status as of 2026-05-24: PR #944 (CompactSlider API fix) cherry-picked, fire/main builds against upstream macos-26 baseline.
 
+> **Update 2026-06-10:** this document is a historical planning snapshot. Much of it shipped: signed/notarized CI DMGs, Sparkle appcast, the MCP server (fire.6–fire.8), AI Quotas (fire.9.x), and trigger conditions — shipped as **AI-Native Automations** in fire.10 (`set_trigger`/`list_triggers`/`remove_trigger` + Settings → Automations). Current state lives in [HANDOFF.md](HANDOFF.md).
+
 ---
 
 ## 1. Executive Summary
