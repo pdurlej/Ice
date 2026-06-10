@@ -20,7 +20,35 @@ approach confirmed; the fail-closed correction was its one required change.
 LESSON: with window-server CGImages, moving the capture is not enough — the
 fetch happens at draw time; materialize off-main or compute results off-main.
 
-## 📋 AUDIT (Fable 5, 2026-06-10) — W1–W4 DONE, W5 pending
+## 🔥 SHIPPED fire.10.2 — audit pack W1–W5 (2026-06-10 ~21:30)
+
+CI `27297989198` success; release `v0.11.13-fire.10.2` (build 1148) signed +
+notarized; installed; **relay smoke-tested end-to-end on the signed binary**
+(`list_triggers` → full path bridge → RelayQueue → pump → fulfiller →
+complete; legacy channel files auto-cleaned); appcast `808a30e`; **FIRE-E
+resolved @next — Sentry now has ZERO unresolved issues.**
+
+**W5 (the Max wave) — authenticated XPC relay** (`615cfc6`): the fire.8.2
+file channels are GONE. Design: PULL relay (main app can't host a Mach
+service — launchd refuses GUI apps, the documented Option D failure — so it
+is the CLIENT of its own MCPBackend.xpc, mirroring the proven
+MenuBarItemService pattern). `MCPBackend/RelayQueue.swift` = actor, FIFO +
+per-id waiters, continuations resume EXACTLY once (removeValue guards the
+timeout/complete race). `Ice/Services/MCPRelayPump.swift` = 200ms off-main
+fetch→fulfill→complete over a peer-gated XPCSession, STRICTLY serial (consent
+modals can never stack), cleans legacy channel files at startup. Wire:
+Request.relayFetch/.relayComplete, Response.relayWork/.relayAck,
+RelayWork/RelayResult; channel namespaces reduced to pure Codable models,
+symlinked into Bridge. Handlers are pure fulfillers now. WHAT IT BUYS:
+same-team peer requirement on signed builds ⇒ no same-user process can
+inject commands or forge results (consent prompts = defense-in-depth, not
+the only boundary); no single-slot races; zero file IO on the MCP path
+(FIRE-E class dead by design). SCOPED OUT + documented in
+AutomationGrant.swift: DataProtection-keychain for the grant HMAC key needs
+an app-identifier entitlement in CI signing first (app signs with no
+entitlements file ⇒ the call would errSecMissingEntitlement as dead code).
+
+## 📋 AUDIT (Fable 5, 2026-06-10) — ALL WAVES W1–W5 SHIPPED in fire.10.2
 
 **Executed 2026-06-10 (all compile-gated, committed per wave, pushed):**
 - **W1** (`ec31134`) correctness pack: codexbar timeout now actually
