@@ -3,6 +3,70 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🔥 SHIPPED fire.10.1 — IceBar App-Hang hotfix, FINISHED (2026-06-10 ~19:50)
+
+CI `27294364385` success; release `v0.11.13-fire.10.1` (build 1147) published,
+notarized; appcast updated (`fire-releases` `b58d802`); installed locally.
+Sentry: **FIRE-D resolved @next**, **FIRE-C resolved** (old 9.8 client).
+
+The fix (`4ca76f6`): fire.9.9 was a HALF-fix — it moved the CGWindowList
+capture *call* off-main, but the returned CGImage is LAZY; the expensive
+window-server pixel fetch (CGSCaptureImageProviderBytePointer) ran at first
+DRAW, inside `averageColor()` on the MAIN thread (Sentry FIRE-D, on 10.0).
+Now `materialized(_:)` rasterizes into a resident bitmap ON the capture
+queue, FAIL CLOSED (nil on failure — never hand a lazy image to main).
+Reviewed by GPT-5.5 Pro (`~/.oracle/sessions/fire-icebar-anr-materializ-review`):
+approach confirmed; the fail-closed correction was its one required change.
+LESSON: with window-server CGImages, moving the capture is not enough — the
+fetch happens at draw time; materialize off-main or compute results off-main.
+
+## 📋 AUDIT (Fable 5, 2026-06-10) — wave plan W1–W5 pending
+
+Full-fork audit (me + 2 Explore agents + Sentry). Confirmed findings → waves:
+- **W1 Correctness** (→ fire.10.2): (a) `CodexBarCLIQuotaBackend.runProcess`
+  timeout is INEFFECTIVE — on the timeout path `group.next()` throws so
+  `process.terminate()` (l.158-161) is unreachable and the task group blocks
+  awaiting the unresumed continuation until the child process exits on its
+  own → a wedged codexbar freezes the AI Quotas item forever (move terminate()
+  into the timeout child, guard isRunning); (b) **FIRE-E (NEW, found via
+  Sentry post-audit, UNRESOLVED as tracker)**: both channel handlers poll on
+  main at 5 Hz each and `isTrustedLocalFile` does a synchronous
+  `FileManager.attributesOfItem` (stat) on the MAIN thread — blocks ≥2s under
+  disk pressure; move poll file-IO off-main (utility queue, hop back with the
+  decoded command) or DispatchSource; (c) Bridge `cooldown_seconds` parsed via
+  `.doubleValue` only — MCP `Value.doubleValue` is a strict case-match so int
+  → nil → silent default 5 (add int+double parse); (d)
+  `MenuBarMutationCoordinator.execute` never re-validates trigger grants
+  although `MutationJob.triggerID/Generation` exist for exactly that (close
+  the defense-in-depth gap for source == .trigger); (e) AppState lines ~79+91
+  call `mcpWriteCommandHandler.performSetup` TWICE (drop the second); (f)
+  TriggerSpecTranslator accepts `start==end` timeWindow (always-false window —
+  reject with message).
+- **W2 IceBar finish**: compute `averageColor` on the captureQueue, main gets
+  only the color (GPT-5.5 Pro "strongest version").
+- **W3 Dead-code sweep** (~800+ lines): `MCPBackend/Mover.swift` (verified: no
+  callers) + `makeMoveItem`/`displayContaining` in MCPBackendStateManager +
+  legacy write stubs in `MenuBarItemService/MenuBarStateManager` (return
+  "Coming in fire.7"; keep listItems/saveLayout/listLayouts/sourcePID) +
+  unused `TriggerRule.lastState` field.
+- **W4 Docs + brand**: CLIENT-SETUP.md lacks the 3 trigger tools; README still
+  lists "trigger conditions" as ROADMAP/planned though shipped in 10.0.
+  REBRAND: rename repo `pdurlej/Ice` → `fire-from-ice` (user's call; GitHub
+  auto-redirects old release URLs so the existing appcast keeps working; new
+  appcast entries use the new name; update local remote, gh default, badges).
+  App has KILKANAŚCIE downloads (real users).
+- **W5 Hardening P2** (tracked follow-up): authenticated XPC replaces the file
+  channels (kills single-slot overwrite races + the 15-120s loser-timeout
+  UX + XPC pool starvation via syncWait), Keychain ACL bound to code signature.
+- P3 backlog: set_trigger approval after >120s installs but agent already got
+  timeout (document/extend); two consent modals can nest (write + trigger);
+  `hasValidGrant` hits Keychain per row per render in Settings (cache);
+  result-match lacks staleness check; `try?` decode in channels (poison file =
+  silent re-poll loop). Adjudicated FALSE agent claims (do not re-chase):
+  CodexBar "double-resume crash" (only terminationHandler XOR run()-catch
+  resumes), syncWait `var result: T!` "crash" (it's a hang/starvation, not a
+  crash), IceBarColorManager isCapturing "permanent lock" (instance-scoped).
+
 ## 🔥 SHIPPED fire.10.0 — AI-Native Triggers P1 (2026-06-08 ~22:55)
 
 CI run `27165435645` **success** (signed + notarized); release published
