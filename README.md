@@ -23,10 +23,10 @@ Ice is a powerful menu bar management tool for macOS. While its primary function
 
 ![Banner](https://github.com/user-attachments/assets/4423085c-4e4b-4f3d-ad0f-90a217c03470)
 
-[![Download](https://img.shields.io/github/v/release/pdurlej/Ice?label=Download%20latest%20DMG&style=flat-square&color=brightgreen)](https://github.com/pdurlej/Ice/releases/latest)
+[![Download](https://img.shields.io/github/v/release/pdurlej/fire-from-ice?label=Download%20latest%20DMG&style=flat-square&color=brightgreen)](https://github.com/pdurlej/fire-from-ice/releases/latest)
 ![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-blue?style=flat-square)
 ![Signed](https://img.shields.io/badge/Developer%20ID-signed%20%2B%20notarized-success?style=flat-square)
-[![License](https://img.shields.io/github/license/pdurlej/Ice?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/github/license/pdurlej/fire-from-ice?style=flat-square)](LICENSE)
 
 ## What this fork fixes
 
@@ -40,7 +40,7 @@ Ice is a powerful menu bar management tool for macOS. While its primary function
 
 ### Download the signed DMG
 
-1. Grab the latest `Ice-v0.11.13-fire.X.dmg` from [Releases](https://github.com/pdurlej/Ice/releases/latest).
+1. Grab the latest `Ice-v0.11.13-fire.X.dmg` from [Releases](https://github.com/pdurlej/fire-from-ice/releases/latest).
 2. Open the DMG. Drag **Ice.app** to your `Applications` folder.
 3. Launch from `/Applications`. On first run, macOS may prompt for **Accessibility** and **Screen Recording** - grant both.
 
@@ -85,8 +85,8 @@ When Fire moves to Phase 4 of the [roadmap](FORK.md#phasing) (proper "Fire" rebr
 ## Building from source
 
 ```sh
-git clone https://github.com/pdurlej/Ice.git
-cd Ice
+git clone https://github.com/pdurlej/fire-from-ice.git
+cd fire-from-ice
 xcodebuild -scheme Ice -configuration Release \
     CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=NO
 ```
@@ -153,7 +153,7 @@ See [ROADMAP.md](ROADMAP.md) for fork-specific planned features (profiles, layou
 
 ## Contributing
 
-- **Bugs specific to this fork** (not present in upstream Ice `0.11.12`): file in [this repo's Issues](https://github.com/pdurlej/Ice/issues).
+- **Bugs specific to this fork** (not present in upstream Ice `0.11.12`): file in [this repo's Issues](https://github.com/pdurlej/fire-from-ice/issues).
 - **Bugs present in upstream too**: please file [upstream](https://github.com/jordanbaird/Ice/issues) first so they show in the canonical tracker. Cross-link from this repo if relevant.
 - **Pull requests**: open against `fire/main`. Both `lint.yml` (SwiftLint, runs on every push touching `**/*.swift`) and `build-dmg.yml` (full signed+notarized build, runs on tag push `v*`) must stay green.
 

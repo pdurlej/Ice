@@ -60,7 +60,7 @@ base for fire/main is therefore a real choice, not a formality.
 ## Remotes
 
 ```
-origin    https://github.com/pdurlej/Ice         # the fork (push)
+origin    https://github.com/pdurlej/fire-from-ice         # the fork (push)
 upstream  https://github.com/jordanbaird/Ice     # original (read-only)
 ```
 

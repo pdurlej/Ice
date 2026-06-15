@@ -3,6 +3,22 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🏷️ REBRAND DONE — repo renamed to `pdurlej/fire-from-ice` (2026-06-15)
+
+`gh repo rename` done: `pdurlej/Ice` → **`pdurlej/fire-from-ice`**. GitHub
+301-redirects the old name and ALL sub-paths, so existing appcast enclosure
+URLs (`…/pdurlej/Ice/releases/download/…`) keep resolving for installed
+users — Sparkle auto-update unaffected. The 6 CI secrets moved with the repo;
+`build-dmg.yml` uses `${{ github.repository }}` so future releases auto-use
+the new name. Local `origin` repointed. In-repo `pdurlej/Ice` refs swapped to
+`fire-from-ice` across README/FORK/ROADMAP/docs/Info.plist/HANDOFF; the
+`git clone … && cd Ice` line fixed to `cd fire-from-ice`.
+UNCHANGED ON PURPOSE: bundle id `com.jordanbaird.Ice` (TCC + Sentry + appcast
+version-matching depend on it), Xcode project/scheme `Ice` + product `Ice.app`,
+the `pdurlej/fire-releases` appcast repo, and `SUFeedURL`
+(`pdurlej.github.io/fire-releases`). Sentry post-10.2: ZERO unresolved, zero
+events on build 1148 over 5 days — the App-Hang saga is field-verified closed.
+
 ## 🔥 SHIPPED fire.10.1 — IceBar App-Hang hotfix, FINISHED (2026-06-10 ~19:50)
 
 CI `27294364385` success; release `v0.11.13-fire.10.1` (build 1147) published,
@@ -100,7 +116,7 @@ Full-fork audit (me + 2 Explore agents + Sentry). Confirmed findings → waves:
   unused `TriggerRule.lastState` field.
 - **W4 Docs + brand**: CLIENT-SETUP.md lacks the 3 trigger tools; README still
   lists "trigger conditions" as ROADMAP/planned though shipped in 10.0.
-  REBRAND: rename repo `pdurlej/Ice` → `fire-from-ice` (user's call; GitHub
+  REBRAND: rename repo `pdurlej/fire-from-ice` → `fire-from-ice` (user's call; GitHub
   auto-redirects old release URLs so the existing appcast keeps working; new
   appcast entries use the new name; update local remote, gh default, badges).
   App has KILKANAŚCIE downloads (real users).
@@ -586,7 +602,7 @@ appcast'd, so users jump 8.1 → 8.4 → 9.
 ## 🔥🔥🔥 SHIPPED fire.8.1 - moves verified end-to-end on macOS 26 (2026-05-29 ~10:17)
 
 **Tagged `v0.11.13-fire.8.1`** (build 1132). CI built + signed + notarized
-in ~4m. DMG at https://github.com/pdurlej/Ice/releases/tag/v0.11.13-fire.8.1.
+in ~4m. DMG at https://github.com/pdurlej/fire-from-ice/releases/tag/v0.11.13-fire.8.1.
 Sparkle appcast updated (`pdurlej/fire-releases` commit `27b9e7e`).
 fire.8 users will get the auto-update prompt.
 
@@ -631,7 +647,7 @@ minX-boundary approach makes them obsolete).
 ## 🔥🔥🔥 SHIPPED fire.8 - write ops live (2026-05-26 ~22:01)
 
 **Tagged `v0.11.13-fire.8`** (build 1131). CI built + signed + notarized
-in 4m34s — DMG at https://github.com/pdurlej/Ice/releases/tag/v0.11.13-fire.8.
+in 4m34s — DMG at https://github.com/pdurlej/fire-from-ice/releases/tag/v0.11.13-fire.8.
 Sparkle appcast updated (`pdurlej/fire-releases` commit `22aa494`),
 fire.7.1 users will get the fire.8 auto-update prompt.
 
@@ -681,7 +697,7 @@ W5+W6 polish before tagging fire.8.
 ### fire.7.1 ship
 
 **`v0.11.13-fire.7.1`** (build 1130) shipped: signed + notarized DMG at
-https://github.com/pdurlej/Ice/releases/tag/v0.11.13-fire.7.1, appcast
+https://github.com/pdurlej/fire-from-ice/releases/tag/v0.11.13-fire.7.1, appcast
 entry appended to `pdurlej/fire-releases` commit `aa6ae05`. fire.7
 users will get the auto-update prompt.
 
@@ -847,9 +863,9 @@ ship status above.
 
 **Next session ship action** (assuming GitHub is healthy):
 ```bash
-gh run rerun <latest-failed-run-id> -R pdurlej/Ice
+gh run rerun <latest-failed-run-id> -R pdurlej/fire-from-ice
 # or manually:
-gh workflow run "Build macOS and Create DMG" -R pdurlej/Ice --ref v0.11.13-fire.7.1
+gh workflow run "Build macOS and Create DMG" -R pdurlej/fire-from-ice --ref v0.11.13-fire.7.1
 ```
 
 Then: download the DMG, `sign_update`, append to appcast.xml at `pdurlej/fire-releases`.
@@ -889,7 +905,7 @@ Estimated remaining for fire.8: 7-8h (depending on whether SourcePIDCache sharin
 
 ## 🔥 SHIPPED fire.7 - multi-display read-only MCP (2026-05-26 ~12:10)
 
-**Tagged `v0.11.13-fire.7`** (build 1129). CI built + signed + notarized; DMG at https://github.com/pdurlej/Ice/releases/tag/v0.11.13-fire.7. Sparkle appcast updated with EdDSA-signed entry (`pdurlej/fire-releases` commit `7dbebdd`) so fire.6 users will receive auto-update notification.
+**Tagged `v0.11.13-fire.7`** (build 1129). CI built + signed + notarized; DMG at https://github.com/pdurlej/fire-from-ice/releases/tag/v0.11.13-fire.7. Sparkle appcast updated with EdDSA-signed entry (`pdurlej/fire-releases` commit `7dbebdd`) so fire.6 users will receive auto-update notification.
 
 **What fire.7 adds:**
 - `list_items` now iterates ALL active displays via `CGGetActiveDisplayList`, not just the primary
@@ -988,7 +1004,7 @@ Cons:
 
 ## 🔥 SHIPPED fire.6 — MCP read-only (2026-05-26 ~08:40)
 
-**Tagged `v0.11.13-fire.6`** (build 1128). CI workflow "Build macOS and Create DMG" running on the tag — will sign + notarize + draft GitHub Release with the DMG. Tracked at https://github.com/pdurlej/Ice/actions.
+**Tagged `v0.11.13-fire.6`** (build 1128). CI workflow "Build macOS and Create DMG" running on the tag — will sign + notarize + draft GitHub Release with the DMG. Tracked at https://github.com/pdurlej/fire-from-ice/actions.
 
 **What fire.6 adds over fire.5:**
 - Real `list_items` MCP tool — Claude/Cursor/Continue can read your menu bar layout. Section detection works when Ice is running (uses Ice's 3 control items as x-coordinate boundaries). Graceful fallback to "all alwaysVisible" when Ice isn't running. Multi-display deferred to fire.7.
@@ -1082,7 +1098,7 @@ After fire.5 shipped, the session continued with the actual MCP MVP
 implementation work, getting through Phases 1 and 2 of the five-phase
 plan from `docs/mcp/ARCHITECTURE.md`.
 
-**WIP PR #2** — https://github.com/pdurlej/Ice/pull/2 (draft, branch
+**WIP PR #2** — https://github.com/pdurlej/fire-from-ice/pull/2 (draft, branch
 `feature/mcp-mvp-phase1-xpc-contract` → `fire/main`).
 The PR body is the canonical source for what's in / what's missing.
 
@@ -1204,7 +1220,7 @@ deliverables:
   issues via Google.
 - **MCP Phase 4.5 design doc + tracking issue** — `docs/mcp/
   ARCHITECTURE.md` (commit `86945db`, 569 lines, 9 sections), and
-  [Issue #1](https://github.com/pdurlej/Ice/issues/1) as milestone
+  [Issue #1](https://github.com/pdurlej/fire-from-ice/issues/1) as milestone
   tracker.
 
 Owner installed fire.4 over fire.3 and confirmed Menu Bar Layout pane
@@ -1298,8 +1314,8 @@ non-destructive.
 
 ### 1. Fire — maintained fork of jordanbaird/Ice
 
-- Repo: `https://github.com/pdurlej/Ice`, default branch `fire/main`.
-- Local: `/Users/pd/Developer/fire`. Remotes: origin = pdurlej/Ice, upstream = jordanbaird/Ice (push disabled).
+- Repo: `https://github.com/pdurlej/fire-from-ice`, default branch `fire/main`.
+- Local: `/Users/pd/Developer/fire`. Remotes: origin = pdurlej/fire-from-ice, upstream = jordanbaird/Ice (push disabled).
 - Currently shipping: tag `v0.11.13-fire.3`, installed in `/Applications/Ice.app`, working on the owner's machine
   with menu bar items loading after the XPC fix.
 - Bundle ID unchanged from upstream: `com.jordanbaird.Ice`.
@@ -1313,7 +1329,7 @@ non-destructive.
 ### 2. Fire — signed builds (SHIPPED at fire.4)
 
 - `feature/signed-builds-prep` merged into `fire/main` at commit `8d3aee5`.
-- All six GH Actions secrets set on `pdurlej/Ice`: `BUILD_CERTIFICATE_BASE64`,
+- All six GH Actions secrets set on `pdurlej/fire-from-ice`: `BUILD_CERTIFICATE_BASE64`,
   `P12_PASSWORD`, `APPLE_ID` (= `piotr@durlej.me` — NOT `p@durlej.me`),
   `APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` (= `R47JTHX25P`), `KEYCHAIN_PASSWORD` (uuid).
 - Apple Developer Program approved (individual, Team `R47JTHX25P`, name `Piotr Krzysztof Durlej`).
@@ -1322,7 +1338,7 @@ non-destructive.
   `security find-identity -v -p codesigning` showing both legacy
   "Apple Development" + Developer ID Application.
 - fire.4 DMG (tag `v0.11.13-fire.4`, build 1126) is live:
-  `https://github.com/pdurlej/Ice/releases/tag/v0.11.13-fire.4`. Notarized,
+  `https://github.com/pdurlej/fire-from-ice/releases/tag/v0.11.13-fire.4`. Notarized,
   stapled, Gatekeeper-accepted, installed on owner's Mac.
 - Future tagged builds (`v0.11.13-fire.5`, etc.) will go through the same
   workflow with zero secret/manual intervention. Just bump
@@ -1413,7 +1429,7 @@ the branch + open the PR proactively after a respectful wait (~1–2 weeks).
   FORK.md roadmap integration, risks, effort estimate, 9 open
   questions). Drafted via Swarmheart `structural-planner` lane (kimi
   primary, fell back to glm-5.1).
-- **Tracking issue:** [pdurlej/Ice#1](https://github.com/pdurlej/Ice/issues/1)
+- **Tracking issue:** [pdurlej/fire-from-ice#1](https://github.com/pdurlej/fire-from-ice/issues/1)
   — first issue on our repo, milestone tracker.
 - **MVP scope:** 6 tools (`list_items`, `move_item`, `hide_item`,
   `show_item`, `apply_layout`, `save_layout`), separate `IceMCPBridge`

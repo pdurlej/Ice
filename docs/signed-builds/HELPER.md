@@ -92,12 +92,12 @@ base64 -w 0 cert.p12 > cert.p12.b64   # GNU coreutils
 If `gh` is authenticated (`gh auth status` shows you logged in), this is one shell block:
 
 ```bash
-gh secret set BUILD_CERTIFICATE_BASE64 --repo pdurlej/Ice < cert.p12.b64
-gh secret set P12_PASSWORD             --repo pdurlej/Ice --body "<the .p12 password you set in step 2>"
-gh secret set APPLE_ID                 --repo pdurlej/Ice --body "p@durlej.me"
-gh secret set APP_SPECIFIC_PASSWORD    --repo pdurlej/Ice --body "<app-specific password from SETUP step 4>"
-gh secret set APPLE_TEAM_ID            --repo pdurlej/Ice --body "<10-char Team ID>"
-gh secret set KEYCHAIN_PASSWORD        --repo pdurlej/Ice --body "$(uuidgen)"
+gh secret set BUILD_CERTIFICATE_BASE64 --repo pdurlej/fire-from-ice < cert.p12.b64
+gh secret set P12_PASSWORD             --repo pdurlej/fire-from-ice --body "<the .p12 password you set in step 2>"
+gh secret set APPLE_ID                 --repo pdurlej/fire-from-ice --body "p@durlej.me"
+gh secret set APP_SPECIFIC_PASSWORD    --repo pdurlej/fire-from-ice --body "<app-specific password from SETUP step 4>"
+gh secret set APPLE_TEAM_ID            --repo pdurlej/fire-from-ice --body "<10-char Team ID>"
+gh secret set KEYCHAIN_PASSWORD        --repo pdurlej/fire-from-ice --body "$(uuidgen)"
 ```
 
 Notes:
@@ -110,7 +110,7 @@ Notes:
 ## 6. Verify all six landed
 
 ```bash
-gh secret list --repo pdurlej/Ice
+gh secret list --repo pdurlej/fire-from-ice
 ```
 
 Expect output like:

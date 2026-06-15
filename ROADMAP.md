@@ -1,6 +1,6 @@
 # Fire (Ice fork) — Engineering Roadmap
 
-Owner: pdurlej (solo). Repo: github.com/pdurlej/Ice. Local: `/Users/pd/Developer/fire`. Branch: `fire/main` (based on `upstream/macos-26`).
+Owner: pdurlej (solo). Repo: github.com/pdurlej/fire-from-ice. Local: `/Users/pd/Developer/fire`. Branch: `fire/main` (based on `upstream/macos-26`).
 Status as of 2026-05-24: PR #944 (CompactSlider API fix) cherry-picked, fire/main builds against upstream macos-26 baseline.
 
 > **Update 2026-06-10:** this document is a historical planning snapshot. Much of it shipped: signed/notarized CI DMGs, Sparkle appcast, the MCP server (fire.6–fire.8), AI Quotas (fire.9.x), and trigger conditions — shipped as **AI-Native Automations** in fire.10 (`set_trigger`/`list_triggers`/`remove_trigger` + Settings → Automations). Current state lives in [HANDOFF.md](HANDOFF.md).
@@ -421,7 +421,7 @@ After 1.3.0, the roadmap becomes reactive: fix what users file. Reserve every fo
 ### 8.3 Community engagement plan
 
 - **Don't drown the upstream tracker.** One post in #760 after Phase 1 lands. One post in #823 ("is it dead?") with the same message. Then silence on upstream — let users find us organically.
-- **Open a Fire-specific Discussions board** on `pdurlej/Ice` repo (currently disabled by default). Phase 0 deliverable: enable Discussions, pin a "Welcome / what is this fork" thread.
+- **Open a Fire-specific Discussions board** on `pdurlej/fire-from-ice` repo (currently disabled by default). Phase 0 deliverable: enable Discussions, pin a "Welcome / what is this fork" thread.
 - **Issue triage cadence:** weekly, 1 hour, Sundays. Label new issues as `bug | feature | upstream-applies | wontfix`. Close anything that's actually upstream's problem with a polite link.
 - **Don't take credit for upstream work.** Every cherry-picked PR's commit message preserves the original author. Release notes credit by `@handle`.
 

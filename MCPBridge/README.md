@@ -1,7 +1,7 @@
 # IceMCPBridge
 
 This directory is the scaffold for the **Fire MCP Server** (Phase 4.5 of
-the FORK.md roadmap). Tracked in [Issue #1](https://github.com/pdurlej/Ice/issues/1).
+the FORK.md roadmap). Tracked in [Issue #1](https://github.com/pdurlej/fire-from-ice/issues/1).
 Architecture doc: [`docs/mcp/ARCHITECTURE.md`](../docs/mcp/ARCHITECTURE.md).
 
 ## Status: scaffolded, not yet implemented

@@ -7,7 +7,7 @@
 
 	  Feed XML is served from a separate dedicated repository
 	  (pdurlej/fire-releases) via GitHub Pages so that the source
-	  repository (pdurlej/Ice) does not need to host static XML on a
+	  repository (pdurlej/fire-from-ice) does not need to host static XML on a
 	  branch. Each tagged release on this repository is signed with the
 	  matching EdDSA private key — kept exclusively in the maintainer's
 	  Keychain and in the SPARKLE_PRIVATE_KEY GitHub Actions secret —

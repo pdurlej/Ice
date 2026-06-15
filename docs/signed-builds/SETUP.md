@@ -104,7 +104,7 @@ See `HELPER.md` for the exact commands. Result: a base64-encoded blob you'll pas
 
 ## 6. Add secrets to GitHub Actions
 
-Browser route: https://github.com/pdurlej/Ice/settings/secrets/actions → **New repository secret** for each of the six below. Or use the `gh secret set` shortcut in `HELPER.md`.
+Browser route: https://github.com/pdurlej/fire-from-ice/settings/secrets/actions → **New repository secret** for each of the six below. Or use the `gh secret set` shortcut in `HELPER.md`.
 
 | Secret name | Value |
 |---|---|
@@ -118,7 +118,7 @@ Browser route: https://github.com/pdurlej/Ice/settings/secrets/actions → **New
 Verify they all landed:
 
 ```bash
-gh secret list --repo pdurlej/Ice
+gh secret list --repo pdurlej/fire-from-ice
 ```
 
 All six names should appear with recent timestamps.
@@ -180,7 +180,7 @@ The tag push is what triggers the release workflow.
 
 ## 10. Watch the CI run
 
-Open https://github.com/pdurlej/Ice/actions and click into the running job. Expected steps in order:
+Open https://github.com/pdurlej/fire-from-ice/actions and click into the running job. Expected steps in order:
 
 1. **Setup Xcode** — pulls the Xcode version pinned in the workflow
 2. **Import certificate** — decodes `BUILD_CERTIFICATE_BASE64`, imports into a temp keychain locked with `KEYCHAIN_PASSWORD`
@@ -240,6 +240,6 @@ If TCC re-prompts on first launch after a signed upgrade, that's a real bug — 
 
 - Cert authority page: https://developer.apple.com/account/resources/certificates/list
 - App-specific passwords: https://appleid.apple.com
-- GitHub secrets UI: https://github.com/pdurlej/Ice/settings/secrets/actions
-- Actions runs: https://github.com/pdurlej/Ice/actions
+- GitHub secrets UI: https://github.com/pdurlej/fire-from-ice/settings/secrets/actions
+- Actions runs: https://github.com/pdurlej/fire-from-ice/actions
 - Apple notarization status: https://developer.apple.com/system-status/ (check here if notarytool hangs >15 min)
