@@ -90,6 +90,25 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO
 
+      - name: Upload dSYMs to Sentry (symbolicate crashes & App Hangs)
+        # The archive's dSYMs carry the Mach-O UUIDs, which survive the manual
+        # codesign below, so they symbolicate the shipped binary. Without this,
+        # our own frames render as "<anonymous> [in-app]" in Sentry and every
+        # hang has to be reverse-engineered from library frames. Guarded on the
+        # token so the build still works for forks/PRs that lack the secret.
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: pdurlej
+          SENTRY_PROJECT: fire
+        run: |
+          if [ -z "$SENTRY_AUTH_TOKEN" ]; then
+            echo "SENTRY_AUTH_TOKEN not set — skipping dSYM upload."
+            echo "Add it (Settings → Secrets → Actions) to enable symbolication."
+            exit 0
+          fi
+          curl -sL https://sentry.io/get-cli/ | bash
+          sentry-cli debug-files upload "build/Ice.xcarchive/dSYMs"
+
       - name: Codesign the .app with Developer ID (hardened runtime + secure timestamp)
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
