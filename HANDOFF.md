@@ -9,26 +9,27 @@ Owner (pdurlej) will tell me to read this in a fresh session.
   commands need `-R pdurlej/fire-from-ice` (old `pdurlej/Ice` 301-redirects but
   use the new name). Branch `fire/main`. Local: `/Users/pd/Developer/fire`.
   App bundle stays `com.jordanbaird.Ice` / `Ice.app` ON PURPOSE.
-- **Shipped: fire.10.3 / build 1149** (installed, notarized, appcast live on
-  `pdurlej.github.io/fire-releases`, Sparkle verified "up to date"). Sentry
-  symbolication is **LIVE** (dSYM upload in CI; needs the `SENTRY_AUTH_TOKEN`
-  secret, already set).
-- **THE one live thread → App-Hang on CLICK-TO-REVEAL a hidden icon.** Sentry
-  **FIRE-F/G/H** (unresolved, on 10.2) = synchronous SkyLight on main
-  (`SLSWindowServerClientCopySpacesForWindows`/`SLSGetWindowCount`). Owner's own
-  Mac (Lublin, macOS 26.5.1). NOT the fork's trigger path (local Triggers=[]);
-  likely upstream Ice's show-hidden-item enumeration on main. **NEXT ACTION:**
-  wait for it to recur ON 10.3 (now symbolicated) → read the named frame → make
-  the targeted off-main fix (or owner's Bartender-style promote-on-click idea)
-  as **fire.10.4**. See [[fire-apphang-click-to-reveal]].
-- **Sentry triage note:** modal-wait ANRs are now NOISE (symbolication surfaced
-  them). FIRE-J (archived) was Sparkle's "You're up to date!" NSAlert left open
-  >2s — `SPUStandardUserDriver showUpdateNotFoundWithError → runModal`. Our
-  consent prompts (MCPWriteAuthorization / AutomationAuthorization) will do the
-  same. **fire.10.4 should filter modal `runModal` ANRs** in the Sentry SDK
-  (beforeSend, or pause app-hang tracking around runModal) so real hangs don't
-  get buried. (The audit already flagged "consent modal blocks main BY DESIGN —
-  not a bug.")
+- **Shipped: fire.10.4 / build 1150** (installed, notarized, appcast live on
+  `pdurlej.github.io/fire-releases`). Sentry symbolication **LIVE** (dSYM upload
+  in CI; `SENTRY_AUTH_TOKEN` set). 10.4 = honest MCP kill-switch + modal-ANR
+  filter + click-to-reveal App-Hang fix (see SHIPPED section below).
+- **THE one live thread → App-Hang on CLICK-TO-REVEAL a hidden icon. FIX LANDED
+  in 10.4 — field-verification PENDING.** Sentry **FIRE-F/G/H** (still
+  unresolved, last events on 10.2) = synchronous SkyLight on main
+  (`SLSWindowServerClientCopySpacesForWindows`/`SLSGetWindowCount`). Found by
+  CODE TRACE (not a symbolicated frame): `MenuBarItemManager` is `@MainActor`,
+  so `cacheItemsIfNeeded()` ran `getMenuBarWindowList(.activeSpace)` (per-window
+  `CGSCopySpacesForWindows`) ON MAIN, and `IceBar.show` calls it on every
+  reveal. 10.4 moved that read off-main (`Task.detached`). **NEXT ACTION:** watch
+  Sentry — FIRE-F should STOP on `fire.10.4+1150`. If it recurs on 10.4, a
+  second main-thread caller remains (or do the Bartender-style promote-on-click).
+  FIRE-H is a DIFFERENT site (`getWindowCount`, 1 event) — not yet addressed.
+  See [[fire-apphang-click-to-reveal]].
+- **Sentry triage note (DONE in 10.4):** modal-wait ANRs were NOISE burying real
+  hangs (FIRE-J = Sparkle's "You're up to date!" `runModal`, archived). 10.4
+  added a `beforeSend` filter in AppDelegate that drops App-Hang events parked
+  in `runModal`/`SPUStandardUserDriver`/`NSAlert` (crashes never dropped). So our
+  consent prompts + Sparkle modals no longer generate ANR noise.
 - **Tests:** `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun
   swift test --package-path FireLogic` (29 tests; needs the Xcode toolchain —
   plain `swift test` lacks XCTest). Compile-gate the app:
@@ -45,13 +46,45 @@ Owner (pdurlej) will tell me to read this in a fresh session.
   prompt**), hand-insert the `<item>` before `</channel>`, push with
   `git -c user.email="pdurlej@users.noreply.github.com" -c user.name="Piotr
   Durlej"`. (Automating this is on the roadmap.)
-- **Roadmap (from the 50-finding audit):** 10.4 = settings-honesty (3 dead
-  Advanced toggles) + App-Hang fix + modal-ANR filter. 10.5 = no-team relay
-  pinning (P1, ad-hoc only — signed DMG already enforces `.isFromSameTeam`) +
-  sendSync watchdog. CI = SHA-pin actions, `concurrency:`, automate appcast.
+- **Roadmap:** ~~10.4 = settings-honesty + App-Hang fix + modal-ANR filter~~ ✅
+  SHIPPED. **10.5** = no-team relay pinning (P1, ad-hoc only — signed DMG already
+  enforces `.isFromSameTeam`) + sendSync watchdog + handler-pool starvation +
+  (if FIRE-H recurs) off-main `isWindowOnScreen` in the IceBar click path. CI =
+  SHA-pin actions, `concurrency:`, automate the manual appcast/sign_update step.
+  Also flagged this session: detect a competing menu bar manager (Bartender /
+  HiddenBar / Dozer by bundle id) and warn instead of silently fighting.
 - **Behaviour:** do NOT tell the owner to rest/sleep/wrap-up (documented Opus
   tic). Oracle only via the `oracle` MCP wrapper / browser / gpt-5.5-pro, don't
   rerun on timeout (use oracle-await). Owner handles all secrets/tokens.
+
+## 🔥 SHIPPED fire.10.4 — honest MCP kill-switch + modal-ANR filter + App-Hang fix (2026-06-19)
+
+CI `27822646798` success; release `v0.11.13-fire.10.4` (build 1150) signed +
+notarized + 16 dSYMs uploaded; appcast `eaf6121` (live on Pages, verified).
+Triggered by the owner enabling Bartender 6 (menu bar "exploded" → quit clean,
+no crash) which prompted re-tracing the reveal path. Commits `0c5b11f` (code) +
+`9275679` (bump). What landed:
+- **A — honest MCP kill-switch (the real trust bug).** The 3 Advanced → MCP
+  toggles were INERT — the server answered regardless, so "Enable MCP server"
+  off did nothing. Now authoritative: `MCPBackend/Listener` gates every
+  agent-facing request (`Response.denied`) — server off ⇒ all refused; writes
+  off ⇒ writes refused, reads still work; the relay handshake is never gated.
+  `MCPRelayPump.fulfill` re-checks (defense-in-depth) + posts a coalescing
+  `mcpNotifyOnWrite` notification. Classification lives on the wire enum
+  (`Request.isAgentFacing`/`isAgentWrite`, `RelayWork.isAgentWrite`).
+  **Upgrade-safe migration** (`migrateMCPToggles`, keyed `hasMigratedMCPToggles`,
+  upgrade signal = `hasMigrated0_8_0` captured before migrations run): existing
+  installs inherit ON (no broken integration), fresh installs stay privacy-first
+  OFF (opt-in per the docs). Writes stay a separate opt-in. Live-smoked both
+  denial paths on the real gate (Debug bridge → MCPBackend) AND the allow path
+  on the notarized build (migration preserved owner's 1/1/1).
+- **B — modal-ANR filter.** `AppDelegate` Sentry `beforeSend` drops App-Hangs
+  parked in `runModal`/`SPUStandardUserDriver`/`NSAlert`. Crashes never dropped.
+- **C — click-to-reveal App-Hang fix (FIRE-F).** `MenuBarItemManager` is
+  `@MainActor` ⇒ `cacheItemsIfNeeded()` ran `getMenuBarWindowList(.activeSpace)`
+  (per-window `CGSCopySpacesForWindows`) ON MAIN; `IceBar.show` calls it on every
+  reveal. Moved off-main via `Task.detached` (pure read → `[CGWindowID]`). Field-
+  verification pending (FIRE-F should stop on 10.4). See [[fire-apphang-click-to-reveal]].
 
 ## 🔥 SHIPPED fire.10.3 — test suite + trust/correctness batch + symbolication (2026-06-19)
 
