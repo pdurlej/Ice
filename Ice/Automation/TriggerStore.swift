@@ -44,9 +44,20 @@ final class TriggerStore: ObservableObject {
             guard
                 let sealed = grantByTrigger[rule.id],
                 sealed.grant.generation == rule.generation,
+                sealed.grant.canonicalDigest == TriggerCanonicalizer.digest(condition: rule.condition, action: rule.onEnter),
                 AutomationGrantStore.shared.validates(sealed)
             else {
-                logger.warning("Trigger \(rule.id, privacy: .public) disabled: grant missing/stale/tampered")
+                // Bind "enabled" to the grant's CONTENT digest, not just its MAC:
+                // a rule whose condition/action/write-set drifted from what was
+                // approved is force-disabled here so the UI honestly shows
+                // "Re-approve…" instead of appearing enabled but silently never
+                // firing (validateForFire would block it). This is also the
+                // clean migration for the fire.10.3 canonical-form change:
+                // pre-10.3 grants carry an old-formula digest, so existing
+                // automations land here once and need a one-click re-approval
+                // (no unsafe auto-re-seal — we can't prove an unchanged
+                // condition from the old non-deterministic digest).
+                logger.warning("Trigger \(rule.id, privacy: .public) disabled: grant missing/stale/digest-mismatch/tampered")
                 var disabled = rule
                 disabled.enabled = false
                 return disabled

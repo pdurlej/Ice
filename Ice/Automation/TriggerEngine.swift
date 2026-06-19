@@ -113,7 +113,7 @@ final class TriggerEngine {
             return battery < percent
 
         case .timeWindow(let days, let start, let end, let timeZoneID):
-            return Self.isInWindow(days: days, start: start, end: end, timeZoneID: timeZoneID)
+            return TimeWindow.contains(days: days, start: start, end: end, timeZoneID: timeZoneID, now: Date())
         }
     }
 
@@ -141,27 +141,5 @@ final class TriggerEngine {
             }
         }
         return nil
-    }
-
-    private static func isInWindow(days: Set<Weekday>, start: LocalTime, end: LocalTime, timeZoneID: String) -> Bool {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: timeZoneID) ?? .current
-        let components = calendar.dateComponents([.weekday, .hour, .minute], from: Date())
-        guard
-            let weekdayValue = components.weekday,
-            let weekday = Weekday(rawValue: weekdayValue),
-            days.contains(weekday),
-            let hour = components.hour,
-            let minute = components.minute
-        else {
-            return false
-        }
-        let now = hour * 60 + minute
-        let startMinutes = start.hour * 60 + start.minute
-        let endMinutes = end.hour * 60 + end.minute
-        if startMinutes <= endMinutes {
-            return now >= startMinutes && now < endMinutes
-        }
-        return now >= startMinutes || now < endMinutes  // crosses midnight
     }
 }
