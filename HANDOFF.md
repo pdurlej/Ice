@@ -3,6 +3,56 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🧭 RESUME HERE (2026-06-19, HEAD `ac135a5`, tree CLEAN)
+
+- **Repo RENAMED → `pdurlej/fire-from-ice`** (origin already repointed). ALL `gh`
+  commands need `-R pdurlej/fire-from-ice` (old `pdurlej/Ice` 301-redirects but
+  use the new name). Branch `fire/main`. Local: `/Users/pd/Developer/fire`.
+  App bundle stays `com.jordanbaird.Ice` / `Ice.app` ON PURPOSE.
+- **Shipped: fire.10.3 / build 1149** (installed, notarized, appcast live on
+  `pdurlej.github.io/fire-releases`, Sparkle verified "up to date"). Sentry
+  symbolication is **LIVE** (dSYM upload in CI; needs the `SENTRY_AUTH_TOKEN`
+  secret, already set).
+- **THE one live thread → App-Hang on CLICK-TO-REVEAL a hidden icon.** Sentry
+  **FIRE-F/G/H** (unresolved, on 10.2) = synchronous SkyLight on main
+  (`SLSWindowServerClientCopySpacesForWindows`/`SLSGetWindowCount`). Owner's own
+  Mac (Lublin, macOS 26.5.1). NOT the fork's trigger path (local Triggers=[]);
+  likely upstream Ice's show-hidden-item enumeration on main. **NEXT ACTION:**
+  wait for it to recur ON 10.3 (now symbolicated) → read the named frame → make
+  the targeted off-main fix (or owner's Bartender-style promote-on-click idea)
+  as **fire.10.4**. See [[fire-apphang-click-to-reveal]].
+- **Sentry triage note:** modal-wait ANRs are now NOISE (symbolication surfaced
+  them). FIRE-J (archived) was Sparkle's "You're up to date!" NSAlert left open
+  >2s — `SPUStandardUserDriver showUpdateNotFoundWithError → runModal`. Our
+  consent prompts (MCPWriteAuthorization / AutomationAuthorization) will do the
+  same. **fire.10.4 should filter modal `runModal` ANRs** in the Sentry SDK
+  (beforeSend, or pause app-hang tracking around runModal) so real hangs don't
+  get buried. (The audit already flagged "consent modal blocks main BY DESIGN —
+  not a bug.")
+- **Tests:** `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun
+  swift test --package-path FireLogic` (29 tests; needs the Xcode toolchain —
+  plain `swift test` lacks XCTest). Compile-gate the app:
+  `DEVELOPER_DIR=…/Xcode xcodebuild -project Ice.xcodeproj -scheme Ice
+  -configuration Debug -destination 'platform=macOS' CODE_SIGN_IDENTITY=""
+  CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build`. Bridge:
+  `swift build --package-path Bridge`.
+- **Ship flow:** bump BOTH `MARKETING_VERSION` (`0.11.13-fire.X`) + 
+  `CURRENT_PROJECT_VERSION` in `Ice.xcodeproj/project.pbxproj` (2 occurrences
+  each) → commit → `git tag -a v0.11.13-fire.X` → push branch + tag → CI on the
+  fork builds/signs/notarizes/uploads-dSYMs + drafts the GH release. Then APPCAST
+  (still MANUAL): clone `pdurlej/fire-releases` to /tmp, `gh release download`
+  the DMG, `sign_update` it (Sparkle bin in DerivedData — **Keychain Allow
+  prompt**), hand-insert the `<item>` before `</channel>`, push with
+  `git -c user.email="pdurlej@users.noreply.github.com" -c user.name="Piotr
+  Durlej"`. (Automating this is on the roadmap.)
+- **Roadmap (from the 50-finding audit):** 10.4 = settings-honesty (3 dead
+  Advanced toggles) + App-Hang fix + modal-ANR filter. 10.5 = no-team relay
+  pinning (P1, ad-hoc only — signed DMG already enforces `.isFromSameTeam`) +
+  sendSync watchdog. CI = SHA-pin actions, `concurrency:`, automate appcast.
+- **Behaviour:** do NOT tell the owner to rest/sleep/wrap-up (documented Opus
+  tic). Oracle only via the `oracle` MCP wrapper / browser / gpt-5.5-pro, don't
+  rerun on timeout (use oracle-await). Owner handles all secrets/tokens.
+
 ## 🔥 SHIPPED fire.10.3 — test suite + trust/correctness batch + symbolication (2026-06-19)
 
 Post-audit (the Fable-5 multi-agent audit: 50 verified findings, see below).
