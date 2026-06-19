@@ -3,6 +3,55 @@
 This is for me (Claude) after session compression strips context.
 Owner (pdurlej) will tell me to read this in a fresh session.
 
+## 🔥 SHIPPED fire.10.3 — test suite + trust/correctness batch + symbolication (2026-06-19)
+
+Post-audit (the Fable-5 multi-agent audit: 50 verified findings, see below).
+CI `27798022215` success; release `v0.11.13-fire.10.3` (build 1149) signed +
+notarized; appcast `e4201af` (now on the `fire-from-ice` URL). What landed:
+- **FireLogic/** — the repo's FIRST automated tests. A standalone `swift test`
+  package that SYMLINKS the Foundation-only security-critical sources out of
+  Ice/Automation/ (zero app/TCC deps). 29 tests. Run:
+  `DEVELOPER_DIR=…/Xcode xcrun swift test --package-path FireLogic`.
+  Covers: TriggerCanonicalizer determinism (golden-pinned), grant seal/validate
+  + tamper, AgentInput sanitization, TimeWindow edges. (commit `2b90bad`,`e02d5d6`)
+- **Canonicalizer determinism P1** — digest was non-deterministic (encoded a
+  `Set<Weekday>` directly; hash-seed-ordered), so a multi-day timeWindow rule
+  silently stopped firing across launches. Now a flat sorted `Canonical` form.
+  TriggerStore.load() now binds enabled↔content-digest (honest "Re-approve…"
+  instead of enabled-but-dead). NOTE: existing automations need a one-time
+  re-approval after 10.3 (digest formula changed; near-zero users).
+- **Consent-spoof P1** — `AgentInput` (pure, tested) rejects (not strips)
+  control/newline/bidi/zero-width in agent-supplied name + reverse-DNS-validates
+  bundleIDs, at both trust boundaries (TriggerSpecTranslator + the move path).
+- **Engine/relay P2** — cooldown now spans restarts (seed lastFired from
+  lastFiredAt); no spurious re-fire on launch (seedState without firing);
+  MCPRelayPump can't wedge busy (one Task + `defer`); RelayQueue cancels the
+  timeout on completion.
+- **SYMBOLICATION (the meta-fix)** — `build-dmg.yml` now uploads dSYMs to
+  Sentry (`sentry-cli debug-files upload`, guarded on `SENTRY_AUTH_TOKEN` which
+  the owner created). 10.3 run uploaded 16 dSYMs incl. Ice.app.dSYM. So future
+  App-Hangs symbolicate to OUR functions — see [[fire-apphang-click-to-reveal]].
+
+### OPEN: App-Hang on click-to-reveal (FIRE-F/G/H, on 10.2) — UNRESOLVED tracker
+Owner's repro: Fire freezes when CLICKING A HIDDEN ICON to reveal it. Stacks =
+synchronous SkyLight on main (`SLSWindowServerClientCopySpacesForWindows`,
+`SLSGetWindowCount`) — the App-Hang franchise's latest organ (after FIRE-D
+capture, FIRE-E file-stat). Local Triggers=[] so it's NOT the fork's
+coordinator path; likely upstream Ice's show-hidden-item enumeration on main.
+10.3 only INSTRUMENTS it. NEXT: once it recurs on 10.3 with symbols → read the
+named frame → targeted off-main fix (or owner's Bartender-style
+promote-on-click idea) as fire.10.4.
+
+### AUDIT ROADMAP (remaining, from the 50-finding audit)
+- fire.10.4: settings-honesty (3 Advanced toggles persisted but never read in
+  the exec path: mcpServerEnabled/mcpAllowWrites/mcpNotifyOnWrite) + the
+  App-Hang fix once symbolicated.
+- fire.10.5: no-team-build relay peer pinning (P1 only affects ad-hoc, not the
+  signed DMG); sendSync watchdog; handler-pool starvation.
+- CI: SHA-pin actions, `concurrency:` group, automate the (still-manual)
+  appcast/Sparkle-sign step. Cleanup: MenuBarItemService dead code, stale docs,
+  a11y labels. (P3 backlog — full list was in the audit report.)
+
 ## 🏷️ REBRAND DONE — repo renamed to `pdurlej/fire-from-ice` (2026-06-15)
 
 `gh repo rename` done: `pdurlej/Ice` → **`pdurlej/fire-from-ice`**. GitHub
