@@ -31,6 +31,10 @@ actor RelayQueue {
     /// Bridge calls suspended until their result arrives, keyed by work id.
     private var waiters: [String: CheckedContinuation<MenuBarItemService.RelayResult?, Never>] = [:]
 
+    /// Per-waiter timeout tasks, cancelled the moment a result arrives so they
+    /// don't sleep out their full (up to 120s) deadline after early completion.
+    private var timeoutTasks: [String: Task<Void, Never>] = [:]
+
     private let logger = Logger(category: "MCPBackend.RelayQueue")
 
     private init() {}
@@ -47,7 +51,7 @@ actor RelayQueue {
         logger.debug("Queued relay work \(id, privacy: .public) (pending: \(self.pending.count))")
         return await withCheckedContinuation { continuation in
             waiters[id] = continuation
-            Task {
+            timeoutTasks[id] = Task {
                 try? await Task.sleep(for: .seconds(timeout))
                 self.expire(id: id)
             }
@@ -62,6 +66,7 @@ actor RelayQueue {
 
     /// Delivers the main app's result to the suspended bridge call.
     func complete(_ result: MenuBarItemService.RelayResult) {
+        timeoutTasks.removeValue(forKey: result.id)?.cancel()
         guard let continuation = waiters.removeValue(forKey: result.id) else {
             logger.notice("Late relay result \(result.id, privacy: .public) dropped (waiter already timed out)")
             return
@@ -70,6 +75,7 @@ actor RelayQueue {
     }
 
     private func expire(id: String) {
+        timeoutTasks.removeValue(forKey: id)
         guard let continuation = waiters.removeValue(forKey: id) else {
             return  // already completed
         }

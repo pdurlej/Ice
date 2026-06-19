@@ -31,6 +31,11 @@ final class TriggerEngine {
     func performSetup() {
         TriggerStore.shared.load()
 
+        // Seed edge + cooldown state from persistence WITHOUT firing — BEFORE
+        // subscribing, so a notification arriving mid-setup can't fire against
+        // an unseeded state. Only genuine condition edges after launch fire.
+        seedState()
+
         // App-focus changes → re-evaluate immediately.
         NSWorkspace.shared.notificationCenter
             .publisher(for: NSWorkspace.didActivateApplicationNotification)
@@ -44,9 +49,25 @@ final class TriggerEngine {
             .sink { [weak self] _ in self?.evaluateAll(reason: "timer") }
             .store(in: &cancellables)
 
-        // Seed level state; fire-on-startup-if-already-true.
-        evaluateAll(reason: "startup")
         logger.debug("Trigger engine active (\(TriggerStore.shared.rules.count) rule(s))")
+    }
+
+    /// Seeds in-memory edge state (`levelState`) and cross-launch cooldown
+    /// (`lastFired`) from persistence WITHOUT firing. Two fixes in one:
+    /// - No re-fire on launch: an automation whose condition is already true at
+    ///   login (e.g. "battery below 20%" while unplugged, or "Slack frontmost")
+    ///   would otherwise see an empty levelState as a false→true edge and fire
+    ///   on every launch, repeatedly overriding a manual arrangement.
+    /// - Cooldown spans restarts: `lastFired` is seeded from the persisted
+    ///   `lastFiredAt`, so the per-rule cooldown the user sees ("Last ran …")
+    ///   is actually honored across relaunches instead of resetting each time.
+    private func seedState() {
+        for rule in TriggerStore.shared.rules where rule.enabled {
+            levelState[rule.id] = currentLevel(rule)
+            if let last = rule.lastFiredAt {
+                lastFired[rule.id] = last
+            }
+        }
     }
 
     /// Re-reads rules after an install / remove / enable change.

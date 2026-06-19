@@ -25,12 +25,13 @@ enum TriggerSpecTranslator {
     private static let cooldownRange: ClosedRange<TimeInterval> = 1...3600
 
     static func makeRule(from spec: MenuBarItemService.TriggerSpec) throws -> TriggerRule {
-        let name = spec.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else {
-            throw TranslationError(message: "name is required")
-        }
-        guard name.count <= 120 else {
-            throw TranslationError(message: "name is too long (max 120 characters)")
+        // The name is shown verbatim in the consent prompt, so it must be a
+        // single safe display line — reject (not strip) control / newline /
+        // bidi / zero-width trickery that could disguise what is being approved.
+        guard let name = AgentInput.validName(spec.name) else {
+            throw TranslationError(
+                message: "name is required, must be at most 120 characters, and must not contain control, newline, or bidirectional/zero-width characters"
+            )
         }
 
         let condition = try makeCondition(spec.condition)
@@ -62,8 +63,8 @@ enum TriggerSpecTranslator {
     ) throws -> TriggerCondition {
         switch spec.type {
         case "appFocus":
-            guard let bundleID = nonEmpty(spec.bundleID) else {
-                throw TranslationError(message: "appFocus requires a non-empty bundleID")
+            guard let bundleID = AgentInput.validBundleID(spec.bundleID ?? "") else {
+                throw TranslationError(message: "appFocus requires a valid bundleID (reverse-DNS: letters, digits, dot, hyphen)")
             }
             let state: TriggerCondition.AppFocusState
             switch (spec.focusState ?? "active").lowercased() {
@@ -134,9 +135,18 @@ enum TriggerSpecTranslator {
     ) throws -> TriggerAction {
         switch spec.type {
         case "setSection":
-            let bundleIDs = (spec.bundleIDs ?? []).compactMap(nonEmpty)
-            guard !bundleIDs.isEmpty else {
+            let rawIDs = spec.bundleIDs ?? []
+            guard !rawIDs.isEmpty else {
                 throw TranslationError(message: "setSection requires at least one bundleID")
+            }
+            // Reject (not silently drop) any malformed id, so the consent
+            // prompt's item list is always exactly what the agent asked for.
+            var bundleIDs: [String] = []
+            for raw in rawIDs {
+                guard let valid = AgentInput.validBundleID(raw) else {
+                    throw TranslationError(message: "every bundleID must be reverse-DNS (letters, digits, dot, hyphen)")
+                }
+                bundleIDs.append(valid)
             }
             guard let rawSection = spec.section, let section = TriggerSection(rawValue: rawSection) else {
                 let valid = TriggerSection.allCases.map(\.rawValue).joined(separator: ", ")

@@ -56,6 +56,13 @@ final class MCPWriteCommandHandler {
             return failure("Command expired before Fire could process it.")
         }
 
+        // The bundle id is shown verbatim in the consent prompt; reject anything
+        // outside the reverse-DNS charset so it can't smuggle bidi/zero-width
+        // text into what the user is approving.
+        guard AgentInput.validBundleID(command.bundleID) != nil else {
+            return failure("Invalid bundle id.")
+        }
+
         // fire.9.8 confused-deputy gate: the TCC-bearing main app authorizes
         // every write in its own UI before using its Accessibility power.
         // Since fire.10.2 the relay underneath is authenticated (same-team

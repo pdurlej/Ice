@@ -70,23 +70,39 @@ final class MCPRelayPump {
     private func tick() {
         guard !busy else { return }
         busy = true
+        // One Task for the whole fetch→fulfill→complete cycle, with `busy`
+        // reset in a `defer` so it ALWAYS clears — even if a hop is dropped or
+        // a fulfiller path returns early. The previous nested-async structure
+        // could leave `busy == true` forever (a permanently wedged relay) if
+        // any inner closure didn't run. The blocking XPC calls still happen off
+        // the main thread via the awaited helpers below.
+        Task { @MainActor in
+            defer { busy = false }
+            guard let work = await fetchWorkOffMain() else { return }
+            let result = await fulfill(work)
+            await postResultOffMain(result)
+        }
+    }
+
+    /// Runs the blocking `relayFetch` XPC round trip off the main thread.
+    private func fetchWorkOffMain() async -> MenuBarItemService.RelayWork? {
         let client = self.client
         let logger = self.logger
-        Self.xpcQueue.async {
-            let work = client.fetchWork(logger: logger)
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                guard let work else {
-                    self.busy = false
-                    return
-                }
-                let result = await self.fulfill(work)
-                Self.xpcQueue.async {
-                    client.complete(result, logger: logger)
-                    Task { @MainActor in
-                        self.busy = false
-                    }
-                }
+        return await withCheckedContinuation { continuation in
+            Self.xpcQueue.async {
+                continuation.resume(returning: client.fetchWork(logger: logger))
+            }
+        }
+    }
+
+    /// Runs the blocking `relayComplete` XPC round trip off the main thread.
+    private func postResultOffMain(_ result: MenuBarItemService.RelayResult) async {
+        let client = self.client
+        let logger = self.logger
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            Self.xpcQueue.async {
+                client.complete(result, logger: logger)
+                continuation.resume()
             }
         }
     }
