@@ -92,6 +92,15 @@ struct AdvancedSettingsPane: View {
             "Enable MCP server",
             isOn: $settings.mcpServerEnabled
         )
+        .annotation {
+            Text(
+                """
+                The master switch. When off, Fire refuses every request from AI \
+                assistants — both reads and writes. Default: off (turn it on to opt in).
+                """
+            )
+            .padding(.trailing, 75)
+        }
     }
 
     @ViewBuilder
@@ -101,6 +110,16 @@ struct AdvancedSettingsPane: View {
             isOn: $settings.mcpAllowWrites
         )
         .disabled(!settings.mcpServerEnabled)
+        .annotation {
+            Text(
+                """
+                When off, AI assistants can read your layout (list_items) but cannot \
+                change it — moving, hiding, saving layouts, and automations are all \
+                refused. Default: off.
+                """
+            )
+            .padding(.trailing, 75)
+        }
     }
 
     @ViewBuilder
@@ -110,6 +129,10 @@ struct AdvancedSettingsPane: View {
             isOn: $settings.mcpNotifyOnWrite
         )
         .disabled(!settings.mcpServerEnabled || !settings.mcpAllowWrites)
+        .annotation {
+            Text("Posts a notification each time an AI assistant changes your menu bar.")
+                .padding(.trailing, 75)
+        }
     }
 
     @ViewBuilder

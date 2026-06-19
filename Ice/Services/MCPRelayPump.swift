@@ -110,27 +110,87 @@ final class MCPRelayPump {
     /// Routes one fetched work item to its fulfiller. Runs on the main actor;
     /// consent prompts and the mutation coordinator live there.
     private func fulfill(_ work: MenuBarItemService.RelayWork) async -> MenuBarItemService.RelayResult {
+        // Defense-in-depth (fire.10.4). MCPBackend.xpc is the authoritative
+        // kill-switch, but the TCC-bearing main app re-checks before using its
+        // Accessibility power: it refuses writes when the user has the server
+        // or write toggle off, closing the window where a toggle flips between
+        // the agent's request reaching the queue and Ice pulling it. Relayed
+        // reads (list_triggers) are not gated here — only state changes.
+        if work.isAgentWrite, let reason = Self.writeDenialReason() {
+            logger.notice("Refusing relayed write — \(reason, privacy: .public)")
+            return Self.deniedResult(for: work, reason: reason)
+        }
+
         switch work {
         case .move(let command):
             guard let appState else {
-                return .move(MCPWriteChannel.Result(
-                    id: command.id, success: false,
-                    message: "Ice app state unavailable",
-                    completedAt: Date().timeIntervalSince1970
-                ))
+                return Self.deniedResult(for: work, reason: "Ice app state unavailable")
             }
-            return .move(await appState.mcpWriteCommandHandler.fulfill(command))
+            let result = await appState.mcpWriteCommandHandler.fulfill(command)
+            if result.success {
+                notifyWriteIfEnabled(command)
+            }
+            return .move(result)
 
         case .trigger(let proposal):
             guard let appState else {
-                return .trigger(MCPTriggerChannel.Result(
-                    id: proposal.id, success: false, triggerID: nil, enabled: false,
-                    triggers: nil, message: "Ice app state unavailable",
-                    completedAt: Date().timeIntervalSince1970
-                ))
+                return Self.deniedResult(for: work, reason: "Ice app state unavailable")
             }
             return .trigger(appState.mcpTriggerCommandHandler.fulfill(proposal))
         }
+    }
+
+    /// The live write policy, mirroring MCPBackend's authoritative gate so the
+    /// two never disagree. A write needs both the server enabled AND writes
+    /// allowed; returns a user-facing refusal reason, or `nil` to proceed.
+    private static func writeDenialReason() -> String? {
+        guard Defaults.bool(forKey: .mcpServerEnabled) else {
+            return "Fire's MCP server is turned off."
+        }
+        guard Defaults.bool(forKey: .mcpAllowWrites) else {
+            return "Fire is not allowing write operations."
+        }
+        return nil
+    }
+
+    /// Builds the correctly-typed failure result for a refused work item.
+    private static func deniedResult(
+        for work: MenuBarItemService.RelayWork,
+        reason: String
+    ) -> MenuBarItemService.RelayResult {
+        switch work {
+        case .move(let command):
+            return .move(MCPWriteChannel.Result(
+                id: command.id, success: false, message: reason,
+                completedAt: Date().timeIntervalSince1970
+            ))
+        case .trigger(let proposal):
+            return .trigger(MCPTriggerChannel.Result(
+                id: proposal.id, success: false, triggerID: nil, enabled: false,
+                triggers: nil, message: reason,
+                completedAt: Date().timeIntervalSince1970
+            ))
+        }
+    }
+
+    /// Posts a single coalescing notification after a successful agent move,
+    /// when "Notify on write operations" is on. The stable `.mcpWrite`
+    /// identifier means a burst (e.g. apply_layout) updates one banner rather
+    /// than stacking many.
+    private func notifyWriteIfEnabled(_ command: MCPWriteChannel.Command) {
+        guard Defaults.bool(forKey: .mcpNotifyOnWrite), let appState else { return }
+        let placement: String
+        switch MenuBarItemService.ItemSection(rawValue: command.toSection) {
+        case .alwaysVisible: placement = "always visible"
+        case .hidden: placement = "hidden"
+        case .alwaysHidden: placement = "always hidden"
+        case nil: placement = command.toSection
+        }
+        appState.userNotificationManager.addRequest(
+            with: .mcpWrite,
+            title: "Fire",
+            body: "Moved \(command.bundleID) → \(placement)"
+        )
     }
 
     /// Best-effort removal of the pre-10.2 file-channel artifacts.

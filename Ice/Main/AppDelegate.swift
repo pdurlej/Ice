@@ -144,6 +144,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // item update fetch URLs that include bundle IDs of running apps).
             options.enableNetworkBreadcrumbs = false
 
+            // fire.10.4: drop App Hang reports that are just the main thread
+            // parked in a modal run loop — our own consent prompts, or
+            // Sparkle's "You're up to date" alert (the archived FIRE-J). That
+            // is the user reading a dialog, not a bug, and these benign ANRs
+            // were burying the real window-server hangs (FIRE-F/G/H) we care
+            // about. Only App Hang events are filtered; genuine crashes that
+            // merely happen during a modal are never dropped.
+            options.beforeSend = { event in
+                let isAppHang = (event.exceptions ?? []).contains { exception in
+                    (exception.mechanism?.type.localizedCaseInsensitiveContains("apphang") ?? false)
+                        || (exception.type?.localizedCaseInsensitiveContains("app hang") ?? false)
+                }
+                guard isAppHang else { return event }
+
+                let modalMarkers = [
+                    "runModal", "runModalSession", "beginSheetModal",
+                    "SPUStandardUserDriver", "NSAlert", "_NSShowStopAlertPanel",
+                ]
+                let parkedInModal = (event.threads ?? []).contains { thread in
+                    (thread.stacktrace?.frames ?? []).contains { frame in
+                        guard let function = frame.function else { return false }
+                        return modalMarkers.contains { function.localizedCaseInsensitiveContains($0) }
+                    }
+                }
+                return parkedInModal ? nil : event
+            }
+
             // We do NOT use Sentry's automatic release-tracking based on
             // session counts — that requires session tracking which we disable.
         }

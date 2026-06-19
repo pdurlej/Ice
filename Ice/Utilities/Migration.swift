@@ -24,6 +24,13 @@ extension MigrationManager {
     func migrateAll() {
         var results = [MigrationResult]()
 
+        // fire.10.4: decide fresh-install vs upgrade BEFORE any migration
+        // runs (the first one sets `hasMigrated0_8_0`). A profile that has
+        // ever launched a prior build always has that flag; a brand-new
+        // install does not yet. The MCP-toggle migration uses this to decide
+        // whether to preserve the pre-10.4 always-on behavior.
+        let isFreshInstall = !Defaults.bool(forKey: .hasMigrated0_8_0)
+
         do {
             try performAll(blocks: [
                 migrate0_8_0,
@@ -40,6 +47,7 @@ extension MigrationManager {
             migrate0_11_10(),
             migrate0_11_13(),
             migrate0_11_13_1(),
+            migrateMCPToggles(isFreshInstall: isFreshInstall),
         ]
 
         for result in results {
@@ -383,6 +391,42 @@ extension MigrationManager {
                 to: identifier.rawValue
             )
         }
+    }
+}
+
+// MARK: - Migrate MCP toggles (fire.10.4)
+
+extension MigrationManager {
+    /// The three Advanced → MCP toggles (Enable MCP server / Allow write
+    /// operations / Notify on write) became authoritative in fire.10.4. Before
+    /// this the MCP server answered regardless of them, so a plain upgrade must
+    /// not silently disable a working integration.
+    ///
+    /// - An **upgrade** inherits ON for either toggle the user never explicitly
+    ///   set (absent key), preserving the pre-10.4 always-on behavior. Users
+    ///   who set a value keep it.
+    /// - A **fresh install** keeps the privacy-first defaults (off — opt-in per
+    ///   the published client-setup docs).
+    ///
+    /// Writes stay a separate opt-in either way: this only seeds keys that are
+    /// absent, and the fresh-install path seeds nothing.
+    private func migrateMCPToggles(isFreshInstall: Bool) -> MigrationResult {
+        guard !Defaults.bool(forKey: .hasMigratedMCPToggles) else {
+            return .success
+        }
+
+        if !isFreshInstall {
+            if Defaults.object(forKey: .mcpServerEnabled) == nil {
+                Defaults.set(true, forKey: .mcpServerEnabled)
+            }
+            if Defaults.object(forKey: .mcpAllowWrites) == nil {
+                Defaults.set(true, forKey: .mcpAllowWrites)
+            }
+        }
+
+        Defaults.set(true, forKey: .hasMigratedMCPToggles)
+        logger.info("Migrated MCP toggles (freshInstall=\(isFreshInstall))")
+        return .success
     }
 }
 

@@ -664,6 +664,16 @@ private func encode(
             isError: false
         )
 
+    case .denied(let reason):
+        // fire.10.4 kill-switch: the user has the MCP server (or writes)
+        // turned off in Fire's Advanced settings. Surface the reason to the
+        // agent verbatim so it can tell the user exactly what to flip.
+        log.notice("tool=\(toolName, privacy: .public) denied=\(reason, privacy: .public)")
+        return CallTool.Result(
+            content: [.text(text: "error: \(reason)", annotations: nil, _meta: nil)],
+            isError: true
+        )
+
     case .start, .sourcePID, .relayWork, .relayAck:
         // These cases belong to Ice's own usage of the service (legacy
         // handshake + the fire.10.2 main-app relay) and shouldn't surface

@@ -45,6 +45,20 @@ final class Listener {
     private func handleMessage(_ message: XPCReceivedMessage) -> MenuBarItemService.Response? {
         do {
             let request = try message.decode(as: MenuBarItemService.Request.self)
+
+            // fire.10.4 kill-switch. The three Advanced → MCP toggles
+            // (Enable MCP server / Allow write operations) were inert before
+            // this — the server answered regardless. Now this signed XPC
+            // service is the authoritative boundary: agent-facing requests
+            // are refused when the user has the server off, and writes are
+            // refused when writes aren't allowed. The main-app relay
+            // handshake (`relayFetch`/`relayComplete`) is never agent-facing,
+            // so Ice can never block its own plumbing.
+            if request.isAgentFacing, let reason = Self.policyDenial(for: request) {
+                logger.notice("MCP policy refused an agent request: \(reason, privacy: .public)")
+                return .denied(reason)
+            }
+
             switch request {
             case .start:
                 logger.debug("Received .start (legacy - belongs to MenuBarItemService, returning .start anyway)")
@@ -175,6 +189,32 @@ final class Listener {
             logger.error("Failed to handle message: \(error)")
             return nil
         }
+    }
+
+    /// Returns a user-facing reason an agent request must be refused, or
+    /// `nil` if it may proceed. This service runs as its own process with a
+    /// separate `UserDefaults` domain, so it reads the host app's suite
+    /// (`com.jordanbaird.Ice`) explicitly — the same store the Advanced
+    /// settings write to.
+    ///
+    /// Defaults are deliberately `false` (absent key ⇒ refused): a fresh
+    /// install ships with MCP off (privacy-first opt-in, matching the docs),
+    /// while existing installs are migrated to ON by the main app at first
+    /// 10.4 launch, so no working integration breaks. Only requests that
+    /// passed `isAgentFacing` reach here.
+    private static func policyDenial(for request: MenuBarItemService.Request) -> String? {
+        let suite = UserDefaults(suiteName: "com.jordanbaird.Ice")
+        let serverEnabled = suite?.bool(forKey: "MCPServerEnabled") ?? false
+        guard serverEnabled else {
+            return "Fire's MCP server is turned off. Turn it on in Fire → Settings → Advanced → MCP Server."
+        }
+        if request.isAgentWrite {
+            let allowWrites = suite?.bool(forKey: "MCPAllowWrites") ?? false
+            guard allowWrites else {
+                return "Fire is not allowing write operations. Turn on \"Allow write operations\" in Fire → Settings → Advanced → MCP Server. Read-only tools like list_items still work."
+            }
+        }
+        return nil
     }
 
     /// Activates the listener. Uses the same-team peer requirement when

@@ -185,6 +185,20 @@ final class AdvancedSettings: ObservableObject {
             }
             .store(in: &c)
 
+        // Ask for notification permission the moment the user turns write
+        // notifications on — `dropFirst` skips the value replayed at launch so
+        // an upgraded install with the toggle already on doesn't get an
+        // out-of-the-blue permission prompt at startup.
+        $mcpNotifyOnWrite
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notify in
+                if notify {
+                    self?.appState?.userNotificationManager.requestAuthorization()
+                }
+            }
+            .store(in: &c)
+
         cancellables = c
     }
 }

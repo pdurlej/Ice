@@ -379,7 +379,18 @@ extension MenuBarItemManager {
     /// the hidden and always-hidden sections are correctly ordered,
     /// arranging them into valid positions if needed.
     func cacheItemsIfNeeded() async {
-        let itemWindowIDs = Bridging.getMenuBarWindowList(option: [.itemsOnly, .activeSpace])
+        // fire.10.4 App-Hang fix (Sentry FIRE-F). This type is @MainActor, so
+        // this async method runs ON the main thread. The `.activeSpace` window
+        // list does a per-window `CGSCopySpacesForWindows` (SLS) round trip —
+        // and on a contended window server (macOS 26, or while another menu
+        // bar manager fights for it) that synchronous call can block for
+        // seconds, which is exactly the click-to-reveal freeze users hit
+        // (IceBar.show → cacheItemsIfNeeded). The query is a pure read whose
+        // result is just an array of window IDs, so compute it off the main
+        // actor; the cache comparison below is unchanged.
+        let itemWindowIDs = await Task.detached(priority: .userInitiated) {
+            Bridging.getMenuBarWindowList(option: [.itemsOnly, .activeSpace])
+        }.value
         if await cacheActor.cachedItemWindowIDs != itemWindowIDs {
             await cacheItemsRegardless(itemWindowIDs)
         }
