@@ -230,6 +230,14 @@ extension MenuBarItemManager {
     private struct CacheContext {
         let controlItems: ControlItemPair
 
+        /// Window bounds prefetched OFF the main thread (fire.10.4.1, Sentry
+        /// FIRE-K). `MenuBarItemManager` is `@MainActor`, so calling
+        /// `Bridging.getWindowBounds` (a synchronous `SLSGetScreenRectForWindow`
+        /// round trip) once per item here would block the main thread — under
+        /// window-server contention that froze the app during cache rebuilds.
+        /// Keyed by `windowID`; `bestBounds` reads from this instead.
+        let prefetchedBounds: [CGWindowID: CGRect]
+
         var cache: ItemCache
         var temporarilyShownItems = [(MenuBarItem, MoveDestination)]()
         var shouldClearCachedItemWindowIDs = false
@@ -237,13 +245,14 @@ extension MenuBarItemManager {
         private(set) lazy var hiddenControlItemBounds = bestBounds(for: controlItems.hidden)
         private(set) lazy var alwaysHiddenControlItemBounds = controlItems.alwaysHidden.map(bestBounds)
 
-        init(controlItems: ControlItemPair, displayID: CGDirectDisplayID?) {
+        init(controlItems: ControlItemPair, displayID: CGDirectDisplayID?, prefetchedBounds: [CGWindowID: CGRect]) {
             self.controlItems = controlItems
+            self.prefetchedBounds = prefetchedBounds
             self.cache = ItemCache(displayID: displayID)
         }
 
         func bestBounds(for item: MenuBarItem) -> CGRect {
-            Bridging.getWindowBounds(for: item.windowID) ?? item.bounds
+            prefetchedBounds[item.windowID] ?? item.bounds
         }
 
         func isValidForCaching(_ item: MenuBarItem) -> Bool {
@@ -294,7 +303,22 @@ extension MenuBarItemManager {
         controlItems: ControlItemPair,
         displayID: CGDirectDisplayID?
     ) async {
-        var context = CacheContext(controlItems: controlItems, displayID: displayID)
+        // Prefetch every relevant window's bounds OFF the main thread before
+        // building the cache on the main actor (Sentry FIRE-K). Covers the
+        // items plus the section control items that `findSection` measures
+        // against, so `bestBounds` never hits the window server on main.
+        var boundsWindowIDs = items.map(\.windowID)
+        boundsWindowIDs.append(controlItems.hidden.windowID)
+        if let alwaysHidden = controlItems.alwaysHidden {
+            boundsWindowIDs.append(alwaysHidden.windowID)
+        }
+        let prefetchedBounds = await Self.fetchWindowBoundsOffMain(boundsWindowIDs)
+
+        var context = CacheContext(
+            controlItems: controlItems,
+            displayID: displayID,
+            prefetchedBounds: prefetchedBounds
+        )
 
         for item in items where context.isValidForCaching(item) {
             if item.sourcePID == nil {
@@ -394,6 +418,24 @@ extension MenuBarItemManager {
         if await cacheActor.cachedItemWindowIDs != itemWindowIDs {
             await cacheItemsRegardless(itemWindowIDs)
         }
+    }
+
+    /// Fetches each window's bounds off the main thread, de-duplicating the
+    /// input. `Bridging.getWindowBounds` talks to the window server over a
+    /// per-thread connection, so it's safe to call anywhere — keeping the
+    /// synchronous SLS round trips off the main actor (Sentry FIRE-K).
+    private static func fetchWindowBoundsOffMain(
+        _ windowIDs: [CGWindowID]
+    ) async -> [CGWindowID: CGRect] {
+        await Task.detached(priority: .userInitiated) {
+            var bounds = [CGWindowID: CGRect]()
+            for windowID in windowIDs where bounds[windowID] == nil {
+                if let rect = Bridging.getWindowBounds(for: windowID) {
+                    bounds[windowID] = rect
+                }
+            }
+            return bounds
+        }.value
     }
 }
 

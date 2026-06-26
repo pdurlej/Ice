@@ -213,10 +213,8 @@ final class MenuBarOverlayPanel: NSPanel {
                 guard let self, needsShow else {
                     return
                 }
-                defer {
-                    self.needsShow = false
-                }
-                show()
+                self.needsShow = false
+                Task { await self.show() }
             }
             .store(in: &c)
 
@@ -228,10 +226,13 @@ final class MenuBarOverlayPanel: NSPanel {
                 Task {
                     // Must be run async, or this will not remove the flags.
                     self.updateFlags.removeAll()
-                }
-                let windows = WindowInfo.createWindows(option: .onScreen)
-                if validate(for: .updates, with: windows) {
-                    performUpdates(for: flags, windows: windows, screen: owningScreen)
+                    // createWindows → SLSGetOnScreenWindowCount is a synchronous
+                    // window-server enumeration; fetch off-main so a busy window
+                    // server can't freeze appearance updates (fire.10.4.1).
+                    let windows = await Task.detached { WindowInfo.createWindows(option: .onScreen) }.value
+                    if self.validate(for: .updates, with: windows) {
+                        self.performUpdates(for: flags, windows: windows, screen: self.owningScreen)
+                    }
                 }
             }
             .store(in: &c)
@@ -315,7 +316,7 @@ final class MenuBarOverlayPanel: NSPanel {
     }
 
     /// Shows the panel.
-    private func show() {
+    private func show() async {
         guard let appState else {
             return
         }
@@ -326,7 +327,10 @@ final class MenuBarOverlayPanel: NSPanel {
         }
 
         // Adapted from upstream PR #803 by Philly Cai — original used WindowInfo.getOnScreenWindows; replaced with the macos-26 equivalent.
-        let windows = WindowInfo.createWindows(option: .onScreen)
+        // createWindows → SLSGetOnScreenWindowCount is a synchronous window-server
+        // enumeration; fetch off-main so a busy window server can't freeze the
+        // panel show (fire.10.4.1).
+        let windows = await Task.detached { WindowInfo.createWindows(option: .onScreen) }.value
         guard validate(for: .showing, with: windows) else {
             return
         }

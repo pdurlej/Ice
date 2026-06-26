@@ -38,15 +38,17 @@ final class MenuBarSearchModel: ObservableObject {
             isVisible ? screen : nil
         }
         .sink { [weak self] screen in
-            self?.updateAverageColorInfo(for: screen)
+            Task { await self?.updateAverageColorInfo(for: screen) }
         }
         .store(in: &c)
 
         cancellables = c
     }
 
-    private func updateAverageColorInfo(for screen: NSScreen) {
-        let windows = WindowInfo.createWindows(option: .onScreen)
+    private func updateAverageColorInfo(for screen: NSScreen) async {
+        // createWindows enumerates the window server synchronously; fetch
+        // off-main so it can't freeze the main thread (fire.10.4.1).
+        let windows = await Task.detached { WindowInfo.createWindows(option: .onScreen) }.value
         let displayID = screen.displayID
 
         guard

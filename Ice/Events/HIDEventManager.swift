@@ -251,10 +251,18 @@ extension HIDEventManager {
                 return
             }
 
-            // Get the window that was clicked.
+            // Get the window that was clicked. The on-screen window
+            // enumeration (createWindows → getWindowList →
+            // SLSGetOnScreenWindowCount) is a synchronous window-server call;
+            // this Task runs on the main actor, so under contention it froze
+            // the app (Sentry FIRE-M). Compute it off-main — WindowInfo is
+            // Sendable — and do the cheap filtering back here.
+            let onScreenWindows = await Task.detached(priority: .userInitiated) {
+                WindowInfo.createWindows(option: .onScreen)
+            }.value
             guard
                 let mouseLocation = MouseHelpers.locationCoreGraphics,
-                let windowUnderMouse = WindowInfo.createWindows(option: .onScreen)
+                let windowUnderMouse = onScreenWindows
                     .filter({ $0.layer < CGWindowLevelForKey(.cursorWindow) })
                     .first(where: { $0.bounds.contains(mouseLocation) && $0.title?.isEmpty == false }),
                 let owningApplication = windowUnderMouse.owningApplication

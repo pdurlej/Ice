@@ -6,7 +6,12 @@
 import Cocoa
 
 /// Information for a window.
-struct WindowInfo {
+///
+/// All stored properties are value types, so this is `Sendable` — it can be
+/// computed off the main thread (where the window-server enumeration belongs)
+/// and handed back to the main actor. The `owningApplication` accessor is
+/// computed on demand and not stored, so it doesn't affect sendability.
+struct WindowInfo: Sendable {
     /// The window's identifier.
     let windowID: CGWindowID
 

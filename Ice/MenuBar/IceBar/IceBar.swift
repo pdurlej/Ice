@@ -411,9 +411,14 @@ private struct IceBarItemView: View {
                 return
             }
             menuBarManager.section(withName: section)?.hide()
+            let windowID = item.windowID
             Task {
                 try await Task.sleep(for: .milliseconds(25))
-                if Bridging.isWindowOnScreen(item.windowID) {
+                // `isWindowOnScreen` is a synchronous window-server query
+                // (SLSGetOnScreenWindowCount); run it off the main thread so a
+                // busy window server can't freeze this click (fire.10.4.1).
+                let onScreen = await Task.detached { Bridging.isWindowOnScreen(windowID) }.value
+                if onScreen {
                     try await itemManager.click(item: item, with: .left)
                 } else {
                     await itemManager.temporarilyShow(item: item, clickingWith: .left)
@@ -428,9 +433,12 @@ private struct IceBarItemView: View {
                 return
             }
             menuBarManager.section(withName: section)?.hide()
+            let windowID = item.windowID
             Task {
                 try await Task.sleep(for: .milliseconds(25))
-                if Bridging.isWindowOnScreen(item.windowID) {
+                // Off-main window-server query — see leftClickAction (fire.10.4.1).
+                let onScreen = await Task.detached { Bridging.isWindowOnScreen(windowID) }.value
+                if onScreen {
                     try await itemManager.click(item: item, with: .right)
                 } else {
                     await itemManager.temporarilyShow(item: item, clickingWith: .right)

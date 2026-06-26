@@ -206,7 +206,7 @@ final class MenuBarManager: ObservableObject {
             .discardMerge(Timer.publish(every: 5, on: .main, in: .default).autoconnect())
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
-                self?.updateAverageColorInfo()
+                Task { await self?.updateAverageColorInfo() }
             }
             .store(in: &c)
 
@@ -286,7 +286,7 @@ final class MenuBarManager: ObservableObject {
 
     /// Updates the ``averageColorInfo`` property with the current average color
     /// of the menu bar.
-    func updateAverageColorInfo() {
+    func updateAverageColorInfo() async {
         guard
             let settingsWindow,
             settingsWindow.isVisible,
@@ -295,7 +295,9 @@ final class MenuBarManager: ObservableObject {
             return
         }
 
-        let windows = WindowInfo.createWindows(option: .onScreen)
+        // createWindows enumerates the window server synchronously; fetch
+        // off-main so it can't freeze the main thread (fire.10.4.1).
+        let windows = await Task.detached { WindowInfo.createWindows(option: .onScreen) }.value
         let displayID = screen.displayID
 
         guard
