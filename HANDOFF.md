@@ -9,22 +9,29 @@ Owner (pdurlej) will tell me to read this in a fresh session.
   commands need `-R pdurlej/fire-from-ice` (old `pdurlej/Ice` 301-redirects but
   use the new name). Branch `fire/main`. Local: `/Users/pd/Developer/fire`.
   App bundle stays `com.jordanbaird.Ice` / `Ice.app` ON PURPOSE.
-- **Shipped: fire.10.4 / build 1150** (installed, notarized, appcast live on
+- **Shipped: fire.10.4.1 / build 1151** (installed, notarized, appcast live on
   `pdurlej.github.io/fire-releases`). Sentry symbolication **LIVE** (dSYM upload
   in CI; `SENTRY_AUTH_TOKEN` set). 10.4 = honest MCP kill-switch + modal-ANR
-  filter + click-to-reveal App-Hang fix (see SHIPPED section below).
-- **THE one live thread → App-Hang on CLICK-TO-REVEAL a hidden icon. FIX LANDED
-  in 10.4 — field-verification PENDING.** Sentry **FIRE-F/G/H** (still
-  unresolved, last events on 10.2) = synchronous SkyLight on main
-  (`SLSWindowServerClientCopySpacesForWindows`/`SLSGetWindowCount`). Found by
-  CODE TRACE (not a symbolicated frame): `MenuBarItemManager` is `@MainActor`,
-  so `cacheItemsIfNeeded()` ran `getMenuBarWindowList(.activeSpace)` (per-window
-  `CGSCopySpacesForWindows`) ON MAIN, and `IceBar.show` calls it on every
-  reveal. 10.4 moved that read off-main (`Task.detached`). **NEXT ACTION:** watch
-  Sentry — FIRE-F should STOP on `fire.10.4+1150`. If it recurs on 10.4, a
-  second main-thread caller remains (or do the Bartender-style promote-on-click).
-  FIRE-H is a DIFFERENT site (`getWindowCount`, 1 event) — not yet addressed.
-  See [[fire-apphang-click-to-reveal]].
+  filter + click-to-reveal App-Hang fix; **10.4.1 = App-Hang sweep** (moved the
+  remaining main-thread window-server calls off-main — see SHIPPED sections).
+  NOTE: notarization needs the owner's Apple Developer Program License Agreement
+  to be in-effect — 10.4.1 first failed with HTTP 403 "agreement missing/expired"
+  until he accepted it; then a `gh run rerun --failed <id>` (no code change) went
+  green. Watch for this on future ships.
+- **THE App-Hang franchise → main-thread window-server (SLS) calls. 10.4 + 10.4.1
+  swept the known sites; field-verification PENDING.** Sentry **FIRE-F/G/H/K/M**
+  (all App-Hang, owner's macOS 26.5.1 daily driver — he runs the shipped build,
+  see [[fire-owner-is-live-dogfooder]]). 10.4's dSYMs symbolicated the franchise
+  into precise issues: FIRE-K (`uncheckedCacheItems`→`getWindowBounds` per-item)
+  + FIRE-M (`handleSmartRehide`→`createWindows`) fired on 10.4 and are fixed in
+  10.4.1; FIRE-F (`cacheItemsIfNeeded`) fixed in 10.4 and has NOT recurred;
+  FIRE-G/H are old 1-event 10.2 traces whose leaves (`getWindowList`/heavy
+  Combine sink) the 10.4.1 sweep also covers. **NEXT ACTION:** watch Sentry —
+  FIRE-F/G/H/K/M should all go quiet on `fire.10.4.1+1151`. **DEFERRED (not
+  firing, risky):** `HIDEventManager.isMouseInsideMenuBarItem` (live SLS
+  enumeration reachable only via ~5 synchronous event-handler guards — async
+  refactor wants runtime testing) — likely the next FIRE-N if it surfaces. See
+  [[fire-apphang-click-to-reveal]].
 - **Sentry triage note (DONE in 10.4):** modal-wait ANRs were NOISE burying real
   hangs (FIRE-J = Sparkle's "You're up to date!" `runModal`, archived). 10.4
   added a `beforeSend` filter in AppDelegate that drops App-Hang events parked
@@ -56,6 +63,31 @@ Owner (pdurlej) will tell me to read this in a fresh session.
 - **Behaviour:** do NOT tell the owner to rest/sleep/wrap-up (documented Opus
   tic). Oracle only via the `oracle` MCP wrapper / browser / gpt-5.5-pro, don't
   rerun on timeout (use oracle-await). Owner handles all secrets/tokens.
+
+## 🔥 SHIPPED fire.10.4.1 — App-Hang sweep: main-thread SLS calls off-main (2026-06-29)
+
+CI `28232735852` (build 1151) success AFTER the owner accepted a pending Apple
+Developer Program License Agreement (first attempt 403'd on notarization);
+`gh run rerun --failed` then went green. Notarized; appcast `2a95c27` live;
+installed + `list_items`-smoked on the owner's machine. Commits `e7b7ac2` (code)
++ `903d363` (bump). Prompted by 10.4's dSYMs symbolicating two real freezes on
+his daily driver (FIRE-K, FIRE-M) + an Explore audit of the whole class:
+- **FIRE-K** (`SLSGetScreenRectForWindow`): `MenuBarItemManager.uncheckedCacheItems`
+  → `CacheContext.findSection`/`bestBounds` called `Bridging.getWindowBounds`
+  PER ITEM on `@MainActor`. Now prefetches all bounds off-main once
+  (`fetchWindowBoundsOffMain`); `bestBounds` reads the map.
+- **FIRE-M** (`SLSGetOnScreenWindowCount`): `HIDEventManager.handleSmartRehide`
+  → `WindowInfo.createWindows(.onScreen)` on the `@MainActor` Task → off-main.
+  Made `WindowInfo: Sendable` (all stored props are value types) to allow it.
+- Same class, proactively off-main: `MenuBarOverlayPanel` createWindows ×2
+  (`$updateFlags` sink + `show()` now async); `MenuBarManager` /
+  `MenuBarSearchModel.updateAverageColorInfo` (now async); IceBar left/right
+  click `isWindowOnScreen`.
+- **DEFERRED (documented):** `isMouseInsideMenuBarItem` (timing-sensitive event
+  handlers) + a few single light SLS calls. See [[fire-apphang-click-to-reveal]].
+- Pattern throughout: `await Task.detached { <sync SLS call> }.value` — same
+  FIRE-D/E/C fix. `Bridging.getWindowBounds` uses a per-thread connection, so
+  it's safe off-main.
 
 ## 🔥 SHIPPED fire.10.4 — honest MCP kill-switch + modal-ANR filter + App-Hang fix (2026-06-19)
 
