@@ -9,28 +9,28 @@ Owner (pdurlej) will tell me to read this in a fresh session.
   commands need `-R pdurlej/fire-from-ice` (old `pdurlej/Ice` 301-redirects but
   use the new name). Branch `fire/main`. Local: `/Users/pd/Developer/fire`.
   App bundle stays `com.jordanbaird.Ice` / `Ice.app` ON PURPOSE.
-- **Shipped: fire.10.4.1 / build 1151** (installed, notarized, appcast live on
+- **Shipped: fire.10.4.2 / build 1152** (installed, notarized, appcast live on
   `pdurlej.github.io/fire-releases`). Sentry symbolication **LIVE** (dSYM upload
   in CI; `SENTRY_AUTH_TOKEN` set). 10.4 = honest MCP kill-switch + modal-ANR
-  filter + click-to-reveal App-Hang fix; **10.4.1 = App-Hang sweep** (moved the
-  remaining main-thread window-server calls off-main — see SHIPPED sections).
-  NOTE: notarization needs the owner's Apple Developer Program License Agreement
-  to be in-effect — 10.4.1 first failed with HTTP 403 "agreement missing/expired"
-  until he accepted it; then a `gh run rerun --failed <id>` (no code change) went
-  green. Watch for this on future ships.
-- **THE App-Hang franchise → main-thread window-server (SLS) calls. 10.4 + 10.4.1
-  swept the known sites; field-verification PENDING.** Sentry **FIRE-F/G/H/K/M**
-  (all App-Hang, owner's macOS 26.5.1 daily driver — he runs the shipped build,
-  see [[fire-owner-is-live-dogfooder]]). 10.4's dSYMs symbolicated the franchise
-  into precise issues: FIRE-K (`uncheckedCacheItems`→`getWindowBounds` per-item)
-  + FIRE-M (`handleSmartRehide`→`createWindows`) fired on 10.4 and are fixed in
-  10.4.1; FIRE-F (`cacheItemsIfNeeded`) fixed in 10.4 and has NOT recurred;
-  FIRE-G/H are old 1-event 10.2 traces whose leaves (`getWindowList`/heavy
-  Combine sink) the 10.4.1 sweep also covers. **NEXT ACTION:** watch Sentry —
-  FIRE-F/G/H/K/M should all go quiet on `fire.10.4.1+1151`. **DEFERRED (not
-  firing, risky):** `HIDEventManager.isMouseInsideMenuBarItem` (live SLS
-  enumeration reachable only via ~5 synchronous event-handler guards — async
-  refactor wants runtime testing) — likely the next FIRE-N if it surfaces. See
+  filter + click-to-reveal App-Hang fix; 10.4.1 = App-Hang sweep; **10.4.2 =
+  FIRE-N fix** (EventTap no longer queries the window server per event) + a
+  warning cleanup. NOTE: notarization needs the owner's Apple Developer Program
+  License Agreement in-effect — 10.4.1 first 403'd until he accepted it, then
+  `gh run rerun --failed <id>` went green. 10.4.2 notarized first try. Watch for
+  this on future ships.
+- **THE App-Hang franchise → main-thread window-server / AX calls. Now driven by
+  a REPO ISSUE BOARD (#4-#17); symbolication names each new organ.** Sentry
+  **FIRE-F/G/H/K/M/N/P** (all App-Hang, owner's macOS 26 daily driver — he runs
+  the shipped build AND often has Bartender 6 running too, which amplifies
+  window-server contention; see [[fire-owner-is-live-dogfooder]]). Field-verified
+  quiet: FIRE-F/K/M on 10.4.1 (no recurrence). Fixed & shipped: **FIRE-N** (issue
+  #16, `EventTap.isEnabled` per-event WS query → local flag) in 10.4.2. **STILL
+  OPEN:** **FIRE-P** (issue #17, `getApplicationMenuFrame` synchronous AX walk of
+  the frontmost app — a NEW family, AX IPC not SkyLight) + issue #7
+  (`isMouseInsideMenuBarItem`, shares the guard chain with #17 — design their
+  cache together) + issue #11 (light single SLS calls). **NEXT App-Hang ACTION:**
+  #17 + #7 as a pair — needs AXSwift `setMessagingTimeout` research + an off-main
+  cached menu-frame + RUNTIME testing on the owner's bar. See
   [[fire-apphang-click-to-reveal]].
 - **Sentry triage note (DONE in 10.4):** modal-wait ANRs were NOISE burying real
   hangs (FIRE-J = Sparkle's "You're up to date!" `runModal`, archived). 10.4
@@ -63,6 +63,23 @@ Owner (pdurlej) will tell me to read this in a fresh session.
 - **Behaviour:** do NOT tell the owner to rest/sleep/wrap-up (documented Opus
   tic). Oracle only via the `oracle` MCP wrapper / browser / gpt-5.5-pro, don't
   rerun on timeout (use oracle-await). Owner handles all secrets/tokens.
+
+## 🔥 SHIPPED fire.10.4.2 — FIRE-N: EventTap off the window server (2026-07-08)
+
+First release driven by the Fable-5 issue board (#4-#17); Opus 4.8 executing.
+CI `28902845286` (build 1152) success (notarized first try); appcast `c47705d`
+live; installed + `list_items`-smoked on the owner's machine. Commits `0a416aa`
+(fix) + `1e1e4fa` (bump). Closed issues #16 + #15.
+- **FIRE-N** (#16): `EventTap.sharedCallback` runs on the main run loop for
+  every tapped event and did `guard tap.isEnabled` → `CGEvent.tapIsEnabled` →
+  `SLEventTapIsEnabled` (WS round trip per event). Now a local `isActive` Bool
+  set by `enable()`/`disable()`; the disabled-by-timeout/user-input cases are
+  still handled above the guard by event TYPE. All main-thread → no locking.
+- **#15**: `MCPRelayPump.removeLegacyChannelFiles` → `nonisolated static`
+  (standing MainActor-isolation warning gone).
+- **Runtime-verify still owed by the owner**: #16 touches event taps — confirm
+  show-on-hover / ⌘-drag / click-to-reveal behave normally (low risk: the flag
+  faithfully mirrors our enable/disable, all on main).
 
 ## 🔥 SHIPPED fire.10.4.1 — App-Hang sweep: main-thread SLS calls off-main (2026-06-29)
 
