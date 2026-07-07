@@ -53,7 +53,14 @@ final class EventTap {
                 tap.enable()
                 return nil
             }
-            guard tap.isEnabled else {
+            // Use the locally-tracked flag, NOT the `isEnabled` getter: this
+            // callback runs on the main run loop for EVERY tapped event
+            // (mouse moves included), and `isEnabled` does a synchronous
+            // `SLEventTapIsEnabled` window-server round trip. Under window-
+            // server contention that froze the app once per event storm
+            // (Sentry FIRE-N). `isActive` reflects our own enable()/disable()
+            // calls, which is exactly what this guard is meant to check.
+            guard tap.isActive else {
                 return Unmanaged.passUnretained(event)
             }
             return tap.callback(tap, event).map { eventFromCallback in
@@ -66,6 +73,13 @@ final class EventTap {
     private var source: CFRunLoopSource?
     private let runLoop: CFRunLoop
     private let callback: (EventTap, CGEvent) -> CGEvent?
+
+    /// Whether the tap is currently listening, tracked WITHOUT touching the
+    /// window server. Mutated only by `enable()`/`disable()` and read only by
+    /// `sharedCallback` — all on the main thread (the tap's run loop is
+    /// `CFRunLoopGetMain()`), so a plain `Bool` needs no synchronization. See
+    /// the note in `sharedCallback` (Sentry FIRE-N).
+    private var isActive = false
 
     /// A string label that identifies the tap.
     let label: String
@@ -237,6 +251,7 @@ final class EventTap {
         guard let source, let machPort else { return }
         CGEvent.tapEnable(tap: machPort, enable: true)
         CFRunLoopAddSource(runLoop, source, .commonModes)
+        isActive = true
     }
 
     /// Disables the tap.
@@ -244,5 +259,6 @@ final class EventTap {
         guard let source, let machPort else { return }
         CFRunLoopRemoveSource(runLoop, source, .commonModes)
         CGEvent.tapEnable(tap: machPort, enable: false)
+        isActive = false
     }
 }

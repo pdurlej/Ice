@@ -193,8 +193,10 @@ final class MCPRelayPump {
         )
     }
 
-    /// Best-effort removal of the pre-10.2 file-channel artifacts.
-    private static func removeLegacyChannelFiles() {
+    /// Best-effort removal of the pre-10.2 file-channel artifacts. Touches only
+    /// `FileManager` (no actor state), so it's `nonisolated` — it runs on
+    /// `xpcQueue`, and inheriting `MainActor` isolation here was a warning.
+    private nonisolated static func removeLegacyChannelFiles() {
         let base = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
         ).first ?? URL(fileURLWithPath: NSHomeDirectory())
