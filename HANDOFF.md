@@ -9,15 +9,23 @@ Owner (pdurlej) will tell me to read this in a fresh session.
   commands need `-R pdurlej/fire-from-ice` (old `pdurlej/Ice` 301-redirects but
   use the new name). Branch `fire/main`. Local: `/Users/pd/Developer/fire`.
   App bundle stays `com.jordanbaird.Ice` / `Ice.app` ON PURPOSE.
-- **Shipped: fire.10.4.2 / build 1152** (installed, notarized, appcast live on
+- **Shipped: fire.10.5 / build 1153** (installed, notarized, appcast live on
   `pdurlej.github.io/fire-releases`). Sentry symbolication **LIVE** (dSYM upload
-  in CI; `SENTRY_AUTH_TOKEN` set). 10.4 = honest MCP kill-switch + modal-ANR
-  filter + click-to-reveal App-Hang fix; 10.4.1 = App-Hang sweep; **10.4.2 =
-  FIRE-N fix** (EventTap no longer queries the window server per event) + a
-  warning cleanup. NOTE: notarization needs the owner's Apple Developer Program
-  License Agreement in-effect — 10.4.1 first 403'd until he accepted it, then
-  `gh run rerun --failed <id>` went green. 10.4.2 notarized first try. Watch for
-  this on future ships.
+  in CI; `SENTRY_AUTH_TOKEN` set). Recent: 10.4 = honest MCP kill-switch +
+  modal-ANR filter + App-Hang fix; 10.4.1 = App-Hang sweep; 10.4.2 = FIRE-N fix;
+  **10.5 = MenuBarItemService kill-switch bypass fix (#8) + CI SHA-pin (#9)**.
+  NOTE: notarization needs the owner's Apple Developer Program License Agreement
+  in-effect — 10.4.1 first 403'd until he accepted it, then `gh run rerun
+  --failed <id>` went green; 10.4.2/10.5 notarized first try. Watch on future
+  ships. CI actions are now SHA-pinned (tag in a trailing comment) — when
+  bumping an action, resolve the new SHA via `gh api repos/OWNER/REPO/commits/TAG`.
+- **ISSUE BOARD is the roadmap now** (`gh issue list -R pdurlej/fire-from-ice`).
+  Fable-5 audit (2026-07-05) filed #4-#15; FIRE-N/P added #16/#17. Opus 4.8
+  shipped #16+#15 (10.4.2) and #8+#9 (10.5). **STILL OPEN, ranked:** #17+#7
+  (FIRE-P AX family — App-Hang, needs runtime testing, pair them), #4 (P1 relay
+  peer pinning, ad-hoc only), #5 (sendSync watchdog — DEADLOCK TRAP documented in
+  the issue: send holds a lock, native timeout absent), #6 (syncWait starvation),
+  #10 (appcast automation — do next, saves ship toil), #11/#12/#13/#14 (P3).
 - **THE App-Hang franchise → main-thread window-server / AX calls. Now driven by
   a REPO ISSUE BOARD (#4-#17); symbolication names each new organ.** Sentry
   **FIRE-F/G/H/K/M/N/P** (all App-Hang, owner's macOS 26 daily driver — he runs
@@ -63,6 +71,28 @@ Owner (pdurlej) will tell me to read this in a fresh session.
 - **Behaviour:** do NOT tell the owner to rest/sleep/wrap-up (documented Opus
   tic). Oracle only via the `oracle` MCP wrapper / browser / gpt-5.5-pro, don't
   rerun on timeout (use oracle-await). Owner handles all secrets/tokens.
+
+## 🔥 SHIPPED fire.10.5 — kill-switch bypass fix (#8) + CI SHA-pin (#9) (2026-07-08)
+
+CI `28924547311` (build 1153) success (notarized first try; self-verified the
+SHA-pinned actions); appcast `66096c3` live; installed + `list_items`-smoked.
+Commits `cbb74d1` (fix) + `67363b3` (bump). Closed #8 + #9. All work headless —
+no owner runtime testing needed (backend + CI only).
+- **#8 (security)**: `MenuBarItemService/Listener.swift` served `.listItems` /
+  `.saveLayout` / `.listLayouts` via `MenuBarStateManager`, bypassing the 10.4
+  kill-switch (menu-bar layout readable / saveable with the MCP server OFF). Now
+  those cases return `.denied`; the service keeps ONLY `.start` + `.sourcePID`.
+  Deleted `MenuBarStateManager.swift` (274 lines) + `.proposal.phase3` — the
+  `MenuBarItemService` target is a `PBXFileSystemSynchronizedRootGroup`, so a
+  plain `git rm` removes it from the build (NO pbxproj edit; build confirms
+  "Removed stale file MenuBarStateManager.o"). Ice's `MenuBarItemService.Connection`
+  only ever sends `.start`/`.sourcePID`, so the layout editor is untouched.
+- **#9 (CI supply-chain)**: SHA-pinned all 4 `uses:` (checkout, upload-artifact,
+  action-swiftlint) with the tag as a trailing comment; `concurrency:` groups
+  (lint cancel-in-progress: true; build-dmg: false — never kill mid-notarization).
+- **Deferred with notes**: #5 (sendSync watchdog — commented the deadlock trap:
+  send() holds an OSAllocatedUnfairLock, and `XPCSession.sendSync` has no native
+  timeout on macOS 26). #4/#6 need dedicated passes.
 
 ## 🔥 SHIPPED fire.10.4.2 — FIRE-N: EventTap off the window server (2026-07-08)
 
