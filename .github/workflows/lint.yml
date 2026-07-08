@@ -11,13 +11,22 @@ on:
       - ".github/workflows/lint.yml"
       - ".swiftlint.yml"
       - "**/*.swift"
+
+# Cancel an in-flight lint when a newer commit lands on the same ref — the
+# stale result is worthless (issue #9).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   swiftlint:
     if: '!github.event.pull_request.merged'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      # Actions are SHA-pinned (tag kept as a trailing comment) so a tag/branch
+      # move in the upstream action repo can't inject code into CI (issue #9).
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - name: Run SwiftLint
-        uses: norio-nomura/action-swiftlint@3.2.1
+        uses: norio-nomura/action-swiftlint@9f4dcd7fd46b4e75d7935cf2f4df406d5cae3684 # 3.2.1
         with:
           args: --strict

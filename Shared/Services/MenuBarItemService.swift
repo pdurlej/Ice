@@ -49,17 +49,15 @@ extension MenuBarItemService {
         case start
         case sourcePID(WindowInfo)
 
-        // MARK: - MCP Server Extension (Phase 4.5)
+        // MARK: - MCP Server Extension
         //
-        // These cases exist so the future IceMCPBridge binary can speak
-        // to the same XPC listener that the layout UI uses. Each maps
-        // 1:1 to one of the six MVP tools defined in
-        // docs/mcp/ARCHITECTURE.md §3.
-        //
-        // Phase 1 (this commit): wire contract only — handlers in
-        // Listener.swift dispatch to MenuBarStateManager which returns
-        // placeholder data. Phase 3 implements the real Accessibility-
-        // backed read/write logic.
+        // These cases are the agent-facing surface. They are answered ONLY by
+        // MCPBackend.xpc, which enforces the Advanced → MCP kill-switch
+        // (fire.10.4) and relays writes to the Ice main app's consent gate.
+        // MenuBarItemService.xpc REJECTS every one of them (fire.10.5, issue
+        // #8) — it serves only the `.start` + `.sourcePID` handshake for the
+        // layout UI. (It used to serve `.listItems` / `.saveLayout` /
+        // `.listLayouts` directly, which bypassed the kill-switch.)
 
         /// Returns the list of menu bar items, optionally filtered to a
         /// single section. Maps to MCP `list_items` tool.

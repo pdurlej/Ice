@@ -38,38 +38,24 @@ final class Listener {
                 return .sourcePID(pid)
 
             // MARK: - MCP Server Extension (Phase 4.5)
+            //
+            // Every agent-facing request — reads INCLUDED — is owned by
+            // MCPBackend.xpc, which enforces the Advanced → MCP kill-switch
+            // (fire.10.4). This legacy service must NOT answer them: it once
+            // served `.listItems` / `.saveLayout` / `.listLayouts` directly,
+            // which leaked the menu-bar layout (and let a client persist saved
+            // layouts) even with "Enable MCP server" OFF — bypassing the
+            // kill-switch entirely (fire.10.5, issue #8). This service now does
+            // ONLY its real job: the `.start` + `.sourcePID` handshake. A
+            // request landing here for anything else is a misrouted client.
 
-            case .listItems(let section):
-                let items = MenuBarStateManager.shared.listItems(section: section)
-                return .items(items)
+            case .listItems, .listLayouts:
+                Logger.default.notice("Received read op - not served by this service, route to MCPBackend")
+                return .denied("Menu bar reads are handled by MCPBackend, not this service.")
 
-            // Write ops belong to MCPBackend.xpc, which delegates to the Ice
-            // main app's consent gate + mutation coordinator. This legacy
-            // service never mutates the bar; a request landing here is a
-            // misrouted client. (The fire.6-era "deferred" stubs were removed
-            // in the fire.10.2 dead-code sweep.)
-            case .moveItem, .hideItem, .showItem, .applyLayout:
+            case .moveItem, .hideItem, .showItem, .applyLayout, .saveLayout:
                 Logger.default.notice("Received write op - not supported on MenuBarItemService, route to MCPBackend")
-                return .mutationResult(
-                    success: false,
-                    undoToken: nil,
-                    message: "Write operations are not handled by this service."
-                )
-
-            case .saveLayout(let name):
-                if let savedCount = MenuBarStateManager.shared.saveLayout(name: name) {
-                    return .layoutSaved(name: name, itemCount: savedCount)
-                } else {
-                    return .mutationResult(
-                        success: false,
-                        undoToken: nil,
-                        message: "Failed to save layout"
-                    )
-                }
-
-            case .listLayouts:
-                let names = MenuBarStateManager.shared.listLayouts()
-                return .layouts(names)
+                return .denied("Write operations are handled by MCPBackend, not this service.")
 
             // MARK: - AI-Native Triggers (fire.10 P1)
             //
