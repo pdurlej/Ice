@@ -52,15 +52,16 @@ Owner (pdurlej) will tell me to read this in a fresh session.
   -configuration Debug -destination 'platform=macOS' CODE_SIGN_IDENTITY=""
   CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build`. Bridge:
   `swift build --package-path Bridge`.
-- **Ship flow:** bump BOTH `MARKETING_VERSION` (`0.11.13-fire.X`) + 
+- **Ship flow:** bump BOTH `MARKETING_VERSION` (`0.11.13-fire.X`) +
   `CURRENT_PROJECT_VERSION` in `Ice.xcodeproj/project.pbxproj` (2 occurrences
   each) → commit → `git tag -a v0.11.13-fire.X` → push branch + tag → CI on the
-  fork builds/signs/notarizes/uploads-dSYMs + drafts the GH release. Then APPCAST
-  (still MANUAL): clone `pdurlej/fire-releases` to /tmp, `gh release download`
-  the DMG, `sign_update` it (Sparkle bin in DerivedData — **Keychain Allow
-  prompt**), hand-insert the `<item>` before `</channel>`, push with
-  `git -c user.email="pdurlej@users.noreply.github.com" -c user.name="Piotr
-  Durlej"`. (Automating this is on the roadmap.)
+  fork builds/signs/notarizes/uploads-dSYMs + publishes the GH release → install
+  + smoke → **APPCAST: `scripts/publish-appcast.sh v0.11.13-fire.X`** (issue #10,
+  fire.10.5) — downloads the DMG, `sign_update`s it (**one Keychain Allow
+  prompt**), inserts the `<item>`, pushes with the noreply identity, waits for
+  Pages. Idempotent (no-op if already published); `--dry-run` shows the diff;
+  `--notes-file f.html` for custom release notes (default links the GH release).
+  The Sparkle key stays in the Keychain — signing is LOCAL, never CI.
 - **Roadmap:** ~~10.4 = settings-honesty + App-Hang fix + modal-ANR filter~~ ✅
   SHIPPED. **10.5** = no-team relay pinning (P1, ad-hoc only — signed DMG already
   enforces `.isFromSameTeam`) + sendSync watchdog + handler-pool starvation +
