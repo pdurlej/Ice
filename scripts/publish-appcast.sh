@@ -74,7 +74,14 @@ LENGTH="$(stat -f '%z' "$DMG")"
 DMG_NAME="$(basename "$DMG")"
 
 # --- 3. Read + sanity-check the version from the DMG's Info.plist -------------
-MOUNT="$(hdiutil attach "$DMG" -nobrowse -quiet | grep -o '/Volumes/[^ ]*' | tail -1)"
+# `-plist` + plistlib, NOT text parsing: with `-quiet` hdiutil prints nothing,
+# and the volume name contains spaces ("Ice v0.11.13-…"), so grepping the text
+# table truncates the path. (Both bit the first live run of this script.)
+MOUNT="$(hdiutil attach "$DMG" -nobrowse -plist | python3 -c '
+import plistlib, sys
+d = plistlib.loads(sys.stdin.buffer.read())
+print(next(e["mount-point"] for e in d["system-entities"] if "mount-point" in e))
+')"
 [ -n "$MOUNT" ] || die "failed to mount $DMG_NAME"
 APP="$(ls -d "$MOUNT"/*.app 2>/dev/null | head -1)"
 [ -n "$APP" ] || die "no .app inside the DMG"
