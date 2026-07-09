@@ -247,6 +247,14 @@ private final class RelayXPCClient: @unchecked Sendable {
         }
         if MenuBarItemService.ownTeamIdentifier() != nil {
             new.setPeerRequirement(.isFromSameTeam())
+        } else {
+            // Ad-hoc build: no meaningful peer primitive exists (issue #4 —
+            // see MCPBackend/Listener.swift for the full research note). A
+            // spoofed service could feed this pump forged work, but every
+            // write still crosses the user consent prompt.
+            Logger(category: "MCPRelayPump").warning(
+                "SECURITY: no team identifier (ad-hoc build) — relay peer is unauthenticated."
+            )
         }
         try new.activate()
         session = new

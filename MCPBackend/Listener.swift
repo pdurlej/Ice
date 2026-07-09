@@ -239,6 +239,24 @@ final class Listener {
                     }
                 }
             } else {
+                // No team identifier (ad-hoc / community build) — peer
+                // authentication is UNAVAILABLE, not merely skipped (fire.10.6,
+                // issue #4). Researched alternatives, all dead ends for ad-hoc:
+                // `.isFromSameTeam` needs a team; entitlement checks are
+                // self-grantable (anyone can ad-hoc-sign with any entitlement);
+                // `XPCPeerRequirement(lightweightCodeRequirements:)` by
+                // signing-identifier breaks on the bridge's per-build
+                // hash-suffixed identifier (`IceMCPBridge-5555...`), and
+                // `XPCReceivedMessage` exposes no audit token for a path check.
+                // With no chain of trust, any local process can connect — the
+                // consent prompts in the Ice main app are the real (and only)
+                // write boundary on such builds. Signed Developer ID builds are
+                // unaffected. See docs/mcp/ARCHITECTURE.md "Ad-hoc builds".
+                logger.warning("""
+                    SECURITY: no team identifier (ad-hoc build) — accepting XPC \
+                    connections from ANY same-user process. Write consent prompts \
+                    remain the only boundary. Signed builds enforce same-team.
+                    """)
                 listener = try XPCListener(service: name) { [weak self] request in
                     request.accept { message in
                         self?.handleMessage(message)

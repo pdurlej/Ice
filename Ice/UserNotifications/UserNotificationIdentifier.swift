@@ -13,4 +13,8 @@ enum UserNotificationIdentifier: String {
     /// coalesces into one updating banner instead of spamming Notification
     /// Center.
     case mcpWrite = "MCPWrite"
+
+    /// Posted once when a competing menu bar manager (Bartender, Hidden Bar,
+    /// Dozer…) is detected running alongside Fire (fire.10.6, issue #14).
+    case competingManager = "CompetingManager"
 }

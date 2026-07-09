@@ -380,6 +380,39 @@ final class MCPBackendStateManager {
 
     // MARK: - AI-Native Triggers (fire.10 P1 - delegated to Ice main app)
 
+    /// Bounds how many consent-class waits (`setTrigger` / `removeTrigger`) may
+    /// be in flight at once (fire.10.6, issue #6). Each such request blocks an
+    /// XPC worker thread in `syncWait` for up to 120 s while a human reads the
+    /// consent prompt — and XPC dispatches from a bounded pool, so a burst of
+    /// them could starve the pool until even `relayFetch` (which delivers the
+    /// consent REPLIES) couldn't be served: deadlock-by-starvation. The relay
+    /// pump processes one item at a time anyway, so a queued second proposal
+    /// would just burn its whole timeout without its prompt even showing —
+    /// failing fast is honest UX, not merely hygiene.
+    private enum ConsentWaitGate {
+        private static let lock = NSLock()
+        private static var inFlight = 0
+        static let limit = 2
+
+        /// Reserves a slot; `false` means the caller must fail fast.
+        static func tryEnter() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            guard inFlight < limit else { return false }
+            inFlight += 1
+            return true
+        }
+
+        static func leave() {
+            lock.lock()
+            defer { lock.unlock() }
+            inFlight -= 1
+        }
+    }
+
+    private static let consentBusyMessage =
+        "Another automation approval is already pending in Fire. Wait for the user to decide it, then try again."
+
     /// Proposes installing a trigger. Relays the spec to Ice main app over the
     /// `MCPTriggerChannel`; the main app shows the install consent prompt, mints
     /// a sealed grant, and persists the rule. The agent never gets authority —
@@ -389,6 +422,11 @@ final class MCPBackendStateManager {
         spec: MenuBarItemService.TriggerSpec
     ) async -> (success: Bool, triggerID: String?, enabled: Bool, message: String?) {
         logger.debug("setTrigger(name: \(spec.name)) via bridge")
+        guard ConsentWaitGate.tryEnter() else {
+            logger.notice("setTrigger rejected: consent-wait limit reached")
+            return (false, nil, false, Self.consentBusyMessage)
+        }
+        defer { ConsentWaitGate.leave() }
         let proposal = MCPTriggerChannel.Proposal(
             id: UUID().uuidString,
             op: .install,
@@ -425,6 +463,11 @@ final class MCPBackendStateManager {
         id: String
     ) async -> (success: Bool, triggerID: String?, message: String?) {
         logger.debug("removeTrigger(\(id)) via bridge")
+        guard ConsentWaitGate.tryEnter() else {
+            logger.notice("removeTrigger rejected: consent-wait limit reached")
+            return (false, nil, Self.consentBusyMessage)
+        }
+        defer { ConsentWaitGate.leave() }
         let proposal = MCPTriggerChannel.Proposal(
             id: UUID().uuidString,
             op: .remove,

@@ -166,6 +166,7 @@ extension Defaults {
         case mcpServerEnabled = "MCPServerEnabled"
         case mcpAllowWrites = "MCPAllowWrites"
         case mcpNotifyOnWrite = "MCPNotifyOnWrite"
+        case suppressCompetingManagerWarning = "SuppressCompetingManagerWarning"
 
         // MARK: AI Quotas Settings
         case enableAIQuotas = "EnableAIQuotas"

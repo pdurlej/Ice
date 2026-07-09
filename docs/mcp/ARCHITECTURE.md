@@ -529,6 +529,32 @@ Fire's Advanced settings pane will render these snippets with a copy button, aut
 - **Process impersonation.** A malicious process could rename itself to match an approved client path. Mitigated by: Keychain entry stores SHA-256 of the binary at consent time; IceMCPBridge re-hashes on each write call and rejects mismatches.
 - **Consent notification spoofing.** The notification is posted by the Fire main app, not by IceMCPBridge, so a compromised bridge binary cannot bypass the UI.
 
+### Ad-hoc builds: XPC peer authentication is unavailable (fire.10.6, issue #4)
+
+On signed (Developer ID) builds every XPC endpoint enforces `.isFromSameTeam()`,
+so no third-party process can talk to MCPBackend or spoof it. On **ad-hoc /
+community builds** (no Apple Developer Program), that requirement is skipped —
+and after researching the macOS 26 `XPCPeerRequirement` API, no meaningful
+substitute exists for the ad-hoc case:
+
+- `.isFromSameTeam()` needs a team identifier the build doesn't have.
+- Entitlement-based requirements are self-grantable: anyone can ad-hoc-sign a
+  binary with any entitlement.
+- Lightweight-code-requirement matching by signing identifier breaks in
+  practice: the SPM-built bridge gets a per-build, hash-suffixed ad-hoc
+  identifier (`IceMCPBridge-5555…`), so a pinned identifier would reject our
+  own bridge after every rebuild (the upstream #744 failure class).
+- `XPCReceivedMessage` exposes no audit token / PID, so executable-path checks
+  aren't possible from the Swift API — and the app bundle is user-writable
+  anyway, so a same-user attacker could modify it rather than connect to it.
+
+Ad-hoc builds therefore log a loud `SECURITY:` warning at listener/pump startup
+and rely on what has always been the real write boundary: **the consent prompts
+in the Fire main app**, which no XPC peer can bypass. Reads (`list_items`) are
+exposed to any same-user process on such builds — acceptable for a
+build-it-yourself configuration, and stated here so nobody mistakes it for the
+signed-build posture.
+
 ### Performance
 
 - **XPC overhead per call.** Each tool call requires an XPC round-trip. The existing `sendSync` path measures ~2ms for `sourcePID`. Layout operations may take 5–15ms due to Accessibility API calls. This is acceptable for LLM-driven workflows (latency budget is seconds, not milliseconds). Batch operations should be considered for Phase 5 (e.g., `apply_layout` is already atomic at the XPC level).

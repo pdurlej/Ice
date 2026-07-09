@@ -74,7 +74,7 @@ extension UserNotificationManager: @preconcurrency UNUserNotificationCenterDeleg
                 break
             }
             appState.updatesManager.checkForUpdates()
-        case .mcpWrite:
+        case .mcpWrite, .competingManager:
             // Informational only — tapping the banner just dismisses it.
             break
         case nil:

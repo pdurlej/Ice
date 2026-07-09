@@ -64,6 +64,9 @@ final class AppState: ObservableObject {
     /// Manager for user notifications.
     let userNotificationManager = UserNotificationManager()
 
+    /// Warns once when a competing menu bar manager is running (issue #14).
+    let competingManagerMonitor = CompetingManagerMonitor()
+
     /// Storage for internal observers.
     private var cancellables = Set<AnyCancellable>()
 
@@ -93,6 +96,7 @@ final class AppState: ObservableObject {
         imageCache.performSetup(with: self)
         updatesManager.performSetup(with: self)
         userNotificationManager.performSetup(with: self)
+        competingManagerMonitor.performSetup(with: self)
         aiQuotaManager.performSetup(with: self)
         triggerEngine.performSetup()
         mcpTriggerCommandHandler.performSetup(with: self)
