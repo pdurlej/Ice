@@ -9,23 +9,27 @@ Owner (pdurlej) will tell me to read this in a fresh session.
   commands need `-R pdurlej/fire-from-ice` (old `pdurlej/Ice` 301-redirects but
   use the new name). Branch `fire/main`. Local: `/Users/pd/Developer/fire`.
   App bundle stays `com.jordanbaird.Ice` / `Ice.app` ON PURPOSE.
-- **Shipped: fire.10.5 / build 1153** (installed, notarized, appcast live on
-  `pdurlej.github.io/fire-releases`). Sentry symbolication **LIVE** (dSYM upload
-  in CI; `SENTRY_AUTH_TOKEN` set). Recent: 10.4 = honest MCP kill-switch +
-  modal-ANR filter + App-Hang fix; 10.4.1 = App-Hang sweep; 10.4.2 = FIRE-N fix;
-  **10.5 = MenuBarItemService kill-switch bypass fix (#8) + CI SHA-pin (#9)**.
-  NOTE: notarization needs the owner's Apple Developer Program License Agreement
-  in-effect — 10.4.1 first 403'd until he accepted it, then `gh run rerun
-  --failed <id>` went green; 10.4.2/10.5 notarized first try. Watch on future
-  ships. CI actions are now SHA-pinned (tag in a trailing comment) — when
-  bumping an action, resolve the new SHA via `gh api repos/OWNER/REPO/commits/TAG`.
-- **ISSUE BOARD is the roadmap now** (`gh issue list -R pdurlej/fire-from-ice`).
-  Fable-5 audit (2026-07-05) filed #4-#15; FIRE-N/P added #16/#17. Opus 4.8
-  shipped #16+#15 (10.4.2) and #8+#9 (10.5). **STILL OPEN, ranked:** #17+#7
-  (FIRE-P AX family — App-Hang, needs runtime testing, pair them), #4 (P1 relay
-  peer pinning, ad-hoc only), #5 (sendSync watchdog — DEADLOCK TRAP documented in
-  the issue: send holds a lock, native timeout absent), #6 (syncWait starvation),
-  #10 (appcast automation — do next, saves ship toil), #11/#12/#13/#14 (P3).
+- **Shipped: fire.10.6 / build 1154** (installed, notarized, appcast live on
+  `pdurlej.github.io/fire-releases` — published via `scripts/publish-appcast.sh`,
+  now battle-tested end-to-end). Sentry symbolication **LIVE**. Recent: 10.4 =
+  kill-switch + modal-ANR filter + App-Hang fix; 10.4.1 = App-Hang sweep;
+  10.4.2 = FIRE-N fix; 10.5 = kill-switch bypass (#8) + CI SHA-pin (#9);
+  **10.6 = consent-wait gate (#6) + ad-hoc posture documented (#4) +
+  competing-manager warning (#14)**. The repo has **19 GitHub stars** — real
+  users; keep release notes user-readable. NOTE: notarization needs the owner's
+  Apple Developer Program License Agreement in-effect (10.4.1 once 403'd until
+  he accepted it; `gh run rerun --failed` then went green). CI actions are
+  SHA-pinned — bump via `gh api repos/OWNER/REPO/commits/TAG`.
+- **ISSUE BOARD is the roadmap** (`gh issue list -R pdurlej/fire-from-ice`).
+  Fable-5 audit (2026-07-05) filed #4-#15; FIRE-N/P added #16/#17. Shipped so
+  far: #16+#15 (10.4.2), #8+#9 (10.5), #10 (appcast script), #6+#4+#14 (10.6).
+  **STILL OPEN (6), ranked:** #17+#7 (FIRE-P AX family + isMouseInside SLS —
+  the remaining App-Hang pair; needs the owner's RUNTIME testing, design their
+  caches together), #5 (sendSync watchdog — DEADLOCK TRAP documented in the
+  issue: send holds a lock, no native timeout; wants a dedicated careful pass +
+  kill-STOP testing), #11 (light SLS batch — IceBar positioning risk, wants
+  eyes), #12 (undo: implement needs a consent-flow e2e ⇒ owner; strip variant is
+  headless), #13 (a11y — VoiceOver verification ⇒ owner).
 - **THE App-Hang franchise → main-thread window-server / AX calls. Now driven by
   a REPO ISSUE BOARD (#4-#17); symbolication names each new organ.** Sentry
   **FIRE-F/G/H/K/M/N/P** (all App-Hang, owner's macOS 26 daily driver — he runs
@@ -72,6 +76,29 @@ Owner (pdurlej) will tell me to read this in a fresh session.
 - **Behaviour:** do NOT tell the owner to rest/sleep/wrap-up (documented Opus
   tic). Oracle only via the `oracle` MCP wrapper / browser / gpt-5.5-pro, don't
   rerun on timeout (use oracle-await). Owner handles all secrets/tokens.
+
+## 🔥 SHIPPED fire.10.6 — consent-wait gate (#6) + ad-hoc posture (#4) + competing-manager warning (#14) (2026-07-09)
+
+Fable 5 executing its own board, all headless. CI `29016549893` (build 1154)
+success; appcast published via **`scripts/publish-appcast.sh` — first live run**
+(caught 2 script bugs: `hdiutil -quiet` prints nothing + volume names contain
+spaces; fixed with `-plist`+plistlib in `1d5d4ad`; idempotent re-run verified).
+Commits `1dbf805` (feat) + `0e5c960` (bump). Closed #1 (stale tracker), #4, #6,
+#14. Sentry at ship time: zero new issues; FIRE-N quiet since its 10.4.2 fix.
+- **#6**: `ConsentWaitGate` (MCPBackendStateManager) bounds concurrent
+  setTrigger/removeTrigger waits to 2; excess fail fast ("another approval is
+  pending") — prevents XPC handler-pool starvation where even relayFetch (the
+  consent-reply channel) couldn't be served.
+- **#4**: researched `XPCPeerRequirement` fully — no meaningful ad-hoc primitive
+  exists (entitlements self-grantable; LWCR identifier pinning breaks on the
+  bridge's per-build hash-suffixed identifier; no audit token in the Swift API).
+  Shipped loud `SECURITY:` warnings (MCPBackend listener + relay pump) + an
+  "Ad-hoc builds" section in docs/mcp/ARCHITECTURE.md. Signed builds unchanged.
+- **#14**: `CompetingManagerMonitor` — one notification per session when
+  Bartender/Hidden Bar/Dozer/Vanilla runs next to Fire (exact bundle-id match,
+  launch + event-driven, no polling, no telemetry; suppress via
+  `SuppressCompetingManagerWarning`). NOTE: it will self-demo the next time the
+  owner launches Bartender.
 
 ## 🔥 SHIPPED fire.10.5 — kill-switch bypass fix (#8) + CI SHA-pin (#9) (2026-07-08)
 
