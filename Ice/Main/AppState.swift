@@ -67,6 +67,10 @@ final class AppState: ObservableObject {
     /// Warns once when a competing menu bar manager is running (issue #14).
     let competingManagerMonitor = CompetingManagerMonitor()
 
+    /// Off-main-refreshed menu bar geometry for the event-handler guards
+    /// (issues #7 + #17).
+    let menuBarGeometryCache = MenuBarGeometryCache()
+
     /// Storage for internal observers.
     private var cancellables = Set<AnyCancellable>()
 
@@ -91,6 +95,7 @@ final class AppState: ObservableObject {
         }
 
         appearanceManager.performSetup(with: self)
+        menuBarGeometryCache.performSetup(with: self)
         hidEventManager.performSetup(with: self)
         await itemManager.performSetup(with: self)
         imageCache.performSetup(with: self)

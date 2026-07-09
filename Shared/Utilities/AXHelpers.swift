@@ -13,6 +13,15 @@ enum AXHelpers {
         attributes: .concurrent
     )
 
+    /// Caps how long ANY Accessibility call from this process may block on an
+    /// unresponsive target app (the system default is ~6 s). Setting the
+    /// timeout on the system-wide element applies it process-globally, so
+    /// even AX calls outside these helpers stay bounded well below the 2 s
+    /// App-Hang threshold (fire.10.7, issue #17 / Sentry FIRE-P).
+    static func limitGlobalMessagingTimeout(seconds: Float = 0.5) {
+        queue.sync { UIElement.globalMessagingTimeout = seconds }
+    }
+
     @discardableResult
     static func isProcessTrusted(prompt: Bool = false) -> Bool {
         queue.sync { checkIsProcessTrusted(prompt: prompt) }

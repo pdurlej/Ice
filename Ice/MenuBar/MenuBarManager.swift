@@ -239,8 +239,11 @@ final class MenuBarManager: ObservableObject {
                         return
                     }
 
-                    // Get the application menu frame for the display.
-                    guard let applicationMenuFrame = screen.getApplicationMenuFrame() else {
+                    // Cached application menu frame (fire.10.7, issue #17).
+                    // The previous live `getApplicationMenuFrame()` was a
+                    // synchronous AX walk of the frontmost app INSIDE this
+                    // main-thread sink — FIRE-P class.
+                    guard let applicationMenuFrame = appState.menuBarGeometryCache.applicationMenuFrame(for: screen.displayID) else {
                         return
                     }
 

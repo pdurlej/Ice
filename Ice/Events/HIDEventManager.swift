@@ -487,7 +487,11 @@ extension HIDEventManager {
     func isMouseInsideApplicationMenu(appState: AppState, screen: NSScreen) -> Bool {
         guard
             let mouseLocation = MouseHelpers.locationCoreGraphics,
-            var applicationMenuFrame = screen.getApplicationMenuFrame()
+            // Cached + refreshed off-main (fire.10.7, issue #17 / FIRE-P). The
+            // previous live `getApplicationMenuFrame()` did a synchronous AX
+            // walk of the frontmost app on EVERY event — when that app was
+            // busy, this guard hung the main thread with it.
+            var applicationMenuFrame = appState.menuBarGeometryCache.applicationMenuFrame(for: screen.displayID)
         else {
             return false
         }
@@ -502,13 +506,13 @@ extension HIDEventManager {
         guard let mouseLocation = MouseHelpers.locationCoreGraphics else {
             return false
         }
-        let windowIDs = Bridging.getMenuBarWindowList(option: [.onScreen, .activeSpace, .itemsOnly])
-        return windowIDs.contains { windowID in
-            guard let bounds = Bridging.getWindowBounds(for: windowID) else {
-                return false
-            }
-            return bounds.contains(mouseLocation)
-        }
+        // Cached + refreshed off-main (fire.10.7, issue #7). The previous
+        // live window-list enumeration plus a per-window bounds query — all
+        // synchronous SkyLight calls — ran on the main thread on every
+        // mouse/hover/click event, the last known member of the App-Hang
+        // family (FIRE-F/K/M/N/P). The cache covers ALL menu bar windows,
+        // Apple's included, so the guard's semantics are unchanged.
+        return appState.menuBarGeometryCache.isPointInsideMenuBarItem(mouseLocation)
     }
 
     /// A Boolean value that indicates whether the mouse pointer is within
