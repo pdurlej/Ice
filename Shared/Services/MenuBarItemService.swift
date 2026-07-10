@@ -33,7 +33,16 @@ enum MenuBarItemService {
         }
         var info: CFDictionary?
         guard
-            SecCodeCopySigningInformation(code, SecCSFlags(rawValue: 0), &info) == errSecSuccess,
+            // `kSecCSSigningInformation` is REQUIRED — without it the returned
+            // dictionary simply omits the team identifier, so this function
+            // silently answered `nil` for EVERY build, signed ones included.
+            // That quietly disabled `.isFromSameTeam()` on all three XPC
+            // endpoints from fire.10.2 (when the "authenticated relay" shipped)
+            // until fire.10.7.1, where the ad-hoc SECURITY warning added for
+            // issue #4 exposed it on a notarized build. Verified: with the flag
+            // the app, the bridge, and both .xpc services all resolve to the
+            // Developer ID team; with `rawValue: 0` the key is absent.
+            SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
             let dict = info as? [String: Any],
             let teamID = dict[kSecCodeInfoTeamIdentifier as String] as? String,
             !teamID.isEmpty

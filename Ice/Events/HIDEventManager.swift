@@ -502,17 +502,29 @@ extension HIDEventManager {
 
     /// A Boolean value that indicates whether the mouse pointer is within
     /// the bounds of a menu bar item.
+    // NOTE (fire.10.7.1, issue #7): this query stays LIVE, deliberately.
+    // fire.10.7 tried serving it from an off-main-refreshed cache; that was
+    // wrong. Menu bar item frames change at the exact instant this guard is
+    // consulted — Ice expands and collapses sections in response to the very
+    // events the guard gates — so the cache was stale precisely when it
+    // mattered, and hover/click actions lagged, misfired, or did nothing.
+    // Unlike the AX walk in `isMouseInsideApplicationMenu` (Sentry FIRE-P),
+    // this SkyLight query has never produced an App-Hang report. If it ever
+    // does, the fix is a cheaper query — not a cache.
+
+    /// A Boolean value that indicates whether the mouse pointer is within
+    /// the bounds of a menu bar item.
     func isMouseInsideMenuBarItem(appState: AppState, screen: NSScreen) -> Bool {
         guard let mouseLocation = MouseHelpers.locationCoreGraphics else {
             return false
         }
-        // Cached + refreshed off-main (fire.10.7, issue #7). The previous
-        // live window-list enumeration plus a per-window bounds query — all
-        // synchronous SkyLight calls — ran on the main thread on every
-        // mouse/hover/click event, the last known member of the App-Hang
-        // family (FIRE-F/K/M/N/P). The cache covers ALL menu bar windows,
-        // Apple's included, so the guard's semantics are unchanged.
-        return appState.menuBarGeometryCache.isPointInsideMenuBarItem(mouseLocation)
+        let windowIDs = Bridging.getMenuBarWindowList(option: [.onScreen, .activeSpace, .itemsOnly])
+        return windowIDs.contains { windowID in
+            guard let bounds = Bridging.getWindowBounds(for: windowID) else {
+                return false
+            }
+            return bounds.contains(mouseLocation)
+        }
     }
 
     /// A Boolean value that indicates whether the mouse pointer is within

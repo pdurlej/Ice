@@ -161,6 +161,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let modalMarkers = [
                     "runModal", "runModalSession", "beginSheetModal",
                     "SPUStandardUserDriver", "NSAlert", "_NSShowStopAlertPanel",
+                    // An open NSMenu runs its own modal event loop, so a menu
+                    // the user leaves open for >2 s reports as an App Hang.
+                    // Sentry FIRE-Q was exactly this: our secondary context
+                    // menu, held open while testing (fire.10.7.1).
+                    "NSMenuTrackingSession", "NSContextMenuTrackingSession",
+                    "startRunningMenuEventLoop",
                 ]
                 let parkedInModal = (event.threads ?? []).contains { thread in
                     (thread.stacktrace?.frames ?? []).contains { frame in

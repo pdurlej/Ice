@@ -2,22 +2,29 @@
 //  MenuBarGeometryCache.swift
 //  Ice
 //
-//  Off-main-refreshed cache of the menu bar geometry that the event-handler
-//  guards consult (fire.10.7, issues #7 + #17).
+//  Off-main-refreshed cache of the APPLICATION MENU frame (fire.10.7.1,
+//  issue #17 / Sentry FIRE-P).
 //
-//  Sentry FIRE-P: `isMouseInsideApplicationMenu` walked the frontmost app's
-//  menu bar via the Accessibility API — synchronous IPC to that app — on the
-//  main thread, on mouse events. When the frontmost app was busy, Fire's main
-//  thread hung with it. Its sibling `isMouseInsideMenuBarItem` enumerated
-//  every menu bar window (SkyLight calls) per event (issue #7).
+//  FIRE-P: `isMouseInsideApplicationMenu` called
+//  `NSScreen.getApplicationMenuFrame()` on the main thread, on every mouse
+//  event. That walks the FRONTMOST APP's menu bar over the Accessibility API
+//  — element / role / children / per-child isEnabled + frame, each a
+//  synchronous IPC round trip into that app. When the frontmost app was busy,
+//  Fire's main thread hung with it.
 //
-//  Both guards now read this cache synchronously — zero IPC on the event
-//  path and NO timing changes to the guard chain. The cache recomputes off
-//  the main thread, event-driven (frontmost app, space, item cache, screen
-//  changes, app launch/quit) plus a slow 2 s backstop tick, all debounced.
-//  The bounded staleness is harmless here: items move when sections toggle
-//  (covered by the item-cache trigger) and the app menu changes with the
-//  frontmost app (covered); everything else drifts rarely.
+//  Caching is correct HERE because the value only changes when the frontmost
+//  app (or its menus, or the screen layout) changes — never as a function of
+//  mouse movement. The refresh is therefore triggered by exactly those events
+//  and runs off the main thread; the guards read it synchronously.
+//
+//  WHAT THIS DELIBERATELY DOES NOT CACHE (fire.10.7 regression, reverted):
+//  the menu bar ITEM frames used by `isMouseInsideMenuBarItem` (issue #7).
+//  Those change at the very instant the guard is consulted — Ice expands and
+//  collapses sections in response to the same events the guard gates — so any
+//  cache is stale exactly when it matters. In testing that produced hover and
+//  click actions that variously lagged, misfired, or did nothing at all.
+//  `isMouseInsideMenuBarItem` keeps its live SkyLight query; it has never
+//  produced an App-Hang report, unlike the AX walk above.
 //
 
 import Cocoa
@@ -30,18 +37,12 @@ final class MenuBarGeometryCache {
     private var cancellables = Set<AnyCancellable>()
 
     /// Frame of the application menu per display, as computed by
-    /// `NSScreen.getApplicationMenuFrame` (absent when unknown, or suppressed
-    /// by its notch workaround).
-    private(set) var applicationMenuFrames = [CGDirectDisplayID: CGRect]()
-
-    /// Frames of ALL on-screen, active-space menu bar item windows —
-    /// Apple's items included (unlike the item manager's ItemCache, which
-    /// only tracks Ice-managed items; the guards must respect the clock and
-    /// Control Center too).
-    private(set) var menuBarItemFrames = [CGRect]()
+    /// `NSScreen.getApplicationMenuFrame()` off the main thread.
+    private var applicationMenuFrames = [CGDirectDisplayID: CGRect]()
 
     /// Serializes refreshes; a trigger landing mid-refresh queues exactly one
-    /// follow-up so the cache always converges on fresh data.
+    /// follow-up, so the cache always converges on fresh data without piling
+    /// up AX walks.
     private var isRefreshing = false
     private var needsAnotherRefresh = false
 
@@ -50,38 +51,34 @@ final class MenuBarGeometryCache {
     func performSetup(with appState: AppState) {
         self.appState = appState
 
-        // Belt and suspenders for the whole process: cap how long ANY
-        // Accessibility call may block on an unresponsive target app. The
-        // refreshes below run off-main anyway; this bounds the residual
-        // main-thread AX users (permission checks, hasValidMenuBar) well
-        // below the 2 s hang threshold.
+        // Cap how long ANY Accessibility call from this process may block on
+        // an unresponsive target app (system default is ~6 s). The walk below
+        // runs off-main, so this mainly bounds the residual main-thread AX
+        // users (permission checks, `hasValidMenuBar`) below the 2 s App-Hang
+        // threshold.
         AXHelpers.limitGlobalMessagingTimeout()
 
         let workspaceCenter = NSWorkspace.shared.notificationCenter
         let triggers: [AnyPublisher<Void, Never>] = [
-            workspaceCenter.publisher(for: NSWorkspace.activeSpaceDidChangeNotification)
-                .map { _ in () }.eraseToAnyPublisher(),
-            workspaceCenter.publisher(for: NSWorkspace.didLaunchApplicationNotification)
-                .map { _ in () }.eraseToAnyPublisher(),
-            workspaceCenter.publisher(for: NSWorkspace.didTerminateApplicationNotification)
-                .map { _ in () }.eraseToAnyPublisher(),
-            NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
-                .map { _ in () }.eraseToAnyPublisher(),
+            // The app menu belongs to the frontmost / menu-bar-owning app —
+            // these are the changes that actually invalidate the frame.
             NSWorkspace.shared.publisher(for: \.frontmostApplication)
                 .map { _ in () }.eraseToAnyPublisher(),
             NSWorkspace.shared.publisher(for: \.menuBarOwningApplication)
                 .map { _ in () }.eraseToAnyPublisher(),
-            appState.itemManager.$itemCache
+            workspaceCenter.publisher(for: NSWorkspace.activeSpaceDidChangeNotification)
                 .map { _ in () }.eraseToAnyPublisher(),
-            // Slow backstop for drift with no notification (an app renaming
-            // its menus, an item resizing in place). The walk runs off-main
-            // at utility QoS, so the cost is a few ms of background IPC.
+            NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
+                .map { _ in () }.eraseToAnyPublisher(),
+            // Backstop for menus that change within one app (a document opens,
+            // a mode switches) with no notification to hang off.
             Timer.publish(every: 2, on: .main, in: .common).autoconnect()
                 .map { _ in () }.eraseToAnyPublisher(),
         ]
 
+        // No debounce: an app switch must land before the user's next hover.
+        // Bursts are coalesced by `isRefreshing`/`needsAnotherRefresh` instead.
         Publishers.MergeMany(triggers)
-            .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] in
                 self?.refresh()
             }
@@ -91,18 +88,12 @@ final class MenuBarGeometryCache {
         logger.debug("Menu bar geometry cache active")
     }
 
-    /// The cached application-menu frame for a display.
+    /// The cached application-menu frame for a display, if known.
     func applicationMenuFrame(for displayID: CGDirectDisplayID) -> CGRect? {
         applicationMenuFrames[displayID]
     }
 
-    /// Whether a point (CoreGraphics coordinates) lies inside any cached
-    /// menu bar item window.
-    func isPointInsideMenuBarItem(_ point: CGPoint) -> Bool {
-        menuBarItemFrames.contains { $0.contains(point) }
-    }
-
-    /// Recomputes the geometry off the main thread and publishes it back.
+    /// Recomputes the application menu frames off the main thread.
     private func refresh() {
         guard !isRefreshing else {
             needsAnotherRefresh = true
@@ -110,28 +101,34 @@ final class MenuBarGeometryCache {
         }
         isRefreshing = true
 
-        // Snapshot the screens on the main actor; the AX + SkyLight walk runs
-        // detached. Calling `getApplicationMenuFrame()` off-main is the same
-        // (long-shipped) pattern MenuBarOverlayPanel's update task uses.
-        let screens = NSScreen.screens
-        Task.detached(priority: .utility) { [weak self] in
-            var menuFrames = [CGDirectDisplayID: CGRect]()
-            for screen in screens {
-                if let frame = screen.getApplicationMenuFrame() {
-                    menuFrames[screen.displayID] = frame
+        // Snapshot the screens on the main actor; the AX walk runs detached.
+        // (MenuBarOverlayPanel's update task has called `getApplicationMenuFrame()`
+        // off-main for many releases — this is the same, proven pattern.)
+        let screens = NSScreen.screens.map { (id: $0.displayID, screen: $0) }
+        let liveDisplayIDs = Set(screens.map(\.id))
+        Task.detached(priority: .userInitiated) { [weak self] in
+            var frames = [CGDirectDisplayID: CGRect]()
+            for entry in screens {
+                if let frame = entry.screen.getApplicationMenuFrame() {
+                    frames[entry.id] = frame
                 }
             }
-
-            let windowIDs = Bridging.getMenuBarWindowList(option: [.onScreen, .activeSpace, .itemsOnly])
-            let itemFrames = windowIDs.compactMap { Bridging.getWindowBounds(for: $0) }
-
-            await self?.publish(menuFrames: menuFrames, itemFrames: itemFrames)
+            await self?.publish(frames, liveDisplayIDs: liveDisplayIDs)
         }
     }
 
-    private func publish(menuFrames: [CGDirectDisplayID: CGRect], itemFrames: [CGRect]) {
-        applicationMenuFrames = menuFrames
-        menuBarItemFrames = itemFrames
+    private func publish(_ frames: [CGDirectDisplayID: CGRect], liveDisplayIDs: Set<CGDirectDisplayID>) {
+        // Drop only displays that are physically gone…
+        applicationMenuFrames = applicationMenuFrames.filter { liveDisplayIDs.contains($0.key) }
+        // …then MERGE, don't replace: a display whose walk produced nothing
+        // this round (the AX messaging timeout fired, the app is mid-launch)
+        // keeps its last good frame. Dropping it would make
+        // `isMouseInsideApplicationMenu` answer "no" — i.e. treat the app menu
+        // as empty menu bar space — and fire show-on-hover over File/Edit.
+        for (displayID, frame) in frames {
+            applicationMenuFrames[displayID] = frame
+        }
+
         isRefreshing = false
         if needsAnotherRefresh {
             needsAnotherRefresh = false
