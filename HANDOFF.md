@@ -1,7 +1,27 @@
 # HANDOFF — Fire fork + ClaudeBar PR + CodexBar issue + AuditLM
 
 This is for me (Claude) after session compression strips context.
-Owner (pdurlej) will tell me to read this in a fresh session.
+Owner (pdurlej) will tell me to read this in a fresh session. **Codex / other
+agents: start with `AGENTS.md` at the repo root** — it has the current pending
+state and the gotchas; this file is the deep history.
+
+## ⏳ CURRENT STATE (2026-07-10) — fire.10.7.1 built + installed, NOT yet on appcast
+
+`v0.11.13-fire.10.7.1` (build 1156, HEAD `161c748`) is notarized + installed on
+the owner's machine but **publication is gated on his runtime test** of the
+menu-bar guards. Appcast still shows 10.6 as newest (10.7 was never published;
+10.7.1 pending). On his "works": run `scripts/publish-appcast.sh
+v0.11.13-fire.10.7.1`, close #17 + #4, leave #7 open. Full detail in the SHIPPED
+sections below + `AGENTS.md`. Three fixes landed in 10.7.1:
+1. **P1 — `.isFromSameTeam()` was never applied** (any build, since fire.10.2):
+   `ownTeamIdentifier()` passed `SecCSFlags(rawValue: 0)` to
+   `SecCodeCopySigningInformation`, which omits the team id → always nil. Fixed
+   with `kSecCSSigningInformation`; probe-verified all 4 binaries resolve the
+   team. Surfaced by the #4 ad-hoc SECURITY warning firing on a SIGNED build.
+2. **Reverted the fire.10.7 item-frame cache (#7)** — caching geometry that
+   changes at guard-eval time broke hover/click. Live SLS query restored.
+3. **Kept the app-menu cache (#17 / FIRE-P)** — correct there — and taught the
+   modal-ANR filter about `NSMenuTrackingSession` (FIRE-Q was a held-open menu).
 
 ## 🧭 RESUME HERE (2026-06-19, HEAD `ac135a5`, tree CLEAN)
 
