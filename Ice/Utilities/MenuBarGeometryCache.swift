@@ -33,12 +33,31 @@ import OSLog
 
 @MainActor
 final class MenuBarGeometryCache {
-    private weak var appState: AppState?
+    enum ApplicationMenuFrameState {
+        /// The active/menu-bar-owning application changed and the cache has
+        /// not published geometry for the new context yet.
+        case pending
+
+        /// Geometry belongs to the current application context. A `nil` frame
+        /// means the AX walk completed without finding a usable menu.
+        case current(CGRect?)
+    }
+
+    private struct ApplicationContext: Equatable, Sendable {
+        let frontmostPID: pid_t?
+        let menuBarOwnerPID: pid_t?
+    }
+
     private var cancellables = Set<AnyCancellable>()
 
     /// Frame of the application menu per display, as computed by
     /// `NSScreen.getApplicationMenuFrame()` off the main thread.
     private var applicationMenuFrames = [CGDirectDisplayID: CGRect]()
+
+    /// The application context that owns `applicationMenuFrames`. Comparing
+    /// this with the live context prevents an old app's menu width from being
+    /// used during the async refresh after Cmd-Tab.
+    private var publishedContext: ApplicationContext?
 
     /// Serializes refreshes; a trigger landing mid-refresh queues exactly one
     /// follow-up, so the cache always converges on fresh data without piling
@@ -49,8 +68,6 @@ final class MenuBarGeometryCache {
     private let logger = Logger(category: "MenuBarGeometryCache")
 
     func performSetup(with appState: AppState) {
-        self.appState = appState
-
         // Cap how long ANY Accessibility call from this process may block on
         // an unresponsive target app (system default is ~6 s). The walk below
         // runs off-main, so this mainly bounds the residual main-thread AX
@@ -65,6 +82,8 @@ final class MenuBarGeometryCache {
             NSWorkspace.shared.publisher(for: \.frontmostApplication)
                 .map { _ in () }.eraseToAnyPublisher(),
             NSWorkspace.shared.publisher(for: \.menuBarOwningApplication)
+                .map { _ in () }.eraseToAnyPublisher(),
+            workspaceCenter.publisher(for: NSWorkspace.didActivateApplicationNotification)
                 .map { _ in () }.eraseToAnyPublisher(),
             workspaceCenter.publisher(for: NSWorkspace.activeSpaceDidChangeNotification)
                 .map { _ in () }.eraseToAnyPublisher(),
@@ -88,9 +107,16 @@ final class MenuBarGeometryCache {
         logger.debug("Menu bar geometry cache active")
     }
 
-    /// The cached application-menu frame for a display, if known.
-    func applicationMenuFrame(for displayID: CGDirectDisplayID) -> CGRect? {
-        applicationMenuFrames[displayID]
+    /// The cached application-menu frame state for a display.
+    ///
+    /// Callers must distinguish `.pending` from `.current(nil)`: while a new
+    /// app's AX walk is in flight, treating the old frame (or no frame) as
+    /// current can briefly classify File/Edit/View as empty menu-bar space.
+    func applicationMenuFrameState(for displayID: CGDirectDisplayID) -> ApplicationMenuFrameState {
+        guard publishedContext == currentApplicationContext else {
+            return .pending
+        }
+        return .current(applicationMenuFrames[displayID])
     }
 
     /// Recomputes the application menu frames off the main thread.
@@ -104,6 +130,7 @@ final class MenuBarGeometryCache {
         // Snapshot the screens on the main actor; the AX walk runs detached.
         // (MenuBarOverlayPanel's update task has called `getApplicationMenuFrame()`
         // off-main for many releases — this is the same, proven pattern.)
+        let requestedContext = currentApplicationContext
         let screens = NSScreen.screens.map { (id: $0.displayID, screen: $0) }
         let liveDisplayIDs = Set(screens.map(\.id))
         Task.detached(priority: .userInitiated) { [weak self] in
@@ -113,11 +140,36 @@ final class MenuBarGeometryCache {
                     frames[entry.id] = frame
                 }
             }
-            await self?.publish(frames, liveDisplayIDs: liveDisplayIDs)
+            await self?.publish(
+                frames,
+                requestedContext: requestedContext,
+                liveDisplayIDs: liveDisplayIDs
+            )
         }
     }
 
-    private func publish(_ frames: [CGDirectDisplayID: CGRect], liveDisplayIDs: Set<CGDirectDisplayID>) {
+    private func publish(
+        _ frames: [CGDirectDisplayID: CGRect],
+        requestedContext: ApplicationContext,
+        liveDisplayIDs: Set<CGDirectDisplayID>
+    ) {
+        // The AX walk may finish after another Cmd-Tab. Never publish those
+        // frames under the newer application context; queue a fresh pass.
+        guard requestedContext == currentApplicationContext else {
+            isRefreshing = false
+            needsAnotherRefresh = false
+            refresh()
+            return
+        }
+
+        // Preserve last-good frames only within the same application context.
+        // Carrying a previous app's width across Cmd-Tab caused the transient
+        // reveal and delayed secondary-menu hit testing seen in 10.7.1.
+        if publishedContext != requestedContext {
+            applicationMenuFrames.removeAll()
+        }
+        publishedContext = requestedContext
+
         // Drop only displays that are physically gone…
         applicationMenuFrames = applicationMenuFrames.filter { liveDisplayIDs.contains($0.key) }
         // …then MERGE, don't replace: a display whose walk produced nothing
@@ -134,5 +186,12 @@ final class MenuBarGeometryCache {
             needsAnotherRefresh = false
             refresh()
         }
+    }
+
+    private var currentApplicationContext: ApplicationContext {
+        ApplicationContext(
+            frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier,
+            menuBarOwnerPID: NSWorkspace.shared.menuBarOwningApplication?.processIdentifier
+        )
     }
 }

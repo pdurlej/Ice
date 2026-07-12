@@ -243,7 +243,10 @@ final class MenuBarManager: ObservableObject {
                     // The previous live `getApplicationMenuFrame()` was a
                     // synchronous AX walk of the frontmost app INSIDE this
                     // main-thread sink — FIRE-P class.
-                    guard let applicationMenuFrame = appState.menuBarGeometryCache.applicationMenuFrame(for: screen.displayID) else {
+                    guard
+                        case .current(let applicationMenuFrame?) = appState.menuBarGeometryCache
+                            .applicationMenuFrameState(for: screen.displayID)
+                    else {
                         return
                     }
 

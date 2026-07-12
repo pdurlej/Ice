@@ -485,23 +485,29 @@ extension HIDEventManager {
     /// A Boolean value that indicates whether the mouse pointer is within
     /// the bounds of the current application menu.
     func isMouseInsideApplicationMenu(appState: AppState, screen: NSScreen) -> Bool {
-        guard
-            let mouseLocation = MouseHelpers.locationCoreGraphics,
-            // Cached + refreshed off-main (fire.10.7, issue #17 / FIRE-P). The
-            // previous live `getApplicationMenuFrame()` did a synchronous AX
-            // walk of the frontmost app on EVERY event — when that app was
-            // busy, this guard hung the main thread with it.
-            var applicationMenuFrame = appState.menuBarGeometryCache.applicationMenuFrame(for: screen.displayID)
-        else {
+        guard let mouseLocation = MouseHelpers.locationCoreGraphics else {
             return false
         }
+
+        // Cached + refreshed off-main (fire.10.7, issue #17 / FIRE-P). During
+        // Cmd-Tab the old app's frame is stale until the new AX walk finishes.
+        // Fail closed in that short `.pending` window: treating the location as
+        // application-menu space prevents a transient reveal over File/Edit.
+        var applicationMenuFrame: CGRect
+        switch appState.menuBarGeometryCache.applicationMenuFrameState(for: screen.displayID) {
+        case .pending:
+            return true
+        case .current(nil):
+            return false
+        case .current(let frame?):
+            applicationMenuFrame = frame
+        }
+
         applicationMenuFrame.size.width += applicationMenuFrame.origin.x - screen.frame.origin.x
         applicationMenuFrame.origin.x = screen.frame.origin.x
         return applicationMenuFrame.contains(mouseLocation)
     }
 
-    /// A Boolean value that indicates whether the mouse pointer is within
-    /// the bounds of a menu bar item.
     // NOTE (fire.10.7.1, issue #7): this query stays LIVE, deliberately.
     // fire.10.7 tried serving it from an off-main-refreshed cache; that was
     // wrong. Menu bar item frames change at the exact instant this guard is
