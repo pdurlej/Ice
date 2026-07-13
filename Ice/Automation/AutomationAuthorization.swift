@@ -79,11 +79,12 @@ final class AutomationAuthorization {
     /// the engine / coordinator). Guards against a defaults-edited rule whose
     /// sealed grant no longer matches.
     func validateForFire(rule: TriggerRule, sealed: SealedGrant?) -> Bool {
-        guard let sealed,
-              sealed.grant.triggerID == rule.id,
-              sealed.grant.generation == rule.generation,
-              sealed.grant.canonicalDigest == TriggerCanonicalizer.digest(condition: rule.condition, action: rule.onEnter),
-              AutomationGrantStore.shared.validates(sealed)
+        guard
+            let sealed,
+            sealed.grant.triggerID == rule.id,
+            sealed.grant.generation == rule.generation,
+            sealed.grant.canonicalDigest == TriggerCanonicalizer.digest(condition: rule.condition, action: rule.onEnter),
+            AutomationGrantStore.shared.validates(sealed)
         else {
             return false
         }

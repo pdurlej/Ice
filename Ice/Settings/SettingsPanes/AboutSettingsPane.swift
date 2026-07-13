@@ -16,7 +16,7 @@ struct AboutSettingsPane: View {
     }
 
     private var contributeURL: URL {
-        URL(string: "https://github.com/pdurlej/fire-from-ice")!
+        githubURL("/pdurlej/fire-from-ice")
     }
 
     private var issuesURL: URL {
@@ -24,7 +24,18 @@ struct AboutSettingsPane: View {
     }
 
     private var upstreamURL: URL {
-        URL(string: "https://github.com/jordanbaird/Ice")!
+        githubURL("/jordanbaird/Ice")
+    }
+
+    private func githubURL(_ path: String) -> URL {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "github.com"
+        components.path = path
+        guard let url = components.url else {
+            preconditionFailure("Invalid static GitHub URL")
+        }
+        return url
     }
 
     private var lastUpdateCheckString: String {
