@@ -11,9 +11,9 @@
 # CI build has published the GitHub release.
 #
 # Usage:
-#   scripts/publish-appcast.sh v0.11.13-fire.10.6 [--notes-file notes.html] [--dry-run]
+#   scripts/publish-appcast.sh v1.0.0 [--notes-file notes.html] [--dry-run]
 #
-# The tag must be v<shortVersion> (e.g. v0.11.13-fire.10.6). Idempotent: a
+# The tag must be v<shortVersion> (e.g. v1.0.0). Idempotent: a
 # no-op if that version is already in the appcast.
 
 set -euo pipefail
@@ -38,11 +38,11 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) grep '^#' "$0" | grep -v '^#!' | sed 's/^# \{0,1\}//'; exit 0 ;;
     v*) TAG="$1"; shift ;;
-    *) die "unknown argument: $1 (expected a tag like v0.11.13-fire.10.6)" ;;
+    *) die "unknown argument: $1 (expected a tag like v1.0.0)" ;;
   esac
 done
 
-[ -n "$TAG" ] || die "no tag given. Usage: $0 v0.11.13-fire.X [--notes-file f] [--dry-run]"
+[ -n "$TAG" ] || die "no tag given. Usage: $0 v1.0.0 [--notes-file f] [--dry-run]"
 [ -z "$NOTES_FILE" ] || [ -f "$NOTES_FILE" ] || die "notes file not found: $NOTES_FILE"
 command -v gh >/dev/null || die "gh CLI not found"
 
@@ -75,7 +75,7 @@ DMG_NAME="$(basename "$DMG")"
 
 # --- 3. Read + sanity-check the version from the DMG's Info.plist -------------
 # `-plist` + plistlib, NOT text parsing: with `-quiet` hdiutil prints nothing,
-# and the volume name contains spaces ("Ice v0.11.13-…"), so grepping the text
+# and the volume name contains spaces (for example "Fire v1.0.0"), so grepping the text
 # table truncates the path. (Both bit the first live run of this script.)
 MOUNT="$(hdiutil attach "$DMG" -nobrowse -plist | python3 -c '
 import plistlib, sys

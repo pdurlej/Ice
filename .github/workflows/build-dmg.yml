@@ -213,10 +213,10 @@ jobs:
           cp -R "build/Ice.app" dmg-contents/
           ln -s /Applications dmg-contents/Applications
 
-          hdiutil create -volname "Ice ${{ steps.version.outputs.VERSION }}" \
+          hdiutil create -volname "Fire ${{ steps.version.outputs.VERSION }}" \
             -srcfolder dmg-contents \
             -ov -format UDZO \
-            "build/Ice-${{ steps.version.outputs.VERSION }}.dmg"
+            "build/Fire-${{ steps.version.outputs.VERSION }}.dmg"
 
           rm -rf dmg-contents
 
@@ -226,8 +226,8 @@ jobs:
                       | grep "Developer ID Application" \
                       | grep -o '"[^"]*"' | head -1 | tr -d '"')
           codesign --force --timestamp --sign "$IDENTITY" \
-                   "build/Ice-${{ steps.version.outputs.VERSION }}.dmg"
-          codesign --verify --verbose=2 "build/Ice-${{ steps.version.outputs.VERSION }}.dmg"
+                   "build/Fire-${{ steps.version.outputs.VERSION }}.dmg"
+          codesign --verify --verbose=2 "build/Fire-${{ steps.version.outputs.VERSION }}.dmg"
 
       - name: Submit DMG for notarization and wait
         env:
@@ -236,7 +236,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           xcrun notarytool submit \
-              "build/Ice-${{ steps.version.outputs.VERSION }}.dmg" \
+              "build/Fire-${{ steps.version.outputs.VERSION }}.dmg" \
               --apple-id "$APPLE_ID" \
               --password "$APP_SPECIFIC_PASSWORD" \
               --team-id "$APPLE_TEAM_ID" \
@@ -244,13 +244,13 @@ jobs:
 
       - name: Staple notarization ticket to the DMG
         run: |
-          xcrun stapler staple "build/Ice-${{ steps.version.outputs.VERSION }}.dmg"
-          xcrun stapler validate "build/Ice-${{ steps.version.outputs.VERSION }}.dmg"
+          xcrun stapler staple "build/Fire-${{ steps.version.outputs.VERSION }}.dmg"
+          xcrun stapler validate "build/Fire-${{ steps.version.outputs.VERSION }}.dmg"
 
       - name: Upload DMG as artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: Ice-DMG-${{ steps.version.outputs.VERSION }}
+          name: Fire-DMG-${{ steps.version.outputs.VERSION }}
           path: build/*.dmg
 
       - name: Create GitHub Release
@@ -265,7 +265,7 @@ jobs:
           # action downloads kept failing.
           gh release create "${{ steps.version.outputs.VERSION }}" \
             --repo "${{ github.repository }}" \
-            --title "Ice ${{ steps.version.outputs.VERSION }}" \
+            --title "Fire ${{ steps.version.outputs.VERSION }}" \
             --generate-notes \
             build/*.dmg
 
