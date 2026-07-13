@@ -5,21 +5,21 @@ Owner (pdurlej) will tell me to read this in a fresh session. **Codex / other
 agents: start with `AGENTS.md` at the repo root** — it has the current live/main
 state and the gotchas; this file is the deep history.
 
-## ✅ CURRENT STATE (2026-07-13) — fire.10.7.2 live; main contract cleanup unshipped
+## ✅ CURRENT STATE (2026-07-13) — fire.10.7.3 live; #12 shipped and closed
 
-`v0.11.13-fire.10.7.2` (build 1157, release commit `5334644`) is notarized,
+`v0.11.13-fire.10.7.3` (build 1158, release commit `3865907`) is notarized,
 installed on the owner's machine, and live on the Sparkle appcast since
-2026-07-12. The owner field-verified hover/click after app switches, the final
-signed MCP `list_items` smoke passed without XPC rejections, and GitHub issues
-#4 and #17 are closed. Issue #7 stays open and its item-frame query stays live.
+2026-07-13. The final signed bridge passed raw JSON-RPC `initialize` and
+`list_items`; a deliberately nonexistent `hide_item` returned a real
+`mutationResult` payload with `success: false`, a message, and no `undoToken`,
+without moving any menu item. GitHub issue #12 is closed.
 
-`fire/main` is one unshipped contract/documentation cleanup ahead of the live
-tag: MCP mutation results omit the always-nil `undoToken`, while the associated
-wire value remains in `MenuBarItemService.Response` solely for older-peer
-compatibility. Do not call that cleanup shipped until a later normal release.
-The public issues still open are #5, #7, #11, #12, and #13.
+The associated `undoToken` value remains in `MenuBarItemService.Response`
+solely for older-peer Codable compatibility; it is not exposed to MCP clients.
+The public issues still open are #5, #7, #11, and #13. Issue #7's item-frame
+query stays live by design.
 
-Sentry checkpoint (2026-07-13 03:09 CEST): 10.7.2 has zero error events;
+Sentry checkpoint (2026-07-13 08:58 CEST): 10.7.3 has zero error events;
 FIRE-P/N remain quiet. FIRE-Q (open `NSMenu`) and archived FIRE-J (modal dialog)
 are false App Hangs, but the client-side `beforeSend` filter based on
 `frame.function` did not suppress them reliably. The historical sections below

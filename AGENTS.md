@@ -17,19 +17,20 @@ shipped-history and deep context** — read its top CURRENT STATE first. The dat
 
 ## ✅ LIVE NOW / NEXT
 
-**`v0.11.13-fire.10.7.2` (build 1157, release commit `5334644`) is the live,
-notarized build and has been on the Sparkle appcast since 2026-07-12.** The owner
-field-verified the hover/click guards, the signed MCP `list_items` smoke passed,
-and GitHub issues #4 and #17 are closed. Leave #7 open: the menu-bar *item*
-query deliberately remains live (see gotcha #2).
+**`v0.11.13-fire.10.7.3` (build 1158, release commit `3865907`) is the live,
+notarized build and has been on the Sparkle appcast since 2026-07-13.** It is
+installed on the owner's machine. Signed raw JSON-RPC smoke passed `initialize`
+and `list_items`; a no-side-effect `hide_item` failure returned mutation JSON
+without `undoToken`. Issue #12 is closed. Issues #4 and #17 remain closed, and
+#7 remains open: the menu-bar *item* query deliberately stays live (gotcha #2).
 
-`fire/main` may be ahead of that live tag with unshipped contract/documentation
-cleanup. In particular, main no longer exposes the always-nil `undoToken` to MCP
-clients while retaining its compatibility-only wire slot. Do not describe such
-main-only work as shipped, and do not publish or install anything from this note
-alone; use the full ship flow and its required runtime evidence.
+The shipped bridge no longer exposes the always-nil `undoToken` to MCP clients,
+while `MenuBarItemService.Response.mutationResult` retains its compatibility-only
+wire slot for older Codable peers. `fire/main` may move ahead of the live tag;
+do not describe later main-only work as shipped without a normal release and its
+runtime evidence.
 
-Sentry showed no 10.7.2 error events at the 2026-07-13 03:09 CEST checkpoint.
+Sentry showed no 10.7.3 error events at the 2026-07-13 08:58 CEST checkpoint.
 FIRE-Q and FIRE-J are benign modal-menu/dialog App Hangs, but the client-side
 `frame.function` filter did **not** suppress them reliably. It is a best-effort
 noise filter. A plausible, unproven explanation is that the final function names
@@ -110,11 +111,11 @@ and `--notes-file` supported).
 | 7 | P2 | design | `isMouseInsideMenuBarItem` live SLS. Do NOT cache (see gotcha #2). If it ever hangs, make the QUERY cheaper. Never fired an App-Hang. |
 | 5 | P2 | careful pass | sendSync watchdog. **Deadlock trap** (documented in the issue): `send()` holds an `OSAllocatedUnfairLock`; no native timeout on macOS 26. Needs kill-STOP testing. |
 | 11 | P3 | some runtime | remaining LIGHT single main-thread SLS calls (SearchPanel view body, IceBar getOrigin, AppState publisher). |
-| 12 | P3 | next release | main strips the user-visible always-nil `undoToken`; the wire slot remains for compatibility. This is not in live 10.7.2. |
 | 13 | P3 | VoiceOver | a11y labels on fork-added UI. |
 
 Shipped from the board so far: #16+#15 (10.4.2), #8+#9 (10.5), #10 (appcast
 script), #6+#4+#14 (10.6), and #17's activation-safe app-menu cache plus signed
 MCP verification (#4) in 10.7.2. The #7 item-frame cache shipped in 10.7 and was
-reverted in 10.7.1. The App-Hang franchise (FIRE-F/G/H/K/M/N/P) is field-quiet;
-FIRE-Q/J are false modal ANRs that the current filter catches only best-effort.
+reverted in 10.7.1. Issue #12's honest MCP mutation contract shipped in 10.7.3.
+The App-Hang franchise (FIRE-F/G/H/K/M/N/P) is field-quiet; FIRE-Q/J are false
+modal ANRs that the current filter catches only best-effort.
