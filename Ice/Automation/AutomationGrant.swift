@@ -91,13 +91,30 @@ enum TriggerCanonicalizer {
             var items: [String]?
             var layoutID: String?
             var layoutDigest: String?
+            var moves: [Move]?
+            var firelineKind: String?
+            var firelineProvider: String?
+            var firelineItem: String?
 
             init(_ action: TriggerAction) {
                 switch action {
                 case .setSection(let items, let section):
                     kind = "setSection"
                     self.section = section.rawValue
-                    self.items = items.map(\.bundleID)  // order-significant, as authored
+                    self.items = items.map(\.canonicalKey)  // order-significant, as authored
+                case .activateContext(let context):
+                    kind = "activateContext"
+                    self.moves = context.moves.map(Move.init)
+                    switch context.fireline {
+                    case .hidden:
+                        firelineKind = "hidden"
+                    case .quota(let provider):
+                        firelineKind = "quota"
+                        firelineProvider = provider.rawValue
+                    case .menuBarItem(let item):
+                        firelineKind = "menuBarItem"
+                        firelineItem = item.canonicalKey
+                    }
                 case .applyLayoutSnapshot(let layoutID, let layoutDigest, _):
                     kind = "applyLayoutSnapshot"
                     self.layoutID = layoutID.uuidString
@@ -108,9 +125,13 @@ enum TriggerCanonicalizer {
 
         struct Move: Codable {
             let bundleID: String
+            let namespace: String?
+            let title: String?
             let toSection: String
             init(_ move: MovePlan) {
                 bundleID = move.bundleID
+                namespace = move.item.namespace
+                title = move.item.title
                 toSection = move.toSection.rawValue
             }
         }

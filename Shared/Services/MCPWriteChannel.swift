@@ -32,6 +32,9 @@ enum MCPWriteChannel {
         let op: String
         /// Bundle ID of the item to move (e.g. com.bitwarden.desktop).
         let bundleID: String
+        /// Exact item selector from `list_items`, when the caller supplied
+        /// one. Nil preserves the pre-1.0 bundle-only wire shape.
+        let selector: MenuBarItemService.ItemSelector?
         /// Target section raw value: alwaysVisible | hidden | alwaysHidden.
         let toSection: String
         /// Optional intra-section index (currently advisory; Ice lands

@@ -43,6 +43,9 @@ final class AppState: ObservableObject {
     /// Manager for the optional AI Quotas menu-bar feature.
     let aiQuotaManager = AIQuotaManager()
 
+    /// Ambient surface for the active, user-approved Context Scene.
+    let firelineContextController = FirelineContextController()
+
     /// AI-Native Triggers engine (fire.10 P1): evaluates conditions and fires
     /// user-approved automations through the shared mutation coordinator.
     let triggerEngine = TriggerEngine()
@@ -103,7 +106,8 @@ final class AppState: ObservableObject {
         userNotificationManager.performSetup(with: self)
         competingManagerMonitor.performSetup(with: self)
         aiQuotaManager.performSetup(with: self)
-        triggerEngine.performSetup()
+        firelineContextController.performSetup(with: self)
+        triggerEngine.performSetup(with: self)
         mcpTriggerCommandHandler.performSetup(with: self)
 
         // fire.10.2: the authenticated XPC relay that feeds both MCP

@@ -62,6 +62,16 @@ final class MCPWriteCommandHandler {
         guard AgentInput.validBundleID(command.bundleID) != nil else {
             return failure("Invalid bundle id.")
         }
+        if let selector = command.selector {
+            guard
+                selector.version == 1,
+                selector.sourceBundleID == command.bundleID,
+                selector.namespace.flatMap({ AgentInput.validName($0, maxLength: 256) }) != nil,
+                selector.title.flatMap({ AgentInput.validName($0, maxLength: 256) }) != nil
+            else {
+                return failure("Invalid item selector.")
+            }
+        }
 
         // fire.9.8 confused-deputy gate: the TCC-bearing main app authorizes
         // every write in its own UI before using its Accessibility power.
@@ -96,9 +106,14 @@ final class MCPWriteCommandHandler {
             return result(false, "Unknown section '\(command.toSection)'")
         }
 
+        let identity = ItemIdentity(
+            bundleID: command.bundleID,
+            namespace: command.selector?.namespace,
+            title: command.selector?.title
+        )
         let job = MutationJob(
             source: .mcp,
-            moves: [MovePlan(bundleID: command.bundleID, toSection: section)]
+            moves: [MovePlan(item: identity, toSection: section)]
         )
         let outcome = await mutationCoordinator.enqueue(job)
         return result(

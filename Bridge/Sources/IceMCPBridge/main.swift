@@ -104,6 +104,48 @@ private func parseOptionalDouble(_ value: Value?) -> Double? {
     return nil
 }
 
+private func parseItemSelector(_ value: Value?, name: String = "selector") throws -> MenuBarItemService.ItemSelector? {
+    guard let value else { return nil }
+    guard let object = value.objectValue else {
+        throw ToolError.invalidArgument("\(name) must be an object from list_items")
+    }
+    let version = parseOptionalInt(object["version"]) ?? 1
+    let namespace = try parseRequiredString(object["namespace"], name: "\(name).namespace")
+    let title = try parseRequiredString(object["title"], name: "\(name).title")
+    let bundleID = try parseRequiredString(object["source_bundle_id"], name: "\(name).source_bundle_id")
+    return MenuBarItemService.ItemSelector(
+        version: version,
+        namespace: namespace,
+        title: title,
+        sourceBundleID: bundleID
+    )
+}
+
+private func parseSelectorArray(_ value: Value?) throws -> [MenuBarItemService.ItemSelector]? {
+    guard let values = value?.arrayValue else { return nil }
+    return try values.enumerated().map { index, value in
+        guard let selector = try parseItemSelector(value, name: "selectors[\(index)]") else {
+            throw ToolError.invalidArgument("selectors[\(index)] is required")
+        }
+        return selector
+    }
+}
+
+private func parseItemReference(
+    _ arguments: [String: Value]?
+) throws -> (bundleID: String, selector: MenuBarItemService.ItemSelector?) {
+    let selector = try parseItemSelector(arguments?["selector"])
+    let explicitBundleID = arguments?["bundle_id"]?.stringValue
+    guard selector != nil || explicitBundleID != nil else {
+        throw ToolError.invalidArgument("provide selector (preferred) or bundle_id")
+    }
+    let bundleID = selector?.sourceBundleID ?? explicitBundleID!
+    if let selector, let explicitBundleID, selector.sourceBundleID != explicitBundleID {
+        throw ToolError.invalidArgument("bundle_id must match selector.source_bundle_id")
+    }
+    return (bundleID, selector)
+}
+
 /// Parses an agent-supplied `set_trigger` payload into the wire `TriggerSpec`.
 /// Shape validation (presence of `type`) happens here; semantic validation
 /// (ranges, enum values, hysteresis) is the main app's job in
@@ -140,7 +182,11 @@ private func parseTriggerSpec(_ arguments: [String: Value]?) throws -> MenuBarIt
     let action = MenuBarItemService.TriggerSpec.ActionSpec(
         type: actionType,
         bundleIDs: actionObj["bundle_ids"]?.arrayValue?.compactMap { $0.stringValue },
-        section: actionObj["section"]?.stringValue
+        selectors: try parseSelectorArray(actionObj["selectors"]),
+        section: actionObj["section"]?.stringValue,
+        firelineType: actionObj["fireline_type"]?.stringValue,
+        firelineProvider: actionObj["fireline_provider"]?.stringValue,
+        firelineSelector: try parseItemSelector(actionObj["fireline_selector"], name: "action.fireline_selector")
     )
 
     return MenuBarItemService.TriggerSpec(
@@ -180,9 +226,16 @@ private enum ToolError: Swift.Error, CustomStringConvertible {
 /// session re-used across requests, recreated on cancel/error.
 @available(macOS 26.0, *)
 final class XPCClient: @unchecked Sendable {
+    private struct SessionHandle: @unchecked Sendable {
+        let id: UUID
+        let session: XPCSession
+    }
+
     private let serviceName: String
     private let queue: DispatchQueue
+    private let blockingQueue: DispatchQueue
     private var session: XPCSession?
+    private var sessionID: UUID?
     private let lock = NSLock()
 
     init(serviceName: String) {
@@ -192,18 +245,24 @@ final class XPCClient: @unchecked Sendable {
             qos: .userInitiated,
             attributes: .concurrent
         )
+        self.blockingQueue = DispatchQueue(
+            label: "com.jordanbaird.Ice.mcp.sendSync",
+            qos: .userInitiated,
+            attributes: .concurrent
+        )
     }
 
-    private func getOrCreateSession() throws -> XPCSession {
+    private func getOrCreateSession() throws -> SessionHandle {
         lock.lock()
         defer { lock.unlock() }
-        if let existing = session { return existing }
+        if let existing = session, let sessionID {
+            return SessionHandle(id: sessionID, session: existing)
+        }
+        let id = UUID()
         let new = try XPCSession(xpcService: serviceName, options: .inactive) { [weak self] error in
             guard let self else { return }
             log.warning("XPC session cancelled: \(error.localizedDescription, privacy: .public)")
-            self.lock.lock()
-            self.session = nil
-            self.lock.unlock()
+            self.clearSession(id: id)
         }
         if MenuBarItemService.ownTeamIdentifier() != nil {
             new.setPeerRequirement(.isFromSameTeam())
@@ -211,25 +270,59 @@ final class XPCClient: @unchecked Sendable {
         new.setTargetQueue(queue)
         try new.activate()
         session = new
-        return new
+        sessionID = id
+        return SessionHandle(id: id, session: new)
     }
 
     /// Sends a request synchronously and decodes the reply as a
     /// `MenuBarItemService.Response`.
     func send(_ request: MenuBarItemService.Request) throws -> MenuBarItemService.Response {
-        let session = try getOrCreateSession()
+        let handle = try getOrCreateSession()
         do {
-            let reply = try session.sendSync(request)
-            return try reply.decode(as: MenuBarItemService.Response.self)
+            return try XPCSyncDeadline.send(
+                request,
+                as: MenuBarItemService.Response.self,
+                through: handle.session,
+                timeout: Self.timeout(for: request),
+                queue: blockingQueue
+            ) { [weak self] in
+                self?.cancelSession(handle, reason: "MCP tool sendSync deadline exceeded")
+            }
         } catch {
             // Drop the session so the next call recreates it after a
             // wire error — matches the connection-recreation pattern
             // in Ice/MenuBar/MenuBarItems/MenuBarItemServiceConnection.swift.
-            lock.lock()
-            self.session = nil
-            lock.unlock()
+            clearSession(id: handle.id)
             throw ToolError.xpcUnavailable(error.localizedDescription)
         }
+    }
+
+    private static func timeout(for request: MenuBarItemService.Request) -> TimeInterval {
+        switch request {
+        case .setTrigger:
+            130
+        case .removeTrigger:
+            70
+        case .moveItem, .hideItem, .showItem, .applyLayout, .saveLayout:
+            20
+        case .listTriggers:
+            15
+        default:
+            10
+        }
+    }
+
+    private func clearSession(id: UUID) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard sessionID == id else { return }
+        session = nil
+        sessionID = nil
+    }
+
+    private func cancelSession(_ handle: SessionHandle, reason: String) {
+        clearSession(id: handle.id)
+        handle.session.cancel(reason: reason)
     }
 }
 
@@ -312,6 +405,19 @@ private func buildToolList() -> [Tool] {
         ),
     ])
 
+    let selectorSchema: Value = .object([
+        "type": .string("object"),
+        "description": .string("Exact versioned item selector copied from list_items. Prefer this whenever it is available."),
+        "properties": .object([
+            "version": .object(["type": .string("integer"), "enum": .array([.int(1)])]),
+            "namespace": .object(["type": .string("string")]),
+            "title": .object(["type": .string("string")]),
+            "source_bundle_id": bundleIDProp,
+        ]),
+        "required": .array([.string("version"), .string("namespace"), .string("title"), .string("source_bundle_id")]),
+        "additionalProperties": .bool(false),
+    ])
+
     let listSchema: Value = .object([
         "type": .string("object"),
         "properties": .object([
@@ -324,6 +430,7 @@ private func buildToolList() -> [Tool] {
         "type": .string("object"),
         "properties": .object([
             "bundle_id": bundleIDProp,
+            "selector": selectorSchema,
             "to_section": sectionEnum,
             "to_index": .object([
                 "type": .string("integer"),
@@ -331,7 +438,11 @@ private func buildToolList() -> [Tool] {
                 "description": .string("0-indexed position within the section (left to right). Omit to append."),
             ]),
         ]),
-        "required": .array([.string("bundle_id"), .string("to_section")]),
+        "required": .array([.string("to_section")]),
+        "anyOf": .array([
+            .object(["required": .array([.string("selector")])]),
+            .object(["required": .array([.string("bundle_id")])]),
+        ]),
         "additionalProperties": .bool(false),
     ])
 
@@ -339,8 +450,12 @@ private func buildToolList() -> [Tool] {
         "type": .string("object"),
         "properties": .object([
             "bundle_id": bundleIDProp,
+            "selector": selectorSchema,
         ]),
-        "required": .array([.string("bundle_id")]),
+        "anyOf": .array([
+            .object(["required": .array([.string("selector")])]),
+            .object(["required": .array([.string("bundle_id")])]),
+        ]),
         "additionalProperties": .bool(false),
     ])
 
@@ -350,7 +465,7 @@ private func buildToolList() -> [Tool] {
             "name": .object([
                 "type": .string("string"),
                 "minLength": .int(1),
-                "description": .string("Layout name as stored in Ice's preferences plist."),
+                "description": .string("Layout name as stored in Fire's compatible preferences."),
             ]),
         ]),
         "required": .array([.string("name")]),
@@ -409,17 +524,34 @@ private func buildToolList() -> [Tool] {
         "properties": .object([
             "type": .object([
                 "type": .string("string"),
-                "enum": .array([.string("setSection")]),
-                "description": .string("P1 supports setSection: move one or more items to a section."),
+                "enum": .array([.string("setSection"), .string("activateContext")]),
+                "description": .string("setSection moves items. activateContext can move items and presents one sealed Fireline payload."),
             ]),
             "bundle_ids": .object([
                 "type": .string("array"),
                 "items": .object(["type": .string("string")]),
                 "description": .string("Bundle ids to move. Use list_items to discover them."),
             ]),
+            "selectors": .object([
+                "type": .string("array"),
+                "items": selectorSchema,
+                "description": .string("Exact selectors from list_items. Preferred; do not also send bundle_ids."),
+            ]),
             "section": sectionEnum,
+            "fireline_type": .object([
+                "type": .string("string"),
+                "enum": .array([.string("hidden"), .string("quota"), .string("menuBarItem")]),
+                "description": .string("activateContext only: the single ambient Fireline payload."),
+            ]),
+            "fireline_provider": .object([
+                "type": .string("string"),
+                "enum": .array([.string("codex"), .string("claude"), .string("antigravity"), .string("ollama")]),
+                "description": .string("quota Fireline only."),
+            ]),
+            "fireline_selector": selectorSchema,
         ]),
-        "required": .array([.string("type"), .string("bundle_ids"), .string("section")]),
+        "required": .array([.string("type")]),
+        "additionalProperties": .bool(false),
     ])
 
     let setTriggerSchema: Value = .object([
@@ -457,14 +589,14 @@ private func buildToolList() -> [Tool] {
     return [
         makeTool(
             name: "list_items",
-            description: "List menu bar items. Optionally filter to one section. Returns a JSON array of {bundleID, displayName, windowID, section, position, isOnScreen}.",
+            description: "List menu bar items. Optionally filter to one section. Returns a stable selector for exact writes; windowID is observational only.",
             inputSchema: listSchema,
             readOnly: true,
             idempotent: true
         ),
         makeTool(
             name: "move_item",
-            description: "Move an item identified by bundle_id to a target section, optionally at a specific index within that section.",
+            description: "Move one item to a target section. Prefer the exact selector from list_items; legacy bundle_id works only when it resolves unambiguously.",
             inputSchema: moveSchema,
             destructive: true
         ),
@@ -484,13 +616,13 @@ private func buildToolList() -> [Tool] {
         ),
         makeTool(
             name: "apply_layout",
-            description: "Apply a previously-saved named layout. Layouts live in Ice's preferences plist.",
+            description: "Apply a previously-saved named layout from Fire's compatible preferences.",
             inputSchema: layoutNameSchema,
             destructive: true
         ),
         makeTool(
             name: "save_layout",
-            description: "Save the current menu bar arrangement under the given name. Writes to Ice's preferences plist.",
+            description: "Save the current menu bar arrangement under the given name in Fire's preferences.",
             inputSchema: layoutNameSchema,
             destructive: true,
             idempotent: true
@@ -512,7 +644,13 @@ private func buildToolList() -> [Tool] {
         // success means the user approved in Fire.
         makeTool(
             name: "set_trigger",
-            description: "Propose a menu-bar automation: when a condition becomes true (an app gains/loses focus, battery drops below a threshold, or a weekly time window), move items to a section. Fire shows the user a consent prompt describing exactly what will happen; nothing is installed unless they approve. On success returns {success, id, enabled, message}. Use list_items first to find bundle ids.",
+            description: "Propose a menu-bar automation: when a condition becomes true (an app gains/loses focus, battery drops below a threshold, or a weekly time window), move exact items to a section. Fire shows the exact write set for approval. Use selectors from list_items; bundle_ids are a legacy unambiguous fallback.",
+            inputSchema: setTriggerSchema,
+            destructive: false
+        ),
+        makeTool(
+            name: "set_context",
+            description: "Install a Fire Context Scene. Use action.type=activateContext with an exact Fireline payload and optional exact menu-bar moves. Fire authors the approval text and seals the entire scene before it can run.",
             inputSchema: setTriggerSchema,
             destructive: false
         ),
@@ -528,8 +666,26 @@ private func buildToolList() -> [Tool] {
             idempotent: true
         ),
         makeTool(
+            name: "list_contexts",
+            description: "List installed Fire Context Scenes and legacy automations, including Fire-authored condition/action descriptions.",
+            inputSchema: .object([
+                "type": .string("object"),
+                "properties": .object([:]),
+                "additionalProperties": .bool(false),
+            ]),
+            readOnly: true,
+            idempotent: true
+        ),
+        makeTool(
             name: "remove_trigger",
             description: "Remove an installed automation by id (from list_triggers). Fire asks the user to confirm before deleting. Returns {success, id, message}.",
+            inputSchema: removeTriggerSchema,
+            destructive: true,
+            idempotent: true
+        ),
+        makeTool(
+            name: "remove_context",
+            description: "Remove an installed Fire Context Scene by id. Fire asks the user to confirm before deleting.",
             inputSchema: removeTriggerSchema,
             destructive: true,
             idempotent: true
@@ -558,18 +714,18 @@ private func dispatch(
             request = .listItems(section: section)
 
         case "move_item":
-            let bundleID = try parseRequiredString(arguments?["bundle_id"], name: "bundle_id")
+            let item = try parseItemReference(arguments)
             let toSection = try parseRequiredSection(arguments?["to_section"], name: "to_section")
             let toIndex = parseOptionalInt(arguments?["to_index"])
-            request = .moveItem(bundleID: bundleID, toSection: toSection, toIndex: toIndex)
+            request = .moveItem(bundleID: item.bundleID, selector: item.selector, toSection: toSection, toIndex: toIndex)
 
         case "hide_item":
-            let bundleID = try parseRequiredString(arguments?["bundle_id"], name: "bundle_id")
-            request = .hideItem(bundleID: bundleID)
+            let item = try parseItemReference(arguments)
+            request = .hideItem(bundleID: item.bundleID, selector: item.selector)
 
         case "show_item":
-            let bundleID = try parseRequiredString(arguments?["bundle_id"], name: "bundle_id")
-            request = .showItem(bundleID: bundleID)
+            let item = try parseItemReference(arguments)
+            request = .showItem(bundleID: item.bundleID, selector: item.selector)
 
         case "apply_layout":
             let layoutName = try parseRequiredString(arguments?["name"], name: "name")
@@ -582,14 +738,14 @@ private func dispatch(
         case "list_layouts":
             request = .listLayouts
 
-        case "set_trigger":
+        case "set_trigger", "set_context":
             let spec = try parseTriggerSpec(arguments)
             request = .setTrigger(spec: spec)
 
-        case "list_triggers":
+        case "list_triggers", "list_contexts":
             request = .listTriggers
 
-        case "remove_trigger":
+        case "remove_trigger", "remove_context":
             let id = try parseRequiredString(arguments?["id"], name: "id")
             request = .removeTrigger(id: id)
 
@@ -711,10 +867,10 @@ func run() async throws {
         name: "fire-mcp",
         version: "1.0.0",
         instructions: """
-            Read and modify the macOS menu bar layout managed by the Ice / Fire app.
-            Use list_items first to discover bundle IDs, then move_item / hide_item /
-            show_item to rearrange them. apply_layout / save_layout work on named
-            layouts persisted in Ice's preferences plist.
+            Program the local macOS menu bar and Fireline managed by Fire.
+            Use list_items first and preserve exact selectors for move_item,
+            hide_item, show_item, and Context Scenes. Fire authors approval text,
+            seals approved changes, and exposes recovery through list_contexts.
             """,
         capabilities: Server.Capabilities(
             tools: Server.Capabilities.Tools(listChanged: false)

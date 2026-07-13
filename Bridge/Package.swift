@@ -44,6 +44,7 @@ let package = Package(
     ],
     products: [
         .executable(name: "IceMCPBridge", targets: ["IceMCPBridge"]),
+        .executable(name: "fire", targets: ["FireCLI"]),
     ],
     dependencies: [
         .package(
@@ -64,6 +65,10 @@ let package = Package(
                 .product(name: "AXSwift", package: "AXSwift"),
             ],
             path: "Sources/IceMCPBridge"
+        ),
+        .executableTarget(
+            name: "FireCLI",
+            path: "Sources/FireCLI"
         ),
     ]
 )

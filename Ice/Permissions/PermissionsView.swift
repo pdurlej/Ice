@@ -62,11 +62,14 @@ struct PermissionsView: View {
     private var explanationBox: some View {
         IceSection {
             VStack {
-                Text("Ice needs your permission to manage the menu bar.")
+                Text("Fire needs your permission to manage the menu bar.")
                     .fontWeight(.medium)
                 Text("Absolutely no personal information is collected or stored.")
                     .bold()
                     .foregroundStyle(Color(red: 0.5, green: 0.75, blue: 1))
+                Text("macOS may list Fire as Ice to preserve your existing permission grants.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .padding()
         }
@@ -135,7 +138,7 @@ struct PermissionsView: View {
                     .underline()
 
                 VStack(spacing: 2) {
-                    Text("Ice needs this to:")
+                    Text("Fire needs this to:")
                         .font(.title3)
                         .bold()
 
@@ -167,7 +170,7 @@ struct PermissionsView: View {
                 .allowsHitTesting(!permission.hasPermission)
 
                 if !permission.isRequired {
-                    CalloutBox("Ice can work in a limited mode without this permission.") {
+                    CalloutBox("Fire can work in a limited mode without this permission.") {
                         Image(systemName: "checkmark.shield")
                             .foregroundStyle(.green)
                     }

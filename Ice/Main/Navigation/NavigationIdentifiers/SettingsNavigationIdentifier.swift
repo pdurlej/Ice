@@ -5,23 +5,21 @@
 
 /// The navigation identifier type for the "Settings" interface.
 enum SettingsNavigationIdentifier: String, NavigationIdentifier {
-    case general = "General"
-    case menuBarLayout = "Menu Bar Layout"
-    case menuBarAppearance = "Menu Bar Appearance"
-    case hotkeys = "Hotkeys"
-    case automations = "Automations"
+    case home = "Home"
+    case surfaces = "Surfaces"
+    case contexts = "Contexts"
+    case agents = "Agents"
     case advanced = "Advanced"
     case about = "About"
 
     var iconResource: IconResource {
         switch self {
-        case .general: .systemSymbol("gearshape")
-        case .menuBarLayout: .systemSymbol("rectangle.topthird.inset.filled")
-        case .menuBarAppearance: .systemSymbol("swatchpalette")
-        case .hotkeys: .systemSymbol("keyboard")
-        case .automations: .systemSymbol("wand.and.rays")
+        case .home: .systemSymbol("house")
+        case .surfaces: .systemSymbol("rectangle.topthird.inset.filled")
+        case .contexts: .systemSymbol("wand.and.rays")
+        case .agents: .systemSymbol("terminal")
         case .advanced: .systemSymbol("gearshape.2")
-        case .about: .assetCatalog(.iceCubeStroke)
+        case .about: .systemSymbol("flame")
         }
     }
 }

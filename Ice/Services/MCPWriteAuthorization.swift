@@ -95,7 +95,11 @@ final class MCPWriteAuthorization {
         default:              section = command.toSection
         }
         switch command.op {
-        case "move": return "move “\(command.bundleID)” to \(section)"
+        case "move":
+            if let title = command.selector?.title {
+                return "move “\(title)” (\(command.bundleID)) to \(section)"
+            }
+            return "move “\(command.bundleID)” to \(section)"
         default:     return "\(command.op) “\(command.bundleID)”"
         }
     }

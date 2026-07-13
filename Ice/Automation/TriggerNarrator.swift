@@ -42,7 +42,12 @@ enum TriggerNarrator {
         guard !moves.isEmpty else { return "make no changes" }
         let grouped = Dictionary(grouping: moves, by: { $0.toSection })
         let parts = grouped.map { section, items -> String in
-            let names = items.map { "“\($0.bundleID)”" }.joined(separator: ", ")
+            let names = items.map { move -> String in
+                if let title = move.item.title {
+                    return "“\(title)” (\(move.bundleID))"
+                }
+                return "“\(move.bundleID)”"
+            }.joined(separator: ", ")
             return "move \(names) to \(Self.sectionName(section))"
         }
         return parts.sorted().joined(separator: "; ")
@@ -50,7 +55,25 @@ enum TriggerNarrator {
 
     /// A human sentence fragment for a whole action.
     static func describe(_ action: TriggerAction) -> String {
-        describe(action.writeSet)
+        switch action {
+        case .setSection, .applyLayoutSnapshot:
+            return describe(action.writeSet)
+        case .activateContext(let context):
+            var parts: [String] = []
+            if !context.moves.isEmpty {
+                parts.append(describe(context.moves))
+            }
+            switch context.fireline {
+            case .hidden:
+                parts.append("hide Fireline")
+            case .quota(let provider):
+                parts.append("show \(provider.rawValue.capitalized) limits in Fireline")
+            case .menuBarItem(let item):
+                let name = item.title ?? item.bundleID
+                parts.append("show “\(name)” in Fireline")
+            }
+            return parts.joined(separator: "; ")
+        }
     }
 
     static func sectionName(_ section: TriggerSection) -> String {

@@ -20,6 +20,8 @@ final class TriggerStore: ObservableObject {
 
     private let rulesKey = "Triggers"
     private let grantsKey = "TriggerGrants"
+    private let fire1RulesKey = "ContextScenesV1"
+    private let fire1GrantsKey = "ContextSceneGrantsV1"
     private let logger = Logger(category: "TriggerStore")
 
     private init() {}
@@ -32,8 +34,11 @@ final class TriggerStore: ObservableObject {
     /// Loads rules from defaults and validates each enabled rule's sealed
     /// grant, disabling any that fail.
     func load() {
-        let storedRules = decode([TriggerRule].self, key: rulesKey) ?? []
-        let sealedGrants = decode([SealedGrant].self, key: grantsKey) ?? []
+        let storedRules = mergedByID(
+            (decode([TriggerRule].self, key: rulesKey) ?? [])
+                + (decode([TriggerRule].self, key: fire1RulesKey) ?? [])
+        )
+        let sealedGrants = allSealedGrants()
         let grantByTrigger = Dictionary(
             sealedGrants.map { ($0.grant.triggerID, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -64,9 +69,10 @@ final class TriggerStore: ObservableObject {
             }
             return rule
         }
-        if rules != storedRules {
-            persistRules()  // write back the force-disables
-        }
+        // Always rewrite the partition. This also migrates any Fire 1.0 beta
+        // payload that was briefly written into the legacy atomic array.
+        persistRules()
+        persistGrantPartitions(sealedGrants, rules: rules)
         logger.debug("Loaded \(self.rules.count) trigger(s)")
     }
 
@@ -76,7 +82,7 @@ final class TriggerStore: ObservableObject {
         rules.append(rule)
         persistRules()
         if let grant {
-            persistGrant(grant)
+            persistGrant(grant, for: rule)
         }
     }
 
@@ -92,9 +98,8 @@ final class TriggerStore: ObservableObject {
     func setEnabled(_ enabled: Bool, id: UUID) -> Bool {
         guard let index = rules.firstIndex(where: { $0.id == id }) else { return false }
         if enabled {
-            let grants = decode([SealedGrant].self, key: grantsKey) ?? []
             guard
-                let sealed = grants.first(where: { $0.grant.triggerID == id }),
+                let sealed = sealedGrant(for: id),
                 sealed.grant.generation == rules[index].generation,
                 AutomationGrantStore.shared.validates(sealed)
             else {
@@ -110,8 +115,7 @@ final class TriggerStore: ObservableObject {
     /// The sealed grant for a trigger, if any. The engine re-validates this
     /// immediately before each auto-fire.
     func sealedGrant(for id: UUID) -> SealedGrant? {
-        let all = decode([SealedGrant].self, key: grantsKey) ?? []
-        return all.first { $0.grant.triggerID == id }
+        allSealedGrants().first { $0.grant.triggerID == id }
     }
 
     /// Whether `rule` currently has a sealed grant that matches its content and
@@ -157,26 +161,72 @@ final class TriggerStore: ObservableObject {
 
     private func persistRules() {
         let encoder = JSONEncoder()
-        if let data = try? encoder.encode(rules) {
+        let legacy = rules.filter { $0.onEnter.isLegacyStorageCompatible }
+        let fire1 = rules.filter { !$0.onEnter.isLegacyStorageCompatible }
+        if let data = try? encoder.encode(legacy) {
             UserDefaults.standard.set(data, forKey: rulesKey)
+        }
+        if let data = try? encoder.encode(fire1) {
+            UserDefaults.standard.set(data, forKey: fire1RulesKey)
         }
     }
 
-    private func persistGrant(_ sealed: SealedGrant) {
-        var all = decode([SealedGrant].self, key: grantsKey) ?? []
-        all.removeAll { $0.grant.triggerID == sealed.grant.triggerID }
-        all.append(sealed)
-        if let data = try? JSONEncoder().encode(all) {
-            UserDefaults.standard.set(data, forKey: grantsKey)
-        }
+    private func persistGrant(_ sealed: SealedGrant, for rule: TriggerRule) {
+        removeGrant(triggerID: sealed.grant.triggerID)
+        let key = rule.onEnter.isLegacyStorageCompatible ? grantsKey : fire1GrantsKey
+        var grants = decode([SealedGrant].self, key: key) ?? []
+        grants.append(sealed)
+        persist(grants, key: key)
     }
 
     private func removeGrant(triggerID: UUID) {
-        var all = decode([SealedGrant].self, key: grantsKey) ?? []
-        all.removeAll { $0.grant.triggerID == triggerID }
-        if let data = try? JSONEncoder().encode(all) {
-            UserDefaults.standard.set(data, forKey: grantsKey)
+        for key in [grantsKey, fire1GrantsKey] {
+            var grants = decode([SealedGrant].self, key: key) ?? []
+            grants.removeAll { $0.grant.triggerID == triggerID }
+            persist(grants, key: key)
         }
+    }
+
+    private func allSealedGrants() -> [SealedGrant] {
+        mergedByID(
+            (decode([SealedGrant].self, key: grantsKey) ?? [])
+                + (decode([SealedGrant].self, key: fire1GrantsKey) ?? []),
+            id: { $0.grant.triggerID }
+        )
+    }
+
+    private func persistGrantPartitions(_ grants: [SealedGrant], rules: [TriggerRule]) {
+        let fire1RuleIDs = Set(
+            rules.lazy
+                .filter { !$0.onEnter.isLegacyStorageCompatible }
+                .map(\.id)
+        )
+        let legacy = grants.filter { sealed in
+            !fire1RuleIDs.contains(sealed.grant.triggerID)
+                && sealed.grant.allowedWriteSet.allSatisfy { !$0.item.isExact }
+        }
+        let legacyIDs = Set(legacy.map { $0.grant.triggerID })
+        let fire1 = grants.filter { !legacyIDs.contains($0.grant.triggerID) }
+        persist(legacy, key: grantsKey)
+        persist(fire1, key: fire1GrantsKey)
+    }
+
+    private func persist<T: Encodable>(_ value: T, key: String) {
+        if let data = try? JSONEncoder().encode(value) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+
+    private func mergedByID(_ values: [TriggerRule]) -> [TriggerRule] {
+        mergedByID(values, id: \TriggerRule.id)
+    }
+
+    private func mergedByID<Value, ID: Hashable>(
+        _ values: [Value],
+        id: (Value) -> ID
+    ) -> [Value] {
+        var seen = Set<ID>()
+        return values.reversed().filter { seen.insert(id($0)).inserted }.reversed()
     }
 
     private func decode<T: Decodable>(_ type: T.Type, key: String) -> T? {

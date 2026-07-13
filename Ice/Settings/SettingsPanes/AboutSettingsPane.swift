@@ -17,16 +17,16 @@ struct AboutSettingsPane: View {
 
     private var contributeURL: URL {
         // swiftlint:disable:next force_unwrapping
-        URL(string: "https://github.com/jordanbaird/Ice")!
+        URL(string: "https://github.com/pdurlej/fire-from-ice")!
     }
 
     private var issuesURL: URL {
         contributeURL.appendingPathComponent("issues")
     }
 
-    private var donateURL: URL {
+    private var upstreamURL: URL {
         // swiftlint:disable:next force_unwrapping
-        URL(string: "https://icemenubar.app/Donate")!
+        URL(string: "https://github.com/jordanbaird/Ice")!
     }
 
     private var lastUpdateCheckString: String {
@@ -85,7 +85,7 @@ struct AboutSettingsPane: View {
                 }
 
                 VStack(alignment: .leading) {
-                    Text("Ice")
+                    Text("Fire")
                         .font(.system(size: 80))
                         .foregroundStyle(.primary)
 
@@ -96,6 +96,10 @@ struct AboutSettingsPane: View {
                     Text(Constants.copyrightString)
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary.opacity(0.67))
+
+                    Text("Built on Ice by Jordan Baird")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
                 }
                 .fontWeight(.medium)
             }
@@ -145,7 +149,7 @@ struct AboutSettingsPane: View {
     @ViewBuilder
     private func bottomBar(containerShape: some InsettableShape) -> some View {
         HStack {
-            Button("Quit Ice") {
+            Button("Quit Fire") {
                 NSApp.terminate(nil)
             }
             Spacer()
@@ -158,8 +162,8 @@ struct AboutSettingsPane: View {
             Button("Report a Bug") {
                 openURL(issuesURL)
             }
-            Button("Support Ice", systemImage: "heart.circle.fill") {
-                openURL(donateURL)
+            Button("Upstream Ice", systemImage: "arrow.up.right.circle") {
+                openURL(upstreamURL)
             }
         }
         .padding(8)

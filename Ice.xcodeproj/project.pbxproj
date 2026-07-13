@@ -341,10 +341,12 @@
 			);
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/IceMCPBridge",
+				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/fire",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/AgentSkills/program-fire/SKILL.md",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\n\n# Builds IceMCPBridge as a SwiftPM executable (vanilla swift build —\n# Xcode 26's SwiftPM bridge cannot resolve swift-nio transitive deps\n# for tool targets, see Bridge/Package.swift header) and embeds the\n# binary into Ice.app/Contents/MacOS/IceMCPBridge.\n#\n# CI's codesign --deep pass will re-sign with Developer ID; the\n# ad-hoc sign here is for local Debug runs.\n\nBRIDGE_PKG_DIR=\"$SRCROOT/Bridge\"\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n    SWIFT_BUILD_CONFIG=\"release\"\nelse\n    SWIFT_BUILD_CONFIG=\"debug\"\nfi\n\ncd \"$BRIDGE_PKG_DIR\"\nswift build -c \"$SWIFT_BUILD_CONFIG\"\n\nSRC_BIN=\"$BRIDGE_PKG_DIR/.build/$SWIFT_BUILD_CONFIG/IceMCPBridge\"\nDEST=\"$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/IceMCPBridge\"\n\nif [ ! -f \"$SRC_BIN\" ]; then\n    echo \"error: IceMCPBridge binary not found at $SRC_BIN\" >&2\n    exit 1\nfi\n\nmkdir -p \"$(dirname \"$DEST\")\"\ncp \"$SRC_BIN\" \"$DEST\"\ncodesign --force --sign - \"$DEST\" 2>/dev/null || true\necho \"Embedded IceMCPBridge → $DEST\"\n";
+			shellScript = "set -e\n\n# Build the MCP server and its companion CLI with vanilla SwiftPM.\n# CI's codesign --deep pass will re-sign with Developer ID; the\n# ad-hoc sign here is for local Debug runs.\n\nBRIDGE_PKG_DIR=\"$SRCROOT/Bridge\"\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n    SWIFT_BUILD_CONFIG=\"release\"\nelse\n    SWIFT_BUILD_CONFIG=\"debug\"\nfi\n\ncd \"$BRIDGE_PKG_DIR\"\nswift build -c \"$SWIFT_BUILD_CONFIG\"\n\nfor BINARY in IceMCPBridge fire; do\n    SRC_BIN=\"$BRIDGE_PKG_DIR/.build/$SWIFT_BUILD_CONFIG/$BINARY\"\n    DEST=\"$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/$BINARY\"\n\n    if [ ! -f \"$SRC_BIN\" ]; then\n        echo \"error: $BINARY binary not found at $SRC_BIN\" >&2\n        exit 1\n    fi\n\n    mkdir -p \"$(dirname \"$DEST\")\"\n    cp \"$SRC_BIN\" \"$DEST\"\n    codesign --force --sign - \"$DEST\" 2>/dev/null || true\n    echo \"Embedded $BINARY → $DEST\"\ndone\n\nSKILL_SRC=\"$SRCROOT/AgentSkill/program-fire\"\nSKILL_DEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/AgentSkills/program-fire\"\nrm -rf \"$SKILL_DEST\"\nmkdir -p \"$(dirname \"$SKILL_DEST\")\"\nditto \"$SKILL_SRC\" \"$SKILL_DEST\"\necho \"Embedded Program Fire skill → $SKILL_DEST\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -520,7 +522,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1158;
+				CURRENT_PROJECT_VERSION = 1159;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_APP_SANDBOX = NO;
@@ -530,13 +532,14 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Ice/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Fire;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "0.11.13-fire.10.7.3";
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jordanbaird.Ice;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -553,7 +556,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1158;
+				CURRENT_PROJECT_VERSION = 1159;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_APP_SANDBOX = NO;
@@ -563,13 +566,14 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Ice/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Fire;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "0.11.13-fire.10.7.3";
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.jordanbaird.Ice;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

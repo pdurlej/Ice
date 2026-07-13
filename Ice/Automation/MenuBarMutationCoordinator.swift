@@ -63,7 +63,7 @@ final class MenuBarMutationCoordinator {
             "Executing mutation job \(job.id, privacy: .public) source=\(job.source.rawValue, privacy: .public) moves=\(job.moves.count)"
         )
         guard let appState else {
-            return MutationResult(jobID: job.id, success: false, movedCount: 0, message: "Ice app state unavailable")
+            return MutationResult(jobID: job.id, success: false, movedCount: 0, message: "Fire app state unavailable")
         }
 
         // Defense-in-depth: a trigger-sourced job re-proves its authority at
@@ -116,13 +116,28 @@ final class MenuBarMutationCoordinator {
         // alwaysHidden divider control items even when collapsed off-screen.
         let items = await MenuBarItem.getMenuBarItems(option: .activeSpace)
 
-        guard let source = items.first(where: { item in
+        let candidates = items.filter { item in
             guard !item.isControlItem else { return false }
             let bundleID = item.sourceApplication?.bundleIdentifier
                 ?? item.owningApplication?.bundleIdentifier
+
+            if let namespace = move.item.namespace, let title = move.item.title {
+                return item.tag.namespace.description == namespace
+                    && item.tag.title == title
+                    && bundleID == move.bundleID
+            }
             return bundleID == move.bundleID
-        }) else {
-            return (false, "Item '\(move.bundleID)' not found in the menu bar")
+        }
+
+        guard let source = candidates.first else {
+            return (false, "Item '\(itemDescription(move.item))' not found in the menu bar")
+        }
+        guard move.item.isExact || candidates.count == 1 else {
+            let choices = candidates.map { "\($0.tag)" }.joined(separator: ", ")
+            return (
+                false,
+                "Bundle ID '\(move.bundleID)' is ambiguous (\(candidates.count) items: \(choices)). Use the exact selector returned by list_items."
+            )
         }
 
         let destination: MenuBarItemManager.MoveDestination
@@ -158,6 +173,13 @@ final class MenuBarMutationCoordinator {
             .map { "\($0.tag)" }
             .joined(separator: ", ")
         return "\(which) control item not found. Enumerated \(items.count) items; control items present: [\(controlTags)]. Is the section enabled in Settings?"
+    }
+
+    private func itemDescription(_ item: ItemIdentity) -> String {
+        guard let namespace = item.namespace, let title = item.title else {
+            return item.bundleID
+        }
+        return "\(namespace):\(title)"
     }
 }
 

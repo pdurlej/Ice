@@ -151,6 +151,17 @@ final class AIQuotaManager: NSObject, ObservableObject {
         render()
     }
 
+    /// Refreshes one provider for Fireline even when the optional always-on
+    /// AI Quotas status item is disabled. This remains local-only and does not
+    /// start the periodic loop or create another menu bar item.
+    func refresh(provider: AIQuotaProvider) async {
+        let snapshot = await backend.fetch(provider: provider)
+        snapshots[provider] = snapshot
+        if settings.enableAIQuotas {
+            render()
+        }
+    }
+
     /// The enabled providers in canonical (allCases) order.
     private func orderedEnabledProviders() -> [AIQuotaProvider] {
         AIQuotaProvider.allCases.filter { settings.enabledProviders.contains($0) }

@@ -124,7 +124,7 @@ final class MCPRelayPump {
         switch work {
         case .move(let command):
             guard let appState else {
-                return Self.deniedResult(for: work, reason: "Ice app state unavailable")
+                return Self.deniedResult(for: work, reason: "Fire app state unavailable")
             }
             let result = await appState.mcpWriteCommandHandler.fulfill(command)
             if result.success {
@@ -134,7 +134,7 @@ final class MCPRelayPump {
 
         case .trigger(let proposal):
             guard let appState else {
-                return Self.deniedResult(for: work, reason: "Ice app state unavailable")
+                return Self.deniedResult(for: work, reason: "Fire app state unavailable")
             }
             return .trigger(appState.mcpTriggerCommandHandler.fulfill(proposal))
         }
@@ -224,9 +224,20 @@ final class MCPRelayPump {
 /// serial queue, so the failure-state flags need no locking of their own.
 @available(macOS 26.0, *)
 private final class RelayXPCClient: @unchecked Sendable {
+    private struct SessionHandle: @unchecked Sendable {
+        let id: UUID
+        let session: XPCSession
+    }
+
     private let serviceName: String
     private var session: XPCSession?
+    private var sessionID: UUID?
     private let lock = NSLock()
+    private let blockingQueue = DispatchQueue(
+        label: "com.jordanbaird.Ice.MCPRelayPump.sendSync",
+        qos: .utility,
+        attributes: .concurrent
+    )
 
     /// Connection-state flag so a dead service logs once, not at 5 Hz.
     private var lastFetchFailed = false
@@ -235,15 +246,15 @@ private final class RelayXPCClient: @unchecked Sendable {
         self.serviceName = serviceName
     }
 
-    private func getOrCreateSession() throws -> XPCSession {
+    private func getOrCreateSession() throws -> SessionHandle {
         lock.lock()
         defer { lock.unlock() }
-        if let existing = session { return existing }
+        if let existing = session, let sessionID {
+            return SessionHandle(id: sessionID, session: existing)
+        }
+        let id = UUID()
         let new = try XPCSession(xpcService: serviceName, options: .inactive) { [weak self] _ in
-            guard let self else { return }
-            self.lock.lock()
-            self.session = nil
-            self.lock.unlock()
+            self?.clearSession(id: id)
         }
         if MenuBarItemService.ownTeamIdentifier() != nil {
             new.setPeerRequirement(.isFromSameTeam())
@@ -258,20 +269,39 @@ private final class RelayXPCClient: @unchecked Sendable {
         }
         try new.activate()
         session = new
-        return new
+        sessionID = id
+        return SessionHandle(id: id, session: new)
     }
 
     private func send(_ request: MenuBarItemService.Request) throws -> MenuBarItemService.Response {
-        let session = try getOrCreateSession()
+        let handle = try getOrCreateSession()
         do {
-            let reply = try session.sendSync(request)
-            return try reply.decode(as: MenuBarItemService.Response.self)
+            return try XPCSyncDeadline.send(
+                request,
+                as: MenuBarItemService.Response.self,
+                through: handle.session,
+                timeout: 5,
+                queue: blockingQueue
+            ) { [weak self] in
+                self?.cancelSession(handle, reason: "Relay sendSync deadline exceeded")
+            }
         } catch {
-            lock.lock()
-            self.session = nil
-            lock.unlock()
+            clearSession(id: handle.id)
             throw error
         }
+    }
+
+    private func clearSession(id: UUID) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard sessionID == id else { return }
+        session = nil
+        sessionID = nil
+    }
+
+    private func cancelSession(_ handle: SessionHandle, reason: String) {
+        clearSession(id: handle.id)
+        handle.session.cancel(reason: reason)
     }
 
     func fetchWork(logger: Logger) -> MenuBarItemService.RelayWork? {

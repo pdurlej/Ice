@@ -20,6 +20,7 @@ import OSLog
 
 @MainActor
 final class TriggerEngine {
+    private weak var appState: AppState?
     private var cancellables = Set<AnyCancellable>()
 
     /// In-memory edge state (per-tick level), not persisted on every poll.
@@ -28,7 +29,8 @@ final class TriggerEngine {
 
     private let logger = Logger(category: "TriggerEngine")
 
-    func performSetup() {
+    func performSetup(with appState: AppState) {
+        self.appState = appState
         TriggerStore.shared.load()
 
         // Seed edge + cooldown state from persistence WITHOUT firing — BEFORE
@@ -73,6 +75,9 @@ final class TriggerEngine {
     /// Re-reads rules after an install / remove / enable change.
     func reload() {
         TriggerStore.shared.load()
+        if !TriggerStore.shared.rules.contains(where: { $0.enabled }) {
+            appState?.firelineContextController.deactivate()
+        }
         evaluateAll(reason: "reload")
     }
 
@@ -114,6 +119,9 @@ final class TriggerEngine {
         Task {
             let result = await MenuBarMutationCoordinator.shared.enqueue(job)
             logger.log("Trigger \(rule.id, privacy: .public) result success=\(result.success) moved=\(result.movedCount)")
+            if result.success {
+                appState?.firelineContextController.activate(rule: rule)
+            }
         }
     }
 

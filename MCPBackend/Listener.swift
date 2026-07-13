@@ -79,10 +79,11 @@ final class Listener {
                 }
                 return .items(items)
 
-            case .moveItem(let bundleID, let toSection, let toIndex):
+            case .moveItem(let bundleID, let selector, let toSection, let toIndex):
                 let result = syncWait {
                     await MCPBackendStateManager.shared.moveItem(
                         bundleID: bundleID,
+                        selector: selector,
                         toSection: toSection,
                         toIndex: toIndex
                     )
@@ -93,9 +94,9 @@ final class Listener {
                     message: result.message
                 )
 
-            case .hideItem(let bundleID):
+            case .hideItem(let bundleID, let selector):
                 let result = syncWait {
-                    await MCPBackendStateManager.shared.hideItem(bundleID: bundleID)
+                    await MCPBackendStateManager.shared.hideItem(bundleID: bundleID, selector: selector)
                 }
                 return .mutationResult(
                     success: result.success,
@@ -103,9 +104,9 @@ final class Listener {
                     message: result.message
                 )
 
-            case .showItem(let bundleID):
+            case .showItem(let bundleID, let selector):
                 let result = syncWait {
-                    await MCPBackendStateManager.shared.showItem(bundleID: bundleID)
+                    await MCPBackendStateManager.shared.showItem(bundleID: bundleID, selector: selector)
                 }
                 return .mutationResult(
                     success: result.success,

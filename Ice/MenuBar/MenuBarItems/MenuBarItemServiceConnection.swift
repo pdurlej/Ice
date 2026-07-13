@@ -83,26 +83,42 @@ extension MenuBarItemService {
     private final class Session: Sendable {
         /// A session's underlying storage.
         private final class Storage: @unchecked Sendable {
+            struct SessionHandle: @unchecked Sendable {
+                let id: UUID
+                let session: XPCSession
+            }
+
             private let name = MenuBarItemService.name
             private var session: XPCSession?
+            private var sessionID: UUID?
             private let queue: DispatchQueue
+            private let blockingQueue: DispatchQueue
             private let logger: Logger
+            private let lock = NSLock()
 
             init(queue: DispatchQueue, logger: Logger) {
                 self.queue = queue
                 self.logger = logger
+                self.blockingQueue = DispatchQueue(
+                    label: "com.jordanbaird.Ice.MenuBarItemService.sendSync",
+                    qos: .userInitiated,
+                    attributes: .concurrent
+                )
             }
 
-            private func getOrCreateSession() throws -> XPCSession {
-                if let session {
-                    return session
+            private func getOrCreateSession() throws -> SessionHandle {
+                lock.lock()
+                defer { lock.unlock() }
+                if let session, let sessionID {
+                    return SessionHandle(id: sessionID, session: session)
                 }
+                let id = UUID()
                 let session = try XPCSession(xpcService: name, options: .inactive) { [weak self] error in
                     guard let self else {
                         return
                     }
                     logger.warning("Session was cancelled with error \(error.localizedDescription)")
-                    self.session = nil
+                    clearSession(id: id)
                 }
                 // Same logic as MenuBarItemService/Listener.swift's listener-side
                 // guard: only enforce `.isFromSameTeam()` when we actually have
@@ -117,30 +133,59 @@ extension MenuBarItemService {
                 session.setTargetQueue(queue)
                 try session.activate()
                 self.session = session
-                return session
+                sessionID = id
+                return SessionHandle(id: id, session: session)
             }
 
             func cancel(reason: String) {
-                guard let session = session.take() else {
-                    return
-                }
-                session.cancel(reason: reason)
+                lock.lock()
+                let current = session.map { SessionHandle(id: sessionID ?? UUID(), session: $0) }
+                session = nil
+                sessionID = nil
+                lock.unlock()
+                current?.session.cancel(reason: reason)
             }
 
             func send(request: Request) -> Response? {
                 do {
-                    let session = try getOrCreateSession()
-                    let reply = try session.sendSync(request)
-                    return try reply.decode(as: Response.self)
+                    let handle = try getOrCreateSession()
+                    do {
+                        return try XPCSyncDeadline.send(
+                            request,
+                            as: Response.self,
+                            through: handle.session,
+                            timeout: 5,
+                            queue: blockingQueue
+                        ) { [weak self] in
+                            self?.cancelSession(handle, reason: "MenuBarItemService sendSync deadline exceeded")
+                        }
+                    } catch {
+                        clearSession(id: handle.id)
+                        throw error
+                    }
                 } catch {
                     logger.error("Session failed with error \(error)")
                     return nil
                 }
             }
+
+            private func clearSession(id: UUID) {
+                lock.lock()
+                defer { lock.unlock() }
+                guard sessionID == id else { return }
+                session = nil
+                sessionID = nil
+            }
+
+            private func cancelSession(_ handle: SessionHandle, reason: String) {
+                clearSession(id: handle.id)
+                handle.session.cancel(reason: reason)
+            }
         }
 
-        /// Protected storage for the underlying XPC session.
-        private let storage: OSAllocatedUnfairLock<Storage>
+        /// Storage protects only session creation/replacement. The blocking
+        /// send never holds that lock, so a deadline can cancel concurrently.
+        private let storage: Storage
 
         /// The session's target queue.
         private let queue: DispatchQueue
@@ -150,7 +195,7 @@ extension MenuBarItemService {
 
         /// Creates a new session.
         init(queue: DispatchQueue, logger: Logger) {
-            self.storage = OSAllocatedUnfairLock(initialState: Storage(queue: queue, logger: logger))
+            self.storage = Storage(queue: queue, logger: logger)
             self.queue = queue
             self.logger = logger
         }
@@ -161,12 +206,12 @@ extension MenuBarItemService {
 
         /// Cancels the session.
         func cancel(reason: String) {
-            storage.withLock { $0.cancel(reason: reason) }
+            storage.cancel(reason: reason)
         }
 
         /// Sends the given request to the service and returns the response.
         func send(request: Request) -> Response? {
-            storage.withLock { $0.send(request: request) }
+            storage.send(request: request)
         }
     }
 }

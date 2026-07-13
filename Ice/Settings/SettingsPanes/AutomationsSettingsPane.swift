@@ -2,7 +2,8 @@
 //  AutomationsSettingsPane.swift
 //  Ice
 //
-//  Settings ▸ Automations — the manage surface for AI-Native Triggers
+//  Settings ▸ Contexts — the manage surface for Context Scenes and compatible
+//  legacy automations.
 //  (fire.10 P1). Lists installed automations and lets the user enable/disable,
 //  re-approve (when a grant has expired), delete, and globally disable all.
 //
@@ -45,13 +46,13 @@ struct AutomationsSettingsPane: View {
             ),
             presenting: pendingDelete
         ) { rule in
-            Button("Remove Automation", role: .destructive) {
+            Button("Remove Context", role: .destructive) {
                 remove(rule)
                 pendingDelete = nil
             }
             Button("Cancel", role: .cancel) { pendingDelete = nil }
         } message: { _ in
-            Text("This deletes the automation and its approval. You can re-create it later.")
+            Text("This deletes the Context Scene and its sealed approval. You can ask an agent to re-create it later.")
         }
     }
 
@@ -59,15 +60,14 @@ struct AutomationsSettingsPane: View {
 
     @ViewBuilder
     private var introSection: some View {
-        IceSection("AI-Native Automations") {
+        IceSection("Context Scenes") {
             Text(
                 """
-                Automations rearrange your menu bar for you when something \
-                happens — an app comes to the front, the battery runs low, or a \
-                weekly time window begins. Ask an AI assistant connected to Fire \
-                (via MCP) to create one, approve it once, and it runs on its own. \
-                Every automation here was approved by you and is bound to the exact \
-                items and destination shown.
+                Context Scenes program the menu bar and one Fireline payload for \
+                the work happening now. Ask a connected local agent to propose \
+                one, review Fire's exact condition and affected items, then \
+                approve it once. Every enabled scene is sealed to that exact \
+                capability; editing it requires approval again.
                 """
             )
             .fixedSize(horizontal: false, vertical: true)
@@ -91,12 +91,12 @@ struct AutomationsSettingsPane: View {
                 Image(systemName: "wand.and.rays")
                     .font(.system(size: 28))
                     .foregroundStyle(.secondary)
-                Text("No automations yet")
+                Text("No Context Scenes yet")
                     .font(.headline)
                 Text(
                     """
-                    Ask an AI assistant connected to Fire to set one up, e.g. \
-                    “when Slack is frontmost, hide my password manager.”
+                    Ask a connected agent to set one up, e.g. “when I work in \
+                    Codex, show my quota in Fireline.”
                     """
                 )
                 .font(.callout)
@@ -137,7 +137,7 @@ struct AutomationsSettingsPane: View {
                         Image(systemName: "trash")
                     }
                     .buttonStyle(.borderless)
-                    .help("Remove this automation")
+                    .help("Remove this Context Scene")
                 }
             }
 
@@ -166,7 +166,7 @@ struct AutomationsSettingsPane: View {
         HStack(spacing: 6) {
             Image(systemName: "lock.trianglebadge.exclamationmark")
                 .foregroundStyle(.orange)
-            Text("Approval expired — this automation was changed and needs to be approved again before it can run.")
+            Text("Approval expired — this context changed and needs to be approved again before it can run.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)

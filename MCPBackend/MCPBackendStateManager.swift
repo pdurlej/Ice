@@ -166,10 +166,22 @@ final class MCPBackendStateManager {
         let app = NSRunningApplication(processIdentifier: resolvedPID)
         let bundleID = app?.bundleIdentifier ?? window.ownerName ?? "unknown"
         let displayName = app?.localizedName ?? window.title ?? window.ownerName
+        let namespace = app?.bundleIdentifier ?? app?.localizedName
+        let selector: MenuBarItemService.ItemSelector?
+        if let namespace, !namespace.isEmpty, let title = window.title, !title.isEmpty {
+            selector = MenuBarItemService.ItemSelector(
+                namespace: namespace,
+                title: title,
+                sourceBundleID: bundleID
+            )
+        } else {
+            selector = nil
+        }
 
         return MenuBarItemService.ItemInfo(
             bundleID: bundleID,
             displayName: displayName,
+            selector: selector,
             windowID: window.windowID,
             section: section,
             position: position,
@@ -217,6 +229,7 @@ final class MCPBackendStateManager {
     /// (the Layout-editor code path), so it handles every section.
     func moveItem(
         bundleID: String,
+        selector: MenuBarItemService.ItemSelector? = nil,
         toSection: MenuBarItemService.ItemSection,
         toIndex: Int?
     ) async -> (success: Bool, message: String?) {
@@ -228,14 +241,22 @@ final class MCPBackendStateManager {
         // round-tripping to Ice, so we can return a fast, clear error.
         let windowIDs = Bridging.getMenuBarWindowList(option: .itemsOnly)
         let allWindows = WindowInfo.createWindows(from: windowIDs)
-        guard findWindow(for: bundleID, in: allWindows) != nil else {
-            return (false, "Item with bundle ID '\(bundleID)' not found in menu bar")
+        let candidates = findWindows(bundleID: bundleID, selector: selector, in: allWindows)
+        guard !candidates.isEmpty else {
+            return (false, "Item '\(selectorDescription(bundleID: bundleID, selector: selector))' not found in menu bar")
+        }
+        if selector == nil, candidates.count > 1 {
+            return (
+                false,
+                "Bundle ID '\(bundleID)' matches \(candidates.count) menu bar items. Use the exact selector returned by list_items."
+            )
         }
 
         let command = MCPWriteChannel.Command(
             id: UUID().uuidString,
             op: "move",
             bundleID: bundleID,
+            selector: selector,
             toSection: toSection.rawValue,
             toIndex: toIndex,
             createdAt: Date().timeIntervalSince1970
@@ -252,12 +273,18 @@ final class MCPBackendStateManager {
         return (result.success, result.message)
     }
 
-    func hideItem(bundleID: String) async -> (success: Bool, message: String?) {
-        await moveItem(bundleID: bundleID, toSection: .hidden, toIndex: nil)
+    func hideItem(
+        bundleID: String,
+        selector: MenuBarItemService.ItemSelector? = nil
+    ) async -> (success: Bool, message: String?) {
+        await moveItem(bundleID: bundleID, selector: selector, toSection: .hidden, toIndex: nil)
     }
 
-    func showItem(bundleID: String) async -> (success: Bool, message: String?) {
-        await moveItem(bundleID: bundleID, toSection: .alwaysVisible, toIndex: nil)
+    func showItem(
+        bundleID: String,
+        selector: MenuBarItemService.ItemSelector? = nil
+    ) async -> (success: Bool, message: String?) {
+        await moveItem(bundleID: bundleID, selector: selector, toSection: .alwaysVisible, toIndex: nil)
     }
 
     /// Applies a previously saved layout by replaying each item's
@@ -293,7 +320,7 @@ final class MCPBackendStateManager {
             for entry in sorted {
                 guard let bundleID = entry["bundleID"] as? String else { continue }
                 let result = await moveItem(
-                    bundleID: bundleID, toSection: section, toIndex: nil
+                    bundleID: bundleID, selector: nil, toSection: section, toIndex: nil
                 )
                 if result.success {
                     moved += 1
@@ -317,26 +344,48 @@ final class MCPBackendStateManager {
     /// Checks both ownerPID (pre-macOS 26 / non-Control-Center items)
     /// and sourcePID via SourcePIDCache (macOS 26 Control Center
     /// reparented items).
-    private func findWindow(
-        for bundleID: String, in windows: [WindowInfo]
-    ) -> WindowInfo? {
+    private func findWindows(
+        bundleID: String,
+        selector: MenuBarItemService.ItemSelector?,
+        in windows: [WindowInfo]
+    ) -> [WindowInfo] {
         guard bundleID != Self.iceBundleID else {
-            return nil
+            return []
         }
-        return windows.first { window in
+        return windows.filter { window in
+            let sourcePID = SourcePIDCache.shared.pid(for: window)
+            let source = sourcePID.flatMap(NSRunningApplication.init(processIdentifier:))
+            let owner = NSRunningApplication(processIdentifier: window.ownerPID)
+            let resolvedBundleID = source?.bundleIdentifier ?? owner?.bundleIdentifier
+
+            if let selector, selector.isExact {
+                let namespace = source?.bundleIdentifier ?? source?.localizedName
+                    ?? owner?.bundleIdentifier ?? window.ownerName ?? owner?.localizedName
+                return namespace == selector.namespace
+                    && (window.title ?? "") == selector.title
+                    && resolvedBundleID == selector.sourceBundleID
+            }
+
             // Try ownerPID first (cheap).
-            if let owner = NSRunningApplication(processIdentifier: window.ownerPID),
-               owner.bundleIdentifier == bundleID {
+            if owner?.bundleIdentifier == bundleID {
                 return true
             }
             // Fall back to sourcePID (AX scan).
-            if let sourcePID = SourcePIDCache.shared.pid(for: window),
-               let source = NSRunningApplication(processIdentifier: sourcePID),
-               source.bundleIdentifier == bundleID {
+            if source?.bundleIdentifier == bundleID {
                 return true
             }
             return false
         }
+    }
+
+    private func selectorDescription(
+        bundleID: String,
+        selector: MenuBarItemService.ItemSelector?
+    ) -> String {
+        guard let selector, let namespace = selector.namespace, let title = selector.title else {
+            return bundleID
+        }
+        return "\(namespace):\(title)"
     }
 
     // MARK: - Save Layout / List Layouts (read-side write - implemented)
@@ -496,4 +545,3 @@ final class MCPBackendStateManager {
         return result
     }
 }
-

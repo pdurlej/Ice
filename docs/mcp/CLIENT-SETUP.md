@@ -1,100 +1,133 @@
-# Connecting MCP clients to Fire
+# Connect local agents to Fire
 
-Fire exposes a Model Context Protocol (MCP) server so AI assistants can read and modify your menu bar layout via tool calls. The bridge binary ships embedded in Ice.app at `/Applications/Ice.app/Contents/MacOS/IceMCPBridge`. Your MCP client launches it directly via stdio - no daemon or background process to manage.
+Fire ships a local stdio MCP server, a diagnostic CLI, and one canonical Agent
+Skill inside the compatibility bundle `Ice.app`. Nothing listens on the network.
 
-## Prerequisites
+Paths:
 
-- Ice.app installed in `/Applications` (the bundle name stays `Ice.app`; the user-facing brand is "Fire from Ice")
-- Settings → Advanced → "Enable MCP server" toggled ON
-- (For write operations) "Allow write operations" toggled ON
-- macOS 26 or later
-
-## Claude Desktop
-
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "fire": {
-      "command": "/Applications/Ice.app/Contents/MacOS/IceMCPBridge",
-      "args": ["--stdio"]
-    }
-  }
-}
+```text
+/Applications/Ice.app/Contents/MacOS/IceMCPBridge
+/Applications/Ice.app/Contents/MacOS/fire
+/Applications/Ice.app/Contents/Resources/AgentSkills/program-fire
 ```
 
-Restart Claude Desktop. The `fire` tools should appear in the tool drawer.
+Prerequisites: macOS 26 or later, Fire installed in `/Applications`, MCP enabled
+in Fire Settings → Agents, and write operations enabled when you want an agent
+to propose changes. Writes remain subject to Fire's own approval sheet.
 
-## Claude Code
+## One shared skill
 
-Run from your terminal:
+Codex and OpenCode discover personal skills in `~/.agents/skills`; Claude Code
+discovers them in `~/.claude/skills`. Point both locations at the same skill
+shipped by Fire:
 
 ```bash
-claude mcp add fire /Applications/Ice.app/Contents/MacOS/IceMCPBridge --stdio
+mkdir -p "$HOME/.agents/skills" "$HOME/.claude/skills"
+ln -sfn "/Applications/Ice.app/Contents/Resources/AgentSkills/program-fire" \
+  "$HOME/.agents/skills/program-fire"
+ln -sfn "/Applications/Ice.app/Contents/Resources/AgentSkills/program-fire" \
+  "$HOME/.claude/skills/program-fire"
 ```
 
-## Cursor
+This is intentionally one source, not three copied prompts. App updates refresh
+the skill behind the stable symlink.
 
-Edit `~/.cursor/mcp.json` for a global install, or `.cursor/mcp.json` in your project root for a per-project install:
+## Codex
 
-```json
-{
-  "mcpServers": {
-    "fire": {
-      "command": "/Applications/Ice.app/Contents/MacOS/IceMCPBridge",
-      "args": ["--stdio"]
-    }
-  }
-}
+Current Codex versions share MCP configuration across the desktop app, CLI, and
+IDE extension. Add the local server:
+
+```bash
+codex mcp add fire -- /Applications/Ice.app/Contents/MacOS/IceMCPBridge
+codex mcp get fire
 ```
 
-Restart Cursor. See [Cursor's MCP docs](https://cursor.com/docs/context/mcp) for additional options (env vars, per-workspace overrides).
-
-## Codex (OpenAI Codex CLI)
-
-Codex uses TOML. Add to `~/.codex/config.toml`:
+The equivalent `~/.codex/config.toml` entry is:
 
 ```toml
 [mcp_servers.fire]
 command = "/Applications/Ice.app/Contents/MacOS/IceMCPBridge"
-args = ["--stdio"]
+default_tools_approval_mode = "writes"
 ```
 
-Restart Codex. See [Codex's MCP docs](https://github.com/openai/codex/blob/main/docs/config.md#mcp_servers) for additional options (env vars, transport types).
+Restart the client after editing TOML directly.
 
-## Available tools
+## Claude Code
 
-- `list_items` - read-only - list menu bar items, optionally filtered by section (`alwaysVisible` / `hidden` / `alwaysHidden`)
-- `hide_item` - write - move an item to the hidden section by bundle ID
-- `show_item` - write - move an item to the alwaysVisible section by bundle ID
-- `move_item` - write - move an item to any section at an optional position
-- `save_layout` - write - snapshot the current layout under a name
-- `apply_layout` - write - restore a previously saved layout
-- `list_layouts` - read-only - list saved layout names
-- `set_trigger` - gated write - propose a menu-bar automation (fire.10+, see below)
-- `list_triggers` - read-only - list installed automations with their ids
-- `remove_trigger` - gated write - remove an automation by id (Fire asks you to confirm)
+Add Fire as a user-scoped local stdio server:
 
-Write operations are consent-gated: Fire shows a prompt describing the exact change and only acts if you approve it there (a move prompt can arm a 5-minute lease so a batch like `apply_layout` isn't N prompts).
+```bash
+claude mcp add --transport stdio --scope user fire -- \
+  /Applications/Ice.app/Contents/MacOS/IceMCPBridge
+claude mcp get fire
+```
 
-## Automations (AI-Native Triggers, fire.10+)
+Inside Claude Code, `/mcp` shows connection status and `/program-fire` invokes
+the shared skill directly.
 
-Ask your assistant to set up an automation and Fire handles the rest:
+## OpenCode
 
-> "When Slack is frontmost, hide my password manager."
+Add this entry to the `mcp` object in `~/.config/opencode/opencode.json`:
 
-The assistant calls `set_trigger` with a condition (`appFocus`, `batteryBelow`, or a weekly `timeWindow`) and an action (move items to a section). Fire then shows you a consent prompt spelling out exactly what will happen - generated by Fire from the validated rule, never by the assistant. Nothing is installed unless you approve, and the approval is sealed to the exact items and destination: any change to the automation requires your approval again. Manage installed automations (enable/disable, last-run audit, delete, disable all) in Settings → Automations.
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "fire": {
+      "type": "local",
+      "command": [
+        "/Applications/Ice.app/Contents/MacOS/IceMCPBridge"
+      ],
+      "enabled": true
+    }
+  },
+  "permission": {
+    "fire_*": "ask"
+  }
+}
+```
 
-## Privacy
+Use `opencode mcp list` to verify it. OpenCode also reads the shared skill from
+`~/.agents/skills/program-fire`.
 
-Fire processes all MCP requests locally. No menu bar state, bundle IDs, or layout data leaves your machine via Fire. Your MCP client may send tool call args (e.g., bundle ID strings) to its model provider as part of its normal operation - read your client's privacy docs for details.
+## Claude Desktop and other JSON clients
 
-## Troubleshooting
+Use this stdio server entry (the bridge accepts no required arguments):
 
-If the tools don't appear in your client after configuration:
+```json
+{
+  "mcpServers": {
+    "fire": {
+      "command": "/Applications/Ice.app/Contents/MacOS/IceMCPBridge",
+      "args": []
+    }
+  }
+}
+```
 
-1. Verify Ice.app is installed at `/Applications/Ice.app` (`ls /Applications/Ice.app/Contents/MacOS/IceMCPBridge` should return the binary).
-2. Verify Settings → Advanced → "Enable MCP server" is ON.
-3. Restart your MCP client.
-4. Check your client's MCP logs (Claude Desktop logs are in `~/Library/Logs/Claude/`).
+## Fire 1.0 tools
+
+- `list_items`: discover items and exact stable selectors.
+- `move_item`, `hide_item`, `show_item`: direct approval-gated moves.
+- `save_layout`, `apply_layout`, `list_layouts`: manual layout snapshots.
+- `set_context`, `list_contexts`, `remove_context`: Context Scenes and Fireline.
+- `set_trigger`, `list_triggers`, `remove_trigger`: compatible legacy aliases.
+
+Use `list_items` first and pass its exact selector. A legacy bundle id is
+accepted only when it resolves to one manageable item; ambiguity fails closed.
+
+## Diagnose
+
+```bash
+/Applications/Ice.app/Contents/MacOS/fire doctor
+/Applications/Ice.app/Contents/MacOS/fire capabilities
+/Applications/Ice.app/Contents/MacOS/fire items
+/Applications/Ice.app/Contents/MacOS/fire contexts
+```
+
+`doctor` verifies MCP initialization and a live read through the signed XPC
+path. If it reports a same-team/XPC failure, reinstall the signed Fire release;
+do not replace the embedded bridge with an ad-hoc build.
+
+Fire itself sends no menu-bar state over the network. The chosen agent may send
+tool arguments to its model provider under that agent's normal privacy policy.
