@@ -55,8 +55,8 @@ The DMG is **signed** with `Developer ID Application: Piotr Durlej (R47JTHX25P)`
 ### Verify the download (optional)
 
 ```sh
-shasum -a 256 Fire-v1.0.1.dmg
-spctl -avv --type install Fire-v1.0.1.dmg
+shasum -a 256 Fire-v1.0.2.dmg
+spctl -avv --type install Fire-v1.0.2.dmg
 # expected: accepted, source=Notarized Developer ID,
 # origin=Developer ID Application: Piotr Durlej (R47JTHX25P)
 ```

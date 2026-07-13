@@ -1,0 +1,18 @@
+<h2>Fire 1.0.2 “Ignition”</h2>
+<p>Fire is a local, agent-first control plane for the space around your Mac's menu bar. This is the recommended Fire 1.0 release.</p>
+<ul>
+  <li><strong>Context Scenes</strong> let Codex, Claude Code, or OpenCode propose approved behavior for the app, time, or battery context you are in.</li>
+  <li><strong>Fireline</strong> shows one useful thing below the notch or menu bar, such as local AI quota status or a selected menu bar item.</li>
+  <li><strong>Exact item selectors</strong> prevent the wrong status item from being moved when one app owns several.</li>
+  <li><strong>Fire CLI and agent skill</strong> provide guided setup, diagnostics, and recovery.</li>
+  <li><strong>Bounded XPC calls</strong> keep a stopped helper from hanging the local agent bridge indefinitely.</li>
+</ul>
+<h3>Fire 1.0 hardening</h3>
+<ul>
+  <li>The approval sheet describes the complete Context Scene, including quota-only Fireline payloads.</li>
+  <li>Disabling or removing the active scene hides its Fireline even when other scenes remain enabled.</li>
+  <li>Context controls and Fireline have clearer accessibility labels and quota diagnostics.</li>
+  <li>Agent setup guidance consistently points to Settings → Agents and the compatible Ice.app path.</li>
+  <li>The source passes the pinned release lint toolchain without force-unwrapped static links.</li>
+</ul>
+<p>Your existing preferences, permissions, saved layouts, update path, and approvals are preserved. For compatibility, macOS System Settings may still list Fire as <strong>Ice</strong>.</p>
