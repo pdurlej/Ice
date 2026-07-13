@@ -153,8 +153,9 @@ extension MenuBarItemService {
         case items([ItemInfo])
 
         /// Generic destructive-op response (move / hide / show / applyLayout).
-        /// `undoToken` is `nil` in Phase 1 — Phase 5 wires the undo ring
-        /// buffer.
+        /// `undoToken` is a deprecated, always-`nil` compatibility slot. Keep
+        /// the associated value so older Codable peers retain the same wire
+        /// shape; the bridge deliberately does not expose it to MCP clients.
         case mutationResult(success: Bool, undoToken: String?, message: String?)
 
         /// Response to `.saveLayout` — confirms the layout was persisted

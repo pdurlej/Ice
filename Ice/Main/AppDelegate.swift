@@ -144,13 +144,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // item update fetch URLs that include bundle IDs of running apps).
             options.enableNetworkBreadcrumbs = false
 
-            // fire.10.4: drop App Hang reports that are just the main thread
-            // parked in a modal run loop — our own consent prompts, or
-            // Sparkle's "You're up to date" alert (the archived FIRE-J). That
-            // is the user reading a dialog, not a bug, and these benign ANRs
-            // were burying the real window-server hangs (FIRE-F/G/H) we care
-            // about. Only App Hang events are filtered; genuine crashes that
-            // merely happen during a modal are never dropped.
+            // fire.10.4: best-effort filter for App Hang reports that are just
+            // the main thread parked in a modal run loop — our own consent
+            // prompts or Sparkle's "You're up to date" alert. FIRE-J and
+            // FIRE-Q prove frame.function matching is not reliable at this
+            // client-side stage. Final names may only be available after
+            // server-side symbolication, but that explanation is unproven.
+            // Only App Hang events are considered; genuine crashes that merely
+            // happen during a modal are never dropped.
             options.beforeSend = { event in
                 let isAppHang = (event.exceptions ?? []).contains { exception in
                     (exception.mechanism?.type.localizedCaseInsensitiveContains("apphang") ?? false)
@@ -164,7 +165,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // An open NSMenu runs its own modal event loop, so a menu
                     // the user leaves open for >2 s reports as an App Hang.
                     // Sentry FIRE-Q was exactly this: our secondary context
-                    // menu, held open while testing (fire.10.7.1).
+                    // menu, held open while testing. The marker remains useful
+                    // when the client already has a function name, but it did
+                    // not suppress FIRE-Q reliably in 10.7/10.7.1.
                     "NSMenuTrackingSession", "NSContextMenuTrackingSession",
                     "startRunningMenuEventLoop",
                 ]

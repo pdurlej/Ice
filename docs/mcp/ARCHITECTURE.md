@@ -640,11 +640,17 @@ Each open question now has a binding decision plus rationale. Where the decision
 
 **Rationale:** Edge case. Realistically one user is using one LLM client at a time. Building async XPC + queue management would triple the implementation work for a scenario almost no one hits. Document the limitation, move on.
 
-### Q7 → YES: undo tokens, with auto-expiration (e.g., 1 hour)
+### Q7 → DEFERRED: undo tokens never shipped
 
-**Decision:** Destructive tools (`move_item`, `hide_item`, `show_item`, `apply_layout`) return an `undo_token` field in their response. A separate `undo(token)` tool reverts the operation. **Tokens expire automatically after 1 hour and the undo log is rotated to keep storage bounded** — no infinite scroll of every action ever taken.
+**Current decision:** Destructive tools do not advertise an `undo_token`, and
+there is no `undo(token)` tool. The response wire retains an always-`nil`
+associated value solely for compatibility with older Codable peers; the bridge
+does not expose it to MCP clients.
 
-**Rationale:** One of the strongest safety nets against LLM mistakes. Cheap to implement (a small ring buffer of last N operations with timestamps). Auto-expiration keeps the storage tiny and avoids the "1GB log of every move I've ever made" problem.
+**Rationale:** The original ring-buffer design remained a plan, not a product
+capability. Returning a placeholder suggested a recovery path that did not
+exist. A future real undo feature needs a fresh product decision, implementation,
+consent analysis, and end-to-end verification rather than another placeholder.
 
 ### Q8 → Ignore Mac App Store / sandbox concerns for now
 
@@ -667,7 +673,7 @@ Each open question now has a binding decision plus rationale. Where the decision
 | Add `modelcontextprotocol/swift-sdk` as Swift Package dependency, IceMCPBridge Xcode target scaffold | **1 hour** (was 3 — SDK does the protocol) | |
 | XPC extension (6 new Request/Response cases + handlers) | 2 hours | |
 | 6 tool implementations | 3 hours | |
-| Undo token mechanism (ring buffer, 1h auto-expire, undo tool) | **+1.5 hours** (new, was 0) | |
+| Undo token mechanism | **Deferred — not implemented** | Compatibility-only wire slot remains always `nil` |
 | Tool annotations (readOnly/destructive/idempotent per tool) | **+0.5 hours** | |
 | Auth/consent flow (read-only auto-grant + write notification) | 2 hours (was 3 — simpler granularity) | |
 | Onboarding UI (Advanced settings pane) | 2 hours | |

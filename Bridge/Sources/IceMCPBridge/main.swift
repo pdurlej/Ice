@@ -251,7 +251,6 @@ private func jsonString<T: Encodable>(_ payload: T) -> String {
 /// Sentinel mutation-result payload the MCP client sees.
 private struct MutationPayload: Encodable {
     let success: Bool
-    let undoToken: String?
     let message: String?
 }
 
@@ -628,8 +627,8 @@ private func encode(
             isError: false
         )
 
-    case .mutationResult(let success, let undoToken, let message):
-        let payload = MutationPayload(success: success, undoToken: undoToken, message: message)
+    case .mutationResult(let success, _, let message):
+        let payload = MutationPayload(success: success, message: message)
         return CallTool.Result(
             content: [.text(text: jsonString(payload), annotations: nil, _meta: nil)],
             isError: !success

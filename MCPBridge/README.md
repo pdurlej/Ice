@@ -40,8 +40,8 @@ is already added at the project level. The next focused work session needs to:
 6. **Add the onboarding UI** — Advanced Settings → "MCP Server" subpane
    with copy-paste configs for Claude Code / Codex / Cursor / Continue.
 
-7. **Implement undo token mechanism** — ring buffer with 1h auto-expire
-   for destructive tools.
+7. **Undo remains deferred** — do not advertise an undo token or tool unless a
+   real implementation, consent analysis, and end-to-end verification land.
 
 ## Effort estimate
 
@@ -58,7 +58,6 @@ work needed before implementation starts.
 - `Tools/ShowItem.swift`
 - `Tools/ApplyLayout.swift`
 - `Tools/SaveLayout.swift`
-- `Tools/Undo.swift` — the auto-expiring undo mechanism
 - `Auth/Consent.swift` — Keychain-scoped per-client-binary consent
 - `Auth/BinaryHasher.swift` — SHA-256 hash + verification
 - `XPCClient.swift` — wraps `MenuBarItemService.Connection` for tool use

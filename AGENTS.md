@@ -3,8 +3,8 @@
 Entry point for coding agents (Codex, and whoever else). Fire is a fork of
 jordanbaird/Ice, a macOS 26 menu bar manager, repositioned as AI-native (MCP
 server + automations). This file is the fast path; **`HANDOFF.md` has the full
-shipped-history and the deep context** — read its "🧭 RESUME HERE" block after
-this.
+shipped-history and deep context** — read its top CURRENT STATE first. The dated
+"🧭 RESUME HERE" block is historical context, not current operating truth.
 
 - **Repo:** `pdurlej/fire-from-ice` (GitHub). Always `-R pdurlej/fire-from-ice`
   for `gh`. Branch: **`fire/main`** (not `main`). Local: `/Users/pd/Developer/fire`.
@@ -15,22 +15,25 @@ this.
   hitting it in normal use. He can test menu-bar behaviour on request — the only
   way to verify the event-handler paths.
 
-## ⏳ PENDING RIGHT NOW (do this first)
+## ✅ LIVE NOW / NEXT
 
-**fire.10.7.1 (build 1156) is built, notarized, and installed on the owner's
-machine, but NOT on the appcast** — publication is gated on his runtime test of
-the menu-bar guards (show-on-hover, show-on-click over empty space vs an icon,
-app-menu hover, smart-rehide, ⌘-drag, ctrl-click secondary menu).
+**`v0.11.13-fire.10.7.2` (build 1157, release commit `5334644`) is the live,
+notarized build and has been on the Sparkle appcast since 2026-07-12.** The owner
+field-verified the hover/click guards, the signed MCP `list_items` smoke passed,
+and GitHub issues #4 and #17 are closed. Leave #7 open: the menu-bar *item*
+query deliberately remains live (see gotcha #2).
 
-- If he says the guards behave **deterministically**: publish the appcast
-  (`scripts/publish-appcast.sh v0.11.13-fire.10.7.1 --notes-file <notes.html>`),
-  then **close #17** (FIRE-P app-menu AX walk — fixed by the cached app-menu
-  frame) and **#4** (P1, below — the peer requirement is now really engaged;
-  headless-verified `list_items` works, no XPC rejections). **Leave #7 OPEN**
-  (see gotcha #2).
-- If a guard still misbehaves: it is almost certainly the **application-menu
-  cache** (`Ice/Utilities/MenuBarGeometryCache.swift`, issue #17) being stale or
-  dropped for a display — debug there, NOT in the live item query.
+`fire/main` may be ahead of that live tag with unshipped contract/documentation
+cleanup. In particular, main no longer exposes the always-nil `undoToken` to MCP
+clients while retaining its compatibility-only wire slot. Do not describe such
+main-only work as shipped, and do not publish or install anything from this note
+alone; use the full ship flow and its required runtime evidence.
+
+Sentry showed no 10.7.2 error events at the 2026-07-13 03:09 CEST checkpoint.
+FIRE-Q and FIRE-J are benign modal-menu/dialog App Hangs, but the client-side
+`frame.function` filter did **not** suppress them reliably. It is a best-effort
+noise filter. A plausible, unproven explanation is that the final function names
+become available only after server-side symbolication.
 
 ## Commands (exact)
 
@@ -104,15 +107,14 @@ and `--notes-file` supported).
 
 | # | P | needs | note |
 |---|---|---|---|
-| 4 | P1 | headless verify | Peer requirement now really engaged (10.7.1). Confirm signed build MCP works, then close. |
-| 17 | P2 | owner runtime | FIRE-P fixed by the app-menu cache; close after the 10.7.1 guard test passes. |
 | 7 | P2 | design | `isMouseInsideMenuBarItem` live SLS. Do NOT cache (see gotcha #2). If it ever hangs, make the QUERY cheaper. Never fired an App-Hang. |
 | 5 | P2 | careful pass | sendSync watchdog. **Deadlock trap** (documented in the issue): `send()` holds an `OSAllocatedUnfairLock`; no native timeout on macOS 26. Needs kill-STOP testing. |
 | 11 | P3 | some runtime | remaining LIGHT single main-thread SLS calls (SearchPanel view body, IceBar getOrigin, AppState publisher). |
-| 12 | P3 | mixed | undoToken is always null: implement minimal undo (needs consent e2e) or strip it (headless). |
+| 12 | P3 | next release | main strips the user-visible always-nil `undoToken`; the wire slot remains for compatibility. This is not in live 10.7.2. |
 | 13 | P3 | VoiceOver | a11y labels on fork-added UI. |
 
 Shipped from the board so far: #16+#15 (10.4.2), #8+#9 (10.5), #10 (appcast
-script), #6+#4+#14 (10.6), #7-cache+#17 (10.7, then #7 reverted in 10.7.1). The
-App-Hang franchise (FIRE-F/G/H/K/M/N/P) is field-quiet; FIRE-Q was a false ANR
-(open NSMenu) now filtered.
+script), #6+#4+#14 (10.6), and #17's activation-safe app-menu cache plus signed
+MCP verification (#4) in 10.7.2. The #7 item-frame cache shipped in 10.7 and was
+reverted in 10.7.1. The App-Hang franchise (FIRE-F/G/H/K/M/N/P) is field-quiet;
+FIRE-Q/J are false modal ANRs that the current filter catches only best-effort.
