@@ -98,8 +98,7 @@ final class MCPBackendStateManager {
                 displayBounds.contains(CGPoint(x: window.bounds.midX, y: window.bounds.midY))
             }
 
-            guard let visibleBoundary,
-                  let hiddenBoundary,
+            guard let hiddenBoundary,
                   let alwaysHiddenBoundary
             else {
                 logger.notice(
@@ -492,7 +491,10 @@ final class MCPBackendStateManager {
 
     /// Lists installed triggers by asking Ice main app (the authoritative
     /// `TriggerStore` owner). Read-only; short deadline.
-    func listTriggers() async -> [MenuBarItemService.TriggerSummary] {
+    func listTriggers() async -> (
+        triggers: [MenuBarItemService.TriggerSummary],
+        error: String?
+    ) {
         logger.debug("listTriggers() via bridge")
         let proposal = MCPTriggerChannel.Proposal(
             id: UUID().uuidString,
@@ -502,9 +504,12 @@ final class MCPBackendStateManager {
             createdAt: Date().timeIntervalSince1970
         )
         guard let result = await sendTriggerProposal(proposal, timeout: 10) else {
-            return []
+            return (
+                [],
+                "Fire did not respond within 10s. Make sure Fire is running and its local MCP server is enabled."
+            )
         }
-        return result.triggers ?? []
+        return (result.triggers ?? [], nil)
     }
 
     /// Proposes removing a trigger by id. The main app confirms before deleting.

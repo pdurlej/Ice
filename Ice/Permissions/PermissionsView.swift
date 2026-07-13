@@ -169,6 +169,14 @@ struct PermissionsView: View {
                 }
                 .allowsHitTesting(!permission.hasPermission)
 
+                if !permission.hasPermission, let recoveryHint = permission.recoveryHint {
+                    Text(recoveryHint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .accessibilityLabel(recoveryHint)
+                }
+
                 if !permission.isRequired {
                     CalloutBox("Fire can work in a limited mode without this permission.") {
                         Image(systemName: "checkmark.shield")

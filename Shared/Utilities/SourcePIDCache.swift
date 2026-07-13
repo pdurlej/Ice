@@ -27,17 +27,25 @@ final class SourcePIDCache {
     /// identifier and extras menu bar.
     private final class CachedApplication {
         private let runningApp: NSRunningApplication
-        private var extrasMenuBar: UIElement?
+        private let cachedProcessIdentifier: pid_t
+        private let extrasMenuBar = OSAllocatedUnfairLock<UIElement?>(initialState: nil)
 
         /// The app's process identifier.
         var processIdentifier: pid_t {
-            runningApp.processIdentifier
+            cachedProcessIdentifier
+        }
+
+        /// Whether this cached wrapper still represents a live process. PIDs
+        /// can be reused after termination, so a dead wrapper must never be
+        /// carried into a later refresh merely because the number matches.
+        var canReuse: Bool {
+            !runningApp.isTerminated
         }
 
         /// A Boolean value indicating whether the app's extras menu
         /// bar has been successfully created and stored.
         var hasExtrasMenuBar: Bool {
-            extrasMenuBar != nil
+            extrasMenuBar.withLock { $0 != nil }
         }
 
         /// A Boolean value indicating whether the app is in a valid
@@ -55,6 +63,7 @@ final class SourcePIDCache {
         /// application.
         init(_ runningApp: NSRunningApplication) {
             self.runningApp = runningApp
+            self.cachedProcessIdentifier = runningApp.processIdentifier
         }
 
         /// Returns the accessibility element representing the app's extras
@@ -63,8 +72,8 @@ final class SourcePIDCache {
         /// When the element is first created, it gets stored for efficient
         /// access on subsequent calls.
         func getOrCreateExtrasMenuBar() -> UIElement? {
-            if let extrasMenuBar {
-                return extrasMenuBar
+            if let cached = extrasMenuBar.withLock({ $0 }) {
+                return cached
             }
             guard
                 isValidForAccessibility,
@@ -73,8 +82,13 @@ final class SourcePIDCache {
             else {
                 return nil
             }
-            extrasMenuBar = bar
-            return bar
+            return extrasMenuBar.withLock { cached in
+                if let cached {
+                    return cached
+                }
+                cached = bar
+                return bar
+            }
         }
     }
 
@@ -163,47 +177,34 @@ final class SourcePIDCache {
     /// The cache's protected state.
     private let state = OSAllocatedUnfairLock(initialState: State())
 
-    /// Observer for running applications.
-    private lazy var cancellable = NSWorkspace.shared.publisher(for: \.runningApplications).sink { [weak self] runningApps in
-        guard let self else {
-            return
+    /// Refresh work never runs on the service's main run loop. The old KVO
+    /// publisher for `runningApplications` rebuilt the entire cache on the main
+    /// thread for every short-lived helper process — including Fire's own CLI
+    /// bridge — which could starve the XPC listener.
+    private let refreshQueue = DispatchQueue(
+        label: "com.jordanbaird.Ice.SourcePIDCache.refresh",
+        qos: .utility
+    )
+
+    /// Observe only meaningful app lifecycle notifications. Background helper
+    /// processes use `.prohibited` activation policy and cannot own a menu bar
+    /// extra, so they must not invalidate this cache.
+    private lazy var cancellable: AnyCancellable = {
+        let center = NSWorkspace.shared.notificationCenter
+        return Publishers.Merge(
+            center.publisher(for: NSWorkspace.didLaunchApplicationNotification),
+            center.publisher(for: NSWorkspace.didTerminateApplicationNotification)
+        )
+        .receive(on: refreshQueue)
+        .compactMap { notification in
+            notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
         }
-
-        Logger.default.debug("Received new running applications")
-
-        let windowIDs = Bridging.getMenuBarWindowList(option: .itemsOnly)
-
-        state.withLock { state in
-            // Convert the cached state to dictionaries keyed by pid to
-            // allow for efficient repeated access.
-            let appMappings = state.apps.reduce(into: [:]) { result, app in
-                result[app.processIdentifier] = app
-            }
-            let pidMappings: [pid_t: [CGWindowID: pid_t]] = windowIDs.reduce(into: [:]) { result, windowID in
-                if let pid = state.pids[windowID] {
-                    result[pid, default: [:]][windowID] = pid
-                }
-            }
-
-            // Create a new state that matches the current running apps.
-            state = runningApps.reduce(into: State()) { result, app in
-                let pid = app.processIdentifier
-
-                if let app = appMappings[pid] {
-                    // Prefer the cached app, as it may have already done
-                    // the work to initialize its extras menu bar.
-                    result.apps.append(app)
-                } else {
-                    // App wasn't in the cache, so it must be new.
-                    result.apps.append(CachedApplication(app))
-                }
-
-                if let pids = pidMappings[pid] {
-                    result.pids.merge(pids) { (_, new) in new }
-                }
-            }
+        .filter { $0.activationPolicy != .prohibited }
+        .debounce(for: .milliseconds(100), scheduler: refreshQueue)
+        .sink { [weak self] _ in
+            self?.refreshRunningApplications()
         }
-    }
+    }()
 
     /// Creates the shared cache.
     private init() {
@@ -212,8 +213,44 @@ final class SourcePIDCache {
 
     /// Starts the observers for the cache.
     func start() {
+        // AX timeouts are process-global, not app-global. Both XPC services run
+        // in their own process, so relying on the main app's timeout left these
+        // helpers exposed to the system's multi-second default.
+        AXHelpers.limitGlobalMessagingTimeout()
+        refreshRunningApplications()
         Logger.default.debug("Starting observers for source PID cache")
         _ = cancellable
+    }
+
+    /// Reconciles cached applications without holding the state lock across
+    /// LaunchServices calls. Cached per-app AX elements survive the refresh.
+    private func refreshRunningApplications() {
+        let runningApps = NSWorkspace.shared.runningApplications
+        let snapshot = state.withLock { ($0.apps, $0.pids) }
+        let cachedApps = Dictionary(uniqueKeysWithValues: snapshot.0.map {
+            ($0.processIdentifier, $0)
+        })
+
+        var refreshedApps = [CachedApplication]()
+        refreshedApps.reserveCapacity(runningApps.count)
+        var livePIDs = Set<pid_t>()
+        for runningApp in runningApps {
+            let pid = runningApp.processIdentifier
+            livePIDs.insert(pid)
+            if let cached = cachedApps[pid], cached.canReuse {
+                refreshedApps.append(cached)
+            } else {
+                refreshedApps.append(CachedApplication(runningApp))
+            }
+        }
+
+        let retainedPIDs = snapshot.1.filter { livePIDs.contains($0.value) }
+        let appsToStore = refreshedApps
+        state.withLock { state in
+            state.apps = appsToStore
+            state.pids = retainedPIDs
+        }
+        Logger.default.debug("Refreshed source PID applications")
     }
 
     /// Returns the cached process identifier for the given window,

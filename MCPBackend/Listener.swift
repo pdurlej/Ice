@@ -156,10 +156,13 @@ final class Listener {
                 )
 
             case .listTriggers:
-                let summaries = syncWait {
+                let result = syncWait {
                     await MCPBackendStateManager.shared.listTriggers()
                 }
-                return .triggers(summaries)
+                if let error = result.error {
+                    return .denied(error)
+                }
+                return .triggers(result.triggers)
 
             case .removeTrigger(let id):
                 let result = syncWait {

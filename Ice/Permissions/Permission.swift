@@ -24,6 +24,9 @@ class Permission: ObservableObject, Identifiable {
     /// A Boolean value that indicates if the app can work without this permission.
     let isRequired: Bool
 
+    /// Recovery guidance shown while the permission is still missing.
+    let recoveryHint: String?
+
     /// The URL of the settings pane to open.
     private let settingsURL: URL?
 
@@ -52,6 +55,7 @@ class Permission: ObservableObject, Identifiable {
         title: String,
         details: [String],
         isRequired: Bool,
+        recoveryHint: String? = nil,
         settingsURL: URL?,
         check: @escaping () -> Bool,
         request: @escaping () -> Void
@@ -59,6 +63,7 @@ class Permission: ObservableObject, Identifiable {
         self.title = title
         self.details = details
         self.isRequired = isRequired
+        self.recoveryHint = recoveryHint
         self.settingsURL = settingsURL
         self.check = check
         self.request = request
@@ -127,7 +132,10 @@ final class AccessibilityPermission: Permission {
                 "Arrange menu bar items.",
             ],
             isRequired: true,
-            settingsURL: nil,
+            recoveryHint: "If Ice is already enabled in System Settings, turn it off and back on, then return to Fire.",
+            settingsURL: URL(
+                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+            ),
             check: {
                 AXHelpers.isProcessTrusted()
             },
