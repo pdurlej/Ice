@@ -61,7 +61,7 @@ extension MenuBarItemService {
         // MARK: - MCP Server Extension
         //
         // These cases are the agent-facing surface. They are answered ONLY by
-        // MCPBackend.xpc, which enforces the Advanced → MCP kill-switch
+        // MCPBackend.xpc, which enforces the Settings → Agents kill-switch
         // (fire.10.4) and relays writes to the Ice main app's consent gate.
         // MenuBarItemService.xpc REJECTS every one of them (fire.10.5, issue
         // #8) — it serves only the `.start` + `.sourcePID` handshake for the
@@ -192,7 +192,7 @@ extension MenuBarItemService {
         /// has the MCP server turned off, or has not allowed write
         /// operations. `String` is a user-facing reason the bridge surfaces
         /// to the agent verbatim. This is the honest counterpart to the
-        /// three Advanced → MCP toggles, which before fire.10.4 were inert.
+        /// three Settings → Agents toggles, which before fire.10.4 were inert.
         case denied(String)
     }
 
@@ -393,7 +393,7 @@ extension MenuBarItemService.Request {
 
     /// Whether this request changes state (menu-bar layout, saved layouts, or
     /// installed automations) and therefore requires the "Allow write
-    /// operations" consent in addition to the server being enabled. Reads
+    /// approved changes" consent in addition to the server being enabled. Reads
     /// (`listItems`/`listLayouts`/`listTriggers`) are not writes.
     var isAgentWrite: Bool {
         switch self {
@@ -411,7 +411,7 @@ extension MenuBarItemService.RelayWork {
     /// Whether this queued item changes state. A `.move` always does; a
     /// `.trigger` does unless it's a `.list` (read). The main app's relay
     /// pump uses this for its defense-in-depth write gate so a relayed
-    /// `list_triggers` is never blocked by the "Allow write operations"
+    /// `list_triggers` is never blocked by the "Allow approved changes"
     /// toggle.
     var isAgentWrite: Bool {
         switch self {

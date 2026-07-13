@@ -1,3 +1,8 @@
+//
+//  HomeSettingsPane.swift
+//  Ice
+//
+
 import SwiftUI
 
 struct HomeSettingsPane: View {

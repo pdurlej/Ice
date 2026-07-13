@@ -1,3 +1,8 @@
+//
+//  SurfacesSettingsPane.swift
+//  Ice
+//
+
 import SwiftUI
 
 struct SurfacesSettingsPane: View {

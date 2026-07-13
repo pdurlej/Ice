@@ -266,7 +266,7 @@ final class MCPBackendStateManager {
         guard case .move(let result)? = await RelayQueue.shared.submitAndWait(.move(command), timeout: 15) else {
             return (
                 false,
-                "Ice did not respond within 15s. Make sure Ice (Fire) is running and has Accessibility permission."
+                "Fire did not respond within 15s. Make sure Fire is running and has Accessibility permission."
             )
         }
         logger.info("moveItem relay result for \(bundleID): success=\(result.success)")
@@ -395,7 +395,7 @@ final class MCPBackendStateManager {
 
         let items = await listItems(section: nil)
         guard !items.isEmpty else {
-            logger.error("saveLayout: no items to snapshot - Ice may not be running")
+            logger.error("saveLayout: no items to snapshot - Fire may not be running")
             return nil
         }
 
@@ -485,7 +485,7 @@ final class MCPBackendStateManager {
         )
         guard let result = await sendTriggerProposal(proposal, timeout: 120) else {
             return (false, nil, false,
-                    "Ice did not respond. Make sure Fire is running, then approve the prompt within two minutes.")
+                    "Fire did not respond. Make sure Fire is running, then approve the prompt within two minutes.")
         }
         return (result.success, result.triggerID, result.enabled, result.message)
     }
@@ -526,7 +526,7 @@ final class MCPBackendStateManager {
         )
         guard let result = await sendTriggerProposal(proposal, timeout: 60) else {
             return (false, nil,
-                    "Ice did not respond. Make sure Fire is running, then confirm the removal prompt.")
+                    "Fire did not respond. Make sure Fire is running, then confirm the removal prompt.")
         }
         return (result.success, result.triggerID, result.message)
     }

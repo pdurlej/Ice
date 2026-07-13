@@ -74,9 +74,16 @@ struct AIQuotaSnapshot: Equatable, Codable {
     /// Convenience: an error-only snapshot for a provider.
     static func failure(_ provider: AIQuotaProvider, _ message: String) -> AIQuotaSnapshot {
         AIQuotaSnapshot(
-            provider: provider, source: nil, updatedAt: nil,
-            primary: nil, secondary: nil, tertiary: nil, extraWindows: [],
-            account: nil, plan: nil, error: message
+            provider: provider,
+            source: nil,
+            updatedAt: nil,
+            primary: nil,
+            secondary: nil,
+            tertiary: nil,
+            extraWindows: [],
+            account: nil,
+            plan: nil,
+            error: message
         )
     }
 

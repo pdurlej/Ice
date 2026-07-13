@@ -75,7 +75,10 @@ final class TriggerEngine {
     /// Re-reads rules after an install / remove / enable change.
     func reload() {
         TriggerStore.shared.load()
-        if !TriggerStore.shared.rules.contains(where: { $0.enabled }) {
+        if FirelineActivationState.shouldDeactivate(
+            activeRuleID: appState?.firelineContextController.activeRuleID,
+            rules: TriggerStore.shared.rules
+        ) {
             appState?.firelineContextController.deactivate()
         }
         evaluateAll(reason: "reload")

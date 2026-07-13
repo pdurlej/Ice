@@ -1,3 +1,8 @@
+//
+//  AgentsSettingsPane.swift
+//  Ice
+//
+
 import AppKit
 import SwiftUI
 
@@ -107,9 +112,13 @@ struct AgentsSettingsPane: View {
                     process.waitUntilExit()
                     let stdout = output.fileHandleForReading.readDataToEndOfFile()
                     let stderr = errors.fileHandleForReading.readDataToEndOfFile()
-                    let text = String(decoding: stdout + stderr, as: UTF8.self)
+                    let text = String(bytes: stdout + stderr, encoding: .utf8)
+                        ?? "Fire Doctor returned non-UTF-8 output"
+                    let trimmedText = text
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-                    return process.terminationStatus == 0 ? "Ready — \(text)" : "Needs attention — \(text)"
+                    return process.terminationStatus == 0
+                        ? "Ready — \(trimmedText)"
+                        : "Needs attention — \(trimmedText)"
                 } catch {
                     return "Needs attention — \(error.localizedDescription)"
                 }

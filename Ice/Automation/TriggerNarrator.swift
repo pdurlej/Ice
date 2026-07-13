@@ -15,6 +15,35 @@
 import Foundation
 
 enum TriggerNarrator {
+    static func capabilityName(_ action: TriggerAction) -> String {
+        if case .activateContext = action {
+            return "Context Scene"
+        }
+        return "menu-bar automation"
+    }
+
+    static func installDescription(_ rule: TriggerRule) -> String {
+        """
+        \(rule.name)
+
+        When \(describe(rule.condition)), Fire will \(describe(rule.onEnter)).
+
+        This \(capabilityName(rule.onEnter)) can then run without asking again. \
+        Any change to its condition, items, destination, or Fireline payload \
+        requires your approval again.
+        """
+    }
+
+    static func removalDescription(_ rule: TriggerRule) -> String {
+        """
+        \(rule.name)
+
+        This \(capabilityName(rule.onEnter)) (when \(describe(rule.condition)), \
+        \(describe(rule.onEnter))) will be deleted. You can re-create it later, \
+        but its approval will need to be granted again.
+        """
+    }
+
     /// A human sentence fragment for a condition, e.g.
     /// "“com.tinyspeck.slackmacgap” becomes the frontmost app".
     static func describe(_ condition: TriggerCondition) -> String {
@@ -30,7 +59,10 @@ enum TriggerNarrator {
                 .map(Self.short).joined(separator: ", ")
             return String(
                 format: "the time is %02d:%02d–%02d:%02d on %@",
-                start.hour, start.minute, end.hour, end.minute,
+                start.hour,
+                start.minute,
+                end.hour,
+                end.minute,
                 dayList.isEmpty ? "any day" : dayList
             )
         }

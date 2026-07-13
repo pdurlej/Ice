@@ -1,6 +1,6 @@
 ---
 name: program-fire
-description: Program the local macOS menu bar and Fireline with Fire From Ice. Use when the user wants to inspect, show, hide, move, or automate menu bar items; create a Context Scene for an app, time, or battery condition; show Codex or Claude quota near the notch; surface a calendar item while using Mail; diagnose the Fire MCP connection; or recover and remove an installed Fire context. Do not use for Dock, Control Center settings, arbitrary widgets, or remote machines.
+description: Program the local macOS menu bar and Fireline with Fire. Use when the user wants to inspect, show, hide, move, or automate menu bar items; create a Context Scene for an app, time, or battery condition; show Codex or Claude quota near the notch; surface a calendar item while using Mail; diagnose the Fire MCP connection; or recover and remove an installed Fire context. Do not use for Dock, Control Center settings, arbitrary widgets, or remote machines.
 ---
 
 # Program Fire

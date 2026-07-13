@@ -87,6 +87,7 @@ private struct FirelineContentView: View {
             Text(sceneName)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
+                .accessibilityLabel("Context \(sceneName)")
 
             Divider().frame(height: 18)
 
@@ -97,7 +98,7 @@ private struct FirelineContentView: View {
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().stroke(.white.opacity(0.14), lineWidth: 0.5))
         .fixedSize()
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Fireline context \(sceneName)")
     }
 
@@ -141,7 +142,7 @@ private struct FirelineQuotaView: View {
 
     private func summary(_ snapshot: AIQuotaSnapshot?) -> String {
         guard let snapshot else { return "checking…" }
-        if snapshot.error != nil { return "unavailable" }
+        if snapshot.error != nil { return "unavailable — check Agents settings" }
         var parts: [String] = []
         if let session = snapshot.primaryLeftPercent {
             parts.append("\(Int(session.rounded()))% session")

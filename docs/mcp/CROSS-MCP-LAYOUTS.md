@@ -21,11 +21,11 @@ menu bar — you just keep your calendar honest.
 
 ## Prerequisites
 
-- Fire installed, **Settings → Advanced → MCP Server** enabled with
-  **Allow write operations** on.
+- Fire installed, **Settings → Agents → Enable local MCP server** enabled with
+  **Allow approved changes** on.
 - A calendar MCP connected to your agent (e.g. Fantastical's MCP).
 - Fire's MCP connected to the same agent:
-  `claude mcp add fire /Applications/Fire.app/Contents/MacOS/IceMCPBridge`
+  `claude mcp add --transport stdio --scope user fire -- /Applications/Ice.app/Contents/MacOS/IceMCPBridge`
   (or the Claude Desktop / Cursor config in `CLIENT-SETUP.md`).
 
 ## Step 1 — save the layouts you want to switch between

@@ -42,7 +42,9 @@ final class MCPWriteCommandHandler {
 
         func failure(_ message: String) -> MCPWriteChannel.Result {
             MCPWriteChannel.Result(
-                id: command.id, success: false, message: message,
+                id: command.id,
+                success: false,
+                message: message,
                 completedAt: Date().timeIntervalSince1970
             )
         }
@@ -94,7 +96,9 @@ final class MCPWriteCommandHandler {
     private func execute(_ command: MCPWriteChannel.Command) async -> MCPWriteChannel.Result {
         func result(_ success: Bool, _ message: String?) -> MCPWriteChannel.Result {
             MCPWriteChannel.Result(
-                id: command.id, success: success, message: message,
+                id: command.id,
+                success: success,
+                message: message,
                 completedAt: Date().timeIntervalSince1970
             )
         }

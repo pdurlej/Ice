@@ -7,5 +7,5 @@ dependencies:
   tools:
     - type: "mcp"
       value: "fire"
-      description: "Local Fire From Ice menu bar control plane"
+      description: "Local Fire menu bar control plane"
       transport: "stdio"

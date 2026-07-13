@@ -148,7 +148,7 @@ final class MCPRelayPump {
             return "Fire's MCP server is turned off."
         }
         guard Defaults.bool(forKey: .mcpAllowWrites) else {
-            return "Fire is not allowing write operations."
+            return "Fire is not allowing approved changes."
         }
         return nil
     }
@@ -161,13 +161,19 @@ final class MCPRelayPump {
         switch work {
         case .move(let command):
             return .move(MCPWriteChannel.Result(
-                id: command.id, success: false, message: reason,
+                id: command.id,
+                success: false,
+                message: reason,
                 completedAt: Date().timeIntervalSince1970
             ))
         case .trigger(let proposal):
             return .trigger(MCPTriggerChannel.Result(
-                id: proposal.id, success: false, triggerID: nil, enabled: false,
-                triggers: nil, message: reason,
+                id: proposal.id,
+                success: false,
+                triggerID: nil,
+                enabled: false,
+                triggers: nil,
+                message: reason,
                 completedAt: Date().timeIntervalSince1970
             ))
         }

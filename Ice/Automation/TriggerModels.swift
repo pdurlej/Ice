@@ -234,6 +234,13 @@ struct TriggerRule: Codable, Identifiable, Equatable {
     }
 }
 
+enum FirelineActivationState {
+    static func shouldDeactivate(activeRuleID: UUID?, rules: [TriggerRule]) -> Bool {
+        guard let activeRuleID else { return false }
+        return !rules.contains { $0.id == activeRuleID && $0.enabled }
+    }
+}
+
 // MARK: - Sealed approval grant
 
 /// Tamper-evident proof that the user approved a specific automation

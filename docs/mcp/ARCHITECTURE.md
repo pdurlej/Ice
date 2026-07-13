@@ -1,5 +1,14 @@
 # Fire MCP Server Architecture
 
+> [!WARNING]
+> This is the original pre-implementation architecture and decision record.
+> It preserves rejected and superseded designs, so it is **not** a runtime
+> runbook. For the shipped Fire 1.0 topology and setup, use
+> [`CLIENT-SETUP.md`](CLIENT-SETUP.md),
+> [`FIRE-1.0-IGNITION.md`](../FIRE-1.0-IGNITION.md), and the source. In
+> particular, Fire 1.0 uses stdio → `MCPBackend.xpc` → an authenticated relay;
+> it does not use the socket or per-client Keychain consent design below.
+
 ## 1. Vision
 
 Fire's MCP server transforms the macOS menu bar from a static strip of icons into a programmable surface that AI agents can read, reason about, and rearrange on the user's behalf. No menu bar manager — not Bartender 6, not Hidden Bar, not upstream Ice — exposes this kind of introspection and control. By shipping an MCP bridge as a first-class binary inside the Fire app bundle, we give every local LLM client (Claude Code, Codex, Cursor, Continue) a structured API into menu bar state that was previously locked behind Accessibility heuristics and manual drag-and-drop. The menu bar becomes the first macOS system area that an AI agent can meaningfully manage.
@@ -407,22 +416,34 @@ Data (JSON):
 
 Read-only tools (`list_items`) work without any consent entry. Write tools require `scope: "write"` and `revoked: false`.
 
-### Revoke Flow
+### Shipped Fire 1.0 Recovery and Revocation
 
-1. User opens Fire → Settings → Advanced → MCP Connections.
-2. UI lists all consented clients from Keychain (query by service name).
-3. User selects a client and clicks "Revoke".
-4. Keychain entry updated: `revoked: true` (or deleted entirely).
-5. Next write-tool call from that client returns an MCP error: `"Client consent revoked. Open Fire settings to re-authorize."`
+The per-client Keychain design above was not implemented. Fire 1.0 provides
+three explicit recovery levels instead:
+
+1. **Settings → Agents → Allow approved changes** disables every agent write
+   while keeping read-only inspection available.
+2. **Settings → Agents → Enable local MCP server** disables the entire local
+   agent surface.
+3. **Settings → Contexts** disables or removes individual sealed Context
+   Scenes. Removal deletes the scene's sealed grant after human confirmation.
+
+Direct menu bar changes remain Fire-consent-gated; Context Scenes receive a
+tamper-evident capability grant only after Fire shows the exact condition,
+items, destinations, and Fireline payload. Fire 1.0 has no per-client consent
+list or client-specific revoke button.
 
 ### Read-Only vs Write Tool Gating
 
-| Category | Tools | Consent Required |
+| Category | Tools | Shipped Fire 1.0 gate |
 |---|---|---|
-| Read-only | `list_items` | None (local process only) |
-| Write | `move_item`, `hide_item`, `show_item`, `apply_layout`, `save_layout` | Explicit Keychain consent with `scope: "write"` |
+| Read-only | `list_items`, `list_layouts`, `list_contexts` | Local MCP server enabled |
+| Direct write | `move_item`, `hide_item`, `show_item`, `apply_layout`, `save_layout` | Approved-changes toggle plus Fire-authored write consent |
+| Context capability | `set_context`, `remove_context` | Approved-changes toggle plus Fire-authored install/removal confirmation |
 
-IceMCPBridge checks consent *before* sending the XPC request. If consent is missing or revoked, the tool returns an error immediately — the XPC message is never sent.
+`MCPBackend.xpc` enforces the Settings toggles before relaying a request. The
+main app checks the write policy again immediately before using its
+Accessibility authority.
 
 ## 5. Discovery Configuration
 
@@ -432,7 +453,7 @@ IceMCPBridge checks consent *before* sending the XPC request. If consent is miss
 {
   "mcpServers": {
     "fire": {
-      "command": "/Applications/Fire.app/Contents/MacOS/IceMCPBridge",
+      "command": "/Applications/Ice.app/Contents/MacOS/IceMCPBridge",
       "args": ["--stdio"]
     }
   }
@@ -445,7 +466,7 @@ IceMCPBridge checks consent *before* sending the XPC request. If consent is miss
 {
   "mcpServers": {
     "fire": {
-      "command": "/Applications/Fire.app/Contents/MacOS/IceMCPBridge",
+      "command": "/Applications/Ice.app/Contents/MacOS/IceMCPBridge",
       "args": ["--stdio"]
     }
   }
@@ -458,7 +479,7 @@ IceMCPBridge checks consent *before* sending the XPC request. If consent is miss
 {
   "mcpServers": {
     "fire": {
-      "command": "/Applications/Fire.app/Contents/MacOS/IceMCPBridge",
+      "command": "/Applications/Ice.app/Contents/MacOS/IceMCPBridge",
       "args": ["--stdio"]
     }
   }
@@ -472,7 +493,7 @@ IceMCPBridge checks consent *before* sending the XPC request. If consent is miss
   "experimental": {
     "mcpServers": {
       "fire": {
-        "command": "/Applications/Fire.app/Contents/MacOS/IceMCPBridge",
+        "command": "/Applications/Ice.app/Contents/MacOS/IceMCPBridge",
         "args": ["--stdio"]
       }
     }
@@ -485,7 +506,7 @@ IceMCPBridge checks consent *before* sending the XPC request. If consent is miss
 ```json
 {
   "fire": {
-    "command": "/Applications/Fire.app/Contents/MacOS/IceMCPBridge",
+    "command": "/Applications/Ice.app/Contents/MacOS/IceMCPBridge",
     "args": ["--stdio"]
   }
 }

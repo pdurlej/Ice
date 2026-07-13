@@ -62,7 +62,6 @@ struct AdvancedSettingsPane: View {
         }
     }
 
-
     @ViewBuilder
     private var enableAlwaysHiddenSection: some View {
         Toggle(
@@ -161,5 +160,4 @@ struct AdvancedSettingsPane: View {
         }
         .annotation("The amount of time to wait before hiding temporarily shown menu bar items.")
     }
-
 }

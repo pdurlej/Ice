@@ -131,6 +131,8 @@ struct AutomationsSettingsPane: View {
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .disabled(!rule.enabled && !store.hasValidGrant(for: rule))
+                        .accessibilityLabel("\(rule.name) enabled")
+                        .accessibilityHint("Controls whether this Context Scene may activate")
                     Button {
                         pendingDelete = rule
                     } label: {
@@ -138,6 +140,7 @@ struct AutomationsSettingsPane: View {
                     }
                     .buttonStyle(.borderless)
                     .help("Remove this Context Scene")
+                    .accessibilityLabel("Remove \(rule.name)")
                 }
             }
 
