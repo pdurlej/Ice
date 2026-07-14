@@ -33,16 +33,26 @@ final class Listener {
     /// Logger scoped to this service.
     private let logger = Logger(category: "MCPBackend.Listener")
 
+    /// Agent requests can wait on AX work or the main-app consent relay. XPC's
+    /// incoming handler is serial for a session, so blocking it would prevent
+    /// the relay session from fetching the very work that completes the
+    /// request. `handoffReply` transfers reply ownership to this queue while
+    /// leaving the listener free to serve `.relayFetch`/`.relayComplete`.
+    private static let replyQueue = DispatchQueue(
+        label: "com.jordanbaird.Ice.MCPBackend.replies",
+        qos: .userInitiated,
+        attributes: .concurrent
+    )
+
     private init() {}
 
     deinit {
         cancel()
     }
 
-    /// Handles a received message. Synchronous - the async MCP-extension
-    /// dispatches go through `syncWait(_:)` because XPC handler closures
-    /// must return synchronously.
-    private func handleMessage(_ message: XPCReceivedMessage) -> MenuBarItemService.Response? {
+    /// Handles a received message. Agent-facing operations hand their reply
+    /// off before starting async work so the listener never blocks the relay.
+    private func handleMessage(_ message: XPCReceivedMessage) -> (any Encodable)? {
         do {
             let request = try message.decode(as: MenuBarItemService.Request.self)
 
@@ -56,124 +66,28 @@ final class Listener {
             // so Ice can never block its own plumbing.
             if request.isAgentFacing, let reason = Self.policyDenial(for: request) {
                 logger.notice("MCP policy refused an agent request: \(reason, privacy: .public)")
-                return .denied(reason)
+                return MenuBarItemService.Response.denied(reason)
+            }
+
+            if request.isAgentFacing {
+                return message.handoffReply(to: Self.replyQueue) { [self] in
+                    Task {
+                        message.reply(await handleAgentRequest(request))
+                    }
+                }
             }
 
             switch request {
             case .start:
                 logger.debug("Received .start (legacy - belongs to MenuBarItemService, returning .start anyway)")
-                return .start
+                return MenuBarItemService.Response.start
 
             case .sourcePID:
                 // MenuBarItemService owns sourcePID. If we receive one
                 // here it's a misrouted client - surface nil rather than
                 // duplicating SourcePIDCache.
                 logger.notice("Received .sourcePID - not supported on MCPBackend, route to MenuBarItemService")
-                return .sourcePID(nil)
-
-            // MARK: - MCP Server Extension (Phase 4.5)
-
-            case .listItems(let section):
-                let items = syncWait {
-                    await MCPBackendStateManager.shared.listItems(section: section)
-                }
-                return .items(items)
-
-            case .moveItem(let bundleID, let selector, let toSection, let toIndex):
-                let result = syncWait {
-                    await MCPBackendStateManager.shared.moveItem(
-                        bundleID: bundleID,
-                        selector: selector,
-                        toSection: toSection,
-                        toIndex: toIndex
-                    )
-                }
-                return .mutationResult(
-                    success: result.success,
-                    undoToken: nil, // Phase 5 wires this
-                    message: result.message
-                )
-
-            case .hideItem(let bundleID, let selector):
-                let result = syncWait {
-                    await MCPBackendStateManager.shared.hideItem(bundleID: bundleID, selector: selector)
-                }
-                return .mutationResult(
-                    success: result.success,
-                    undoToken: nil,
-                    message: result.message
-                )
-
-            case .showItem(let bundleID, let selector):
-                let result = syncWait {
-                    await MCPBackendStateManager.shared.showItem(bundleID: bundleID, selector: selector)
-                }
-                return .mutationResult(
-                    success: result.success,
-                    undoToken: nil,
-                    message: result.message
-                )
-
-            case .applyLayout(let layoutName):
-                let result = syncWait {
-                    await MCPBackendStateManager.shared.applyLayout(name: layoutName)
-                }
-                return .mutationResult(
-                    success: result.success,
-                    undoToken: nil,
-                    message: result.message
-                )
-
-            case .saveLayout(let layoutName):
-                let savedCount = syncWait {
-                    await MCPBackendStateManager.shared.saveLayout(name: layoutName)
-                }
-                if let savedCount {
-                    return .layoutSaved(name: layoutName, itemCount: savedCount)
-                } else {
-                    return .mutationResult(
-                        success: false,
-                        undoToken: nil,
-                        message: "Failed to save layout"
-                    )
-                }
-
-            case .listLayouts:
-                let names = MCPBackendStateManager.shared.listLayouts()
-                return .layouts(names)
-
-            // MARK: - AI-Native Triggers (fire.10 P1)
-
-            case .setTrigger(let spec):
-                let result = syncWait {
-                    await MCPBackendStateManager.shared.setTrigger(spec: spec)
-                }
-                return .triggerResult(
-                    success: result.success,
-                    id: result.triggerID,
-                    enabled: result.enabled,
-                    message: result.message
-                )
-
-            case .listTriggers:
-                let result = syncWait {
-                    await MCPBackendStateManager.shared.listTriggers()
-                }
-                if let error = result.error {
-                    return .denied(error)
-                }
-                return .triggers(result.triggers)
-
-            case .removeTrigger(let id):
-                let result = syncWait {
-                    await MCPBackendStateManager.shared.removeTrigger(id: id)
-                }
-                return .triggerResult(
-                    success: result.success,
-                    id: result.triggerID,
-                    enabled: false,
-                    message: result.message
-                )
+                return MenuBarItemService.Response.sourcePID(nil)
 
             // MARK: - Main-app relay (fire.10.2)
             //
@@ -183,15 +97,89 @@ final class Listener {
 
             case .relayFetch:
                 let work = syncWait { await RelayQueue.shared.dequeue() }
-                return .relayWork(work)
+                return MenuBarItemService.Response.relayWork(work)
 
             case .relayComplete(let result):
                 syncWait { await RelayQueue.shared.complete(result) }
-                return .relayAck
+                return MenuBarItemService.Response.relayAck
+
+            case .listItems, .moveItem, .hideItem, .showItem, .applyLayout,
+                 .saveLayout, .listLayouts, .setTrigger, .listTriggers, .removeTrigger:
+                return MenuBarItemService.Response.denied("Agent request was not handed off.")
             }
         } catch {
             logger.error("Failed to handle message: \(error)")
             return nil
+        }
+    }
+
+    /// Executes an agent request after `handoffReply` has released the XPC
+    /// listener. Requests that wait on the main-app relay can now complete
+    /// without starving `.relayFetch` on the same service.
+    private func handleAgentRequest(
+        _ request: MenuBarItemService.Request
+    ) async -> MenuBarItemService.Response {
+        switch request {
+        case .listItems(let section):
+            return .items(await MCPBackendStateManager.shared.listItems(section: section))
+
+        case .moveItem(let bundleID, let selector, let toSection, let toIndex):
+            let result = await MCPBackendStateManager.shared.moveItem(
+                bundleID: bundleID,
+                selector: selector,
+                toSection: toSection,
+                toIndex: toIndex
+            )
+            return .mutationResult(success: result.success, undoToken: nil, message: result.message)
+
+        case .hideItem(let bundleID, let selector):
+            let result = await MCPBackendStateManager.shared.hideItem(bundleID: bundleID, selector: selector)
+            return .mutationResult(success: result.success, undoToken: nil, message: result.message)
+
+        case .showItem(let bundleID, let selector):
+            let result = await MCPBackendStateManager.shared.showItem(bundleID: bundleID, selector: selector)
+            return .mutationResult(success: result.success, undoToken: nil, message: result.message)
+
+        case .applyLayout(let layoutName):
+            let result = await MCPBackendStateManager.shared.applyLayout(name: layoutName)
+            return .mutationResult(success: result.success, undoToken: nil, message: result.message)
+
+        case .saveLayout(let layoutName):
+            if let savedCount = await MCPBackendStateManager.shared.saveLayout(name: layoutName) {
+                return .layoutSaved(name: layoutName, itemCount: savedCount)
+            }
+            return .mutationResult(success: false, undoToken: nil, message: "Failed to save layout")
+
+        case .listLayouts:
+            return .layouts(MCPBackendStateManager.shared.listLayouts())
+
+        case .setTrigger(let spec):
+            let result = await MCPBackendStateManager.shared.setTrigger(spec: spec)
+            return .triggerResult(
+                success: result.success,
+                id: result.triggerID,
+                enabled: result.enabled,
+                message: result.message
+            )
+
+        case .listTriggers:
+            let result = await MCPBackendStateManager.shared.listTriggers()
+            if let error = result.error {
+                return .denied(error)
+            }
+            return .triggers(result.triggers)
+
+        case .removeTrigger(let id):
+            let result = await MCPBackendStateManager.shared.removeTrigger(id: id)
+            return .triggerResult(
+                success: result.success,
+                id: result.triggerID,
+                enabled: false,
+                message: result.message
+            )
+
+        case .start, .sourcePID, .relayFetch, .relayComplete:
+            return .denied("Unsupported agent request.")
         }
     }
 
