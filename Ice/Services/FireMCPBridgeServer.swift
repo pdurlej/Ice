@@ -136,13 +136,20 @@ final class FireMCPBridgeServer: @unchecked Sendable {
         var buffer = Data()
         var chunk = [UInt8](repeating: 0, count: 16_384)
         while true {
-            let count = read(fd, &chunk, chunk.count)
+            let count = chunk.withUnsafeMutableBytes { rawBuffer in
+                Darwin.read(fd, rawBuffer.baseAddress, rawBuffer.count)
+            }
             if count == 0 { return }
             if count < 0 {
                 if errno == EINTR { continue }
+                logger.error("MCP bridge read failed: errno \(errno)")
                 return
             }
             buffer.append(contentsOf: chunk.prefix(count))
+            guard buffer.count <= 1_048_576 else {
+                logger.notice("Rejected oversized MCP bridge request")
+                return
+            }
 
             while let newline = buffer.firstIndex(of: 0x0A) {
                 let line = Data(buffer[..<newline])
