@@ -18,9 +18,9 @@ struct AgentsSettingsPane: View {
     private var openCodeFireBlock: String {
         """
         {
-          "type": "local",
-          "command": ["\(bridgePath)"],
-          "enabled": true
+            "type": "local",
+            "command": ["\(bridgePath)"],
+            "enabled": true
         }
         """
     }
