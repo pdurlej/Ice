@@ -68,16 +68,13 @@ Mail example (replace the selector copied from `list_items`):
   },
   "action": {
     "type": "activateContext",
-    "selectors": [
-      {
-        "version": 1,
-        "namespace": "copied namespace",
-        "title": "copied Fantastical title",
-        "source_bundle_id": "copied source bundle id"
-      }
-    ],
-    "section": "alwaysVisible",
-    "fireline_type": "hidden"
+    "fireline_type": "menuBarItem",
+    "fireline_selector": {
+      "version": 1,
+      "namespace": "copied namespace",
+      "title": "copied Fantastical title",
+      "source_bundle_id": "copied source bundle id"
+    }
   }
 }
 ```

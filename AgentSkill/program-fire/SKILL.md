@@ -67,9 +67,11 @@ not substitute invented values or a cloud scrape.
 
 Resolve Mail's installed bundle id. Find the exact Fantastical status item with
 `list_items`, show the candidates if more than one looks plausible, and use the
-user-selected selector. Create an `appFocus` context that moves only that item
-to `alwaysVisible`. Use `fireline_type: hidden` unless the user also asked for a
-single Fireline item.
+user-selected selector. When the user asks to surface or show Fantastical near
+the notch, create an `appFocus` context with no menu-bar moves and
+`fireline_type: menuBarItem` plus that exact `fireline_selector`. Move the item
+to `alwaysVisible` only when the user explicitly asks to change its normal menu
+bar section; in that case keep Fireline hidden unless they also request it.
 
 ## CLI fallback
 

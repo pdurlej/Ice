@@ -15,6 +15,16 @@ struct AgentsSettingsPane: View {
     private let bridgePath = "/Applications/Ice.app/Contents/MacOS/IceMCPBridge"
     private let skillPath = "/Applications/Ice.app/Contents/Resources/AgentSkills/program-fire"
 
+    private var openCodeFireBlock: String {
+        """
+        {
+          "type": "local",
+          "command": ["\(bridgePath)"],
+          "enabled": true
+        }
+        """
+    }
+
     var body: some View {
         IceForm {
             IceSection("Local agent bridge") {
@@ -50,19 +60,24 @@ struct AgentsSettingsPane: View {
                     .padding(.trailing, 75)
                 setupRow(
                     "Codex",
-                    command: "codex mcp add fire -- \(bridgePath)"
+                    detail: "codex mcp add fire -- \(bridgePath)",
+                    copyValue: "codex mcp add fire -- \(bridgePath)"
                 )
                 setupRow(
                     "Claude Code",
-                    command: "claude mcp add --transport stdio --scope user fire -- \(bridgePath)"
+                    detail: "claude mcp add --transport stdio --scope user fire -- \(bridgePath)",
+                    copyValue: "claude mcp add --transport stdio --scope user fire -- \(bridgePath)"
                 )
                 setupRow(
                     "OpenCode",
-                    command: "Add \(bridgePath) as an enabled local MCP named fire in ~/.config/opencode/opencode.json"
+                    detail: "Merge the copied block as mcp.fire in ~/.config/opencode/opencode.json",
+                    copyValue: openCodeFireBlock,
+                    buttonTitle: "Copy JSON"
                 )
                 setupRow(
                     "Shared skill",
-                    command: "mkdir -p \"$HOME/.agents/skills\" \"$HOME/.claude/skills\" && ln -sfn \"\(skillPath)\" \"$HOME/.agents/skills/program-fire\" && ln -sfn \"\(skillPath)\" \"$HOME/.claude/skills/program-fire\""
+                    detail: "Link one canonical skill for Codex, Claude Code, and OpenCode",
+                    copyValue: "mkdir -p \"$HOME/.agents/skills\" \"$HOME/.claude/skills\" && ln -sfn \"\(skillPath)\" \"$HOME/.agents/skills/program-fire\" && ln -sfn \"\(skillPath)\" \"$HOME/.claude/skills/program-fire\""
                 )
             }
 
@@ -73,17 +88,22 @@ struct AgentsSettingsPane: View {
     }
 
     @ViewBuilder
-    private func setupRow(_ name: String, command: String) -> some View {
+    private func setupRow(
+        _ name: String,
+        detail: String,
+        copyValue: String,
+        buttonTitle: String = "Copy setup"
+    ) -> some View {
         LabeledContent {
-            Button("Copy setup") {
+            Button(buttonTitle) {
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(command, forType: .string)
+                NSPasteboard.general.setString(copyValue, forType: .string)
             }
             .accessibilityLabel("Copy \(name) setup instructions")
         } label: {
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
-                Text(command)
+                Text(detail)
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
