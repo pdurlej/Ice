@@ -342,6 +342,9 @@ final class ControlItem {
         case .visible:
             updateStatusItemVisibility(true)
             button.appearsDisabled = false
+            // Explicitly use the semantic foreground color so Fire's template
+            // icon remains legible on dark and light menu bars.
+            button.contentTintColor = .labelColor
 
             let icon = appState.settings.general.iceIcon
 
@@ -453,16 +456,16 @@ final class ControlItem {
     /// Re-registers the status item with macOS while preserving its saved position.
     ///
     /// Control Center can occasionally stop exposing a status item to the window
-    /// list even though the item is still present. Removing and immediately adding
-    /// Fire's own item gives macOS a fresh registration without affecting other
-    /// menu bar items or the user's permissions.
+    /// list or remove it from the menu bar entirely. If the item is still present,
+    /// remove it first so macOS receives a fresh registration. Otherwise, add it
+    /// back directly. Both paths preserve Fire's saved position and leave other
+    /// applications' menu bar items untouched.
     func refreshMenuBarRegistration() async {
-        guard isAddedToMenuBar else {
-            return
+        if isAddedToMenuBar {
+            removeFromMenuBar()
+            await Task.yield()
         }
 
-        removeFromMenuBar()
-        await Task.yield()
         addToMenuBar()
         updateStatusItem()
     }

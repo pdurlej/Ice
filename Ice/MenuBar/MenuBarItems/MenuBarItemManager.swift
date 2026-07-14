@@ -413,10 +413,7 @@ extension MenuBarItemManager {
 
     /// Re-registers Fire's hidden-section divider with macOS and retries the cache.
     func repairControlItemRegistration() async {
-        guard
-            let controlItem = appState?.menuBarManager.controlItem(withName: .hidden),
-            controlItem.isAddedToMenuBar
-        else {
+        guard let controlItem = appState?.menuBarManager.controlItem(withName: .hidden) else {
             cacheState = .missingControlItem
             return
         }
