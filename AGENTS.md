@@ -17,24 +17,27 @@ shipped-history and deep context** — read its top CURRENT STATE first. The dat
 
 ## ✅ LIVE NOW / NEXT
 
-**`v0.11.13-fire.10.7.3` (build 1158, release commit `3865907`) is the live,
-notarized build and has been on the Sparkle appcast since 2026-07-13.** It is
-installed on the owner's machine. Signed raw JSON-RPC smoke passed `initialize`
-and `list_items`; a no-side-effect `hide_item` failure returned mutation JSON
-without `undoToken`. Issue #12 is closed. Issues #4 and #17 remain closed, and
-#7 remains open: the menu-bar *item* query deliberately stays live (gotcha #2).
+**`v1.0.10` “Ignition” (build 1169, release commit `01f2bc6`) is the installed,
+signed, notarized final candidate and public GitHub release. It is NOT on the
+Sparkle appcast yet.** The appcast still serves `v0.11.13-fire.10.7.3` (build
+1158), so existing Sparkle users have not received Fire 1.0.
 
-The shipped bridge no longer exposes the always-nil `undoToken` to MCP clients,
-while `MenuBarItemService.Response.mutationResult` retains its compatibility-only
-wire slot for older Codable peers. `fire/main` may move ahead of the live tag;
-do not describe later main-only work as shipped without a normal release and its
-runtime evidence.
+The installed `/Applications/Ice.app` passed deep codesign, stapler, Gatekeeper,
+TCC (Accessibility + Screen Recording), `fire doctor` (13 tools), `contexts`,
+and `list_triggers`. An unanswered Context Scene proposal expired fail-closed in
+120.20 s and both reads recovered in under 0.2 s without restarting the app.
+Sentry has zero events for `com.jordanbaird.Ice@1.0.10+1169` after two such
+modal tests. `FIRE-V` was a 1.0.9 false App Hang from the expected consent modal;
+1.0.10 suppresses that narrow interval at capture time using a thread-safe
+marker, without suppressing genuine hangs elsewhere.
 
-Sentry showed no 10.7.3 error events at the 2026-07-13 08:58 CEST checkpoint.
-FIRE-Q and FIRE-J are benign modal-menu/dialog App Hangs, but the client-side
-`frame.function` filter did **not** suppress them reliably. It is a best-effort
-noise filter. A plausible, unproven explanation is that the final function names
-become available only after server-side symbolication.
+**NEXT is a human consent + publish gate:** install and enable the real `Coding`
+(Codex quota Fireline) and `Mail` (Fantastical Fireline) Context Scenes one at a
+time, verify their runtime behavior, then run
+`scripts/publish-appcast.sh v1.0.10 --notes-file docs/releases/1.0.10.html`.
+The owner must click the two Fire consent dialogs and the local Sparkle Keychain
+prompt. Do not bypass or pre-authorize those gates. After Pages serves 1.0.10,
+update this section from candidate to live.
 
 ## Commands (exact)
 
@@ -48,15 +51,15 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift build --package-path Bridge
 
 # Tests (needs the Xcode toolchain — plain `swift test` lacks XCTest)
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift test --package-path FireLogic  # 29 tests
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift test --package-path FireLogic  # 40 tests
 ```
 
-**Ship flow** (per release): bump BOTH `MARKETING_VERSION` (`0.11.13-fire.X`) +
+**Ship flow** (per release): bump BOTH `MARKETING_VERSION` (`1.0.X`) +
 `CURRENT_PROJECT_VERSION` in `Ice.xcodeproj/project.pbxproj` (2 occurrences each)
-→ commit → `git tag -a v0.11.13-fire.X` → `git push origin fire/main` + push tag
+→ commit → `git tag -a v1.0.X` → `git push origin fire/main` + push tag
 → CI (`gh run list -R pdurlej/fire-from-ice`) builds/signs/notarizes/uploads-dSYMs
 and publishes the GitHub release → download DMG, `ditto` it over `/Applications/Ice.app`
-(quit Ice first), smoke it → **`scripts/publish-appcast.sh v0.11.13-fire.X`** for
+(quit Ice first), smoke it → **`scripts/publish-appcast.sh v1.0.X`** for
 the Sparkle appcast (one Keychain "Allow" for signing; idempotent; `--dry-run`
 and `--notes-file` supported).
 
@@ -103,6 +106,11 @@ and `--notes-file` supported).
    in-effect.** If CI fails with HTTP 403 "agreement missing/expired", the owner
    accepts it at developer.apple.com, then `gh run rerun --failed <run-id>` (no
    code change).
+7. **Expected authorization modals need an explicit capture-time marker.** Sentry
+   client frames can be unsymbolicated, so `frame.function` matching alone did
+   not suppress FIRE-V. `TimedAuthorizationAlert` now increments the
+   thread-safe `ExpectedAuthorizationModal` marker around `runModal`; Sentry
+   drops only App Hang events while that marker is active. Keep the scope narrow.
 
 ## Open issues (`gh issue list -R pdurlej/fire-from-ice`)
 

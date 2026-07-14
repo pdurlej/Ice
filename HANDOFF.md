@@ -5,27 +5,47 @@ Owner (pdurlej) will tell me to read this in a fresh session. **Codex / other
 agents: start with `AGENTS.md` at the repo root** — it has the current live/main
 state and the gotchas; this file is the deep history.
 
-## ✅ CURRENT STATE (2026-07-13) — fire.10.7.3 live; #12 shipped and closed
+## ✅ CURRENT STATE (2026-07-14) — Fire 1.0.10 installed candidate; appcast pending
 
-`v0.11.13-fire.10.7.3` (build 1158, release commit `3865907`) is notarized,
-installed on the owner's machine, and live on the Sparkle appcast since
-2026-07-13. The final signed bridge passed raw JSON-RPC `initialize` and
-`list_items`; a deliberately nonexistent `hide_item` returned a real
-`mutationResult` payload with `success: false`, a message, and no `undoToken`,
-without moving any menu item. GitHub issue #12 is closed.
+`v1.0.10` “Ignition” (build 1169, release commit `01f2bc6`) is a public GitHub
+release, signed and notarized by CI, and installed at `/Applications/Ice.app` on
+the owner's machine. It is **not on the Sparkle appcast**. The live appcast still
+ends at `v0.11.13-fire.10.7.3` (build 1158), so existing users have not received
+Fire 1.0 through updates.
 
-The associated `undoToken` value remains in `MenuBarItemService.Response`
-solely for older-peer Codable compatibility; it is not exposed to MCP clients.
-The public issues still open are #5, #7, #11, and #13. Issue #7's item-frame
+The signed 1.0.10 candidate passed deep codesign, stapler, Gatekeeper, preserved
+Accessibility + Screen Recording TCC grants, `fire doctor` (13 tools), repeated
+`contexts`, `list_triggers`, and authenticated local-socket/XPC smoke. An
+unanswered scene proposal expires at 120 s before the 130 s client deadline and
+the relay recovers immediately without a restart. Sentry currently has zero
+events for `com.jordanbaird.Ice@1.0.10+1169`. FIRE-V was a false App Hang caused
+by the expected 1.0.9 authorization modal; 1.0.10 fixes it with a narrow,
+capture-time `ExpectedAuthorizationModal` marker rather than unreliable
+client-side symbol matching.
+
+### Pending human gate (do not bypass)
+
+With the owner present, run these one at a time and have him click **Install and
+Enable** in Fire:
+
+```bash
+/Applications/Ice.app/Contents/MacOS/fire call set_context '{"name":"Coding","condition":{"type":"appFocus","bundle_id":"com.openai.codex","focus_state":"active"},"action":{"type":"activateContext","fireline_type":"quota","fireline_provider":"codex"},"cooldown_seconds":5}'
+
+/Applications/Ice.app/Contents/MacOS/fire call set_context '{"name":"Mail","condition":{"type":"appFocus","bundle_id":"com.apple.mail","focus_state":"active"},"action":{"type":"activateContext","fireline_type":"menuBarItem","fireline_selector":{"version":1,"namespace":"85C27NK92C.com.flexibits.fantastical2.mac.helper","title":"Fantastical","source_bundle_id":"85C27NK92C.com.flexibits.fantastical2.mac.helper"}},"cooldown_seconds":5}'
+```
+
+The selectors were revalidated against the live signed app on 2026-07-14. After
+both scenes are installed, verify `contexts`, focus behavior, and Sentry, then
+publish with:
+
+```bash
+scripts/publish-appcast.sh v1.0.10 --notes-file docs/releases/1.0.10.html
+```
+
+The owner must handle the local Sparkle Keychain prompt. Verify raw GitHub and
+Pages both contain short version `1.0.10`, build `1169`, before calling Ignition
+live. The public issues still open are #5, #7, #11, and #13; #7's item-frame
 query stays live by design.
-
-Sentry checkpoint (2026-07-13 08:58 CEST): 10.7.3 has zero error events;
-FIRE-P/N remain quiet. FIRE-Q (open `NSMenu`) and archived FIRE-J (modal dialog)
-are false App Hangs, but the client-side `beforeSend` filter based on
-`frame.function` did not suppress them reliably. The historical sections below
-describe the intent at the time, not proof that filtering works. It is plausible
-but unproven that final function names arrive only after server-side
-symbolication.
 
 ## 🧭 RESUME HERE (2026-06-19, HEAD `ac135a5`, tree CLEAN)
 
