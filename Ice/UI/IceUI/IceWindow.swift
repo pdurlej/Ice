@@ -18,18 +18,28 @@ struct IceWindow<Content: View>: Scene {
     /// The window's content view.
     let content: Content
 
+    /// Receives window actions connected to the live SwiftUI environment.
+    let onWindowActionsReady: (OpenWindowAction, DismissWindowAction) -> Void
+
     /// Creates a window with an identifier constant.
     ///
     /// - Parameters:
     ///   - id: A custom identifier constant.
     ///   - content: The content view to display in the window.
-    init(id: IceWindowIdentifier, @ViewBuilder content: () -> Content) {
+    init(
+        id: IceWindowIdentifier,
+        onWindowActionsReady: @escaping (OpenWindowAction, DismissWindowAction) -> Void = { _, _ in },
+        @ViewBuilder content: () -> Content
+    ) {
         self.id = id
+        self.onWindowActionsReady = onWindowActionsReady
         self.content = content()
     }
 
     var body: some Scene {
         windowScene.once {
+            onWindowActionsReady(openWindow, dismissWindow)
+
             // SwiftUI waits to create the underlying NSWindow until the scene
             // is first presented. We may need a valid window reference before
             // that point, so we open the window and immediately dismiss it.

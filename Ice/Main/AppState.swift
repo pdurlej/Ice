@@ -10,6 +10,12 @@ import SwiftUI
 /// The model for app-wide state.
 @MainActor
 final class AppState: ObservableObject {
+    /// A window request made before SwiftUI has supplied its environment actions.
+    private enum PendingWindowRequest {
+        case open(IceWindowIdentifier)
+        case dismiss(IceWindowIdentifier)
+    }
+
     /// Information for the active space.
     @Published private(set) var activeSpace = SpaceInfo.activeSpace()
 
@@ -76,6 +82,12 @@ final class AppState: ObservableObject {
 
     /// Storage for internal observers.
     private var cancellables = Set<AnyCancellable>()
+
+    /// Window actions captured from the live SwiftUI scene environment.
+    private var windowActions: (open: OpenWindowAction, dismiss: DismissWindowAction)?
+
+    /// Requests made during launch before the live scene environment is ready.
+    private var pendingWindowRequests = [PendingWindowRequest]()
 
     /// Logger for the app state.
     private let logger = Logger(category: "AppState")
@@ -267,12 +279,27 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Installs the window actions from the live SwiftUI scene environment.
+    ///
+    /// Constructing a fresh `EnvironmentValues` outside a scene does not
+    /// provide an action connected to this app's windows. Keep the real
+    /// actions instead and replay any launch-time requests in order.
+    func registerWindowActions(open: OpenWindowAction, dismiss: DismissWindowAction) {
+        windowActions = (open, dismiss)
+
+        let requests = pendingWindowRequests
+        pendingWindowRequests.removeAll()
+        for request in requests {
+            performWindowRequest(request)
+        }
+    }
+
     /// Opens the window with the given identifier.
     func openWindow(_ id: IceWindowIdentifier) {
         // Async prevents conflicts with SwiftUI.
         DispatchQueue.main.async {
             self.logger.debug("Opening window with id: \(id, privacy: .public)")
-            EnvironmentValues().openWindow(id: id)
+            self.performWindowRequest(.open(id))
         }
     }
 
@@ -281,7 +308,23 @@ final class AppState: ObservableObject {
         // Async prevents conflicts with SwiftUI.
         DispatchQueue.main.async {
             self.logger.debug("Dismissing window with id: \(id, privacy: .public)")
-            EnvironmentValues().dismissWindow(id: id)
+            self.performWindowRequest(.dismiss(id))
+        }
+    }
+
+    /// Performs a request with the live scene actions, or queues it until the
+    /// scene has supplied them.
+    private func performWindowRequest(_ request: PendingWindowRequest) {
+        guard let windowActions else {
+            pendingWindowRequests.append(request)
+            return
+        }
+
+        switch request {
+        case let .open(id):
+            windowActions.open(id: id)
+        case let .dismiss(id):
+            windowActions.dismiss(id: id)
         }
     }
 

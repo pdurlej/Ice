@@ -5,21 +5,21 @@ Owner (pdurlej) will tell me to read this in a fresh session. **Codex / other
 agents: start with `AGENTS.md` at the repo root** — it has the current live/main
 state and the gotchas; this file is the deep history.
 
-## ✅ CURRENT STATE (2026-07-14) — Settings reopen no-ship; 1.0.16 in progress
+## ✅ CURRENT STATE (2026-07-14) — SwiftUI window-action no-ship; 1.0.17 in progress
 
-`v1.0.15` “Ignition” (build 1174, release commit `b413719`) is a public GitHub
+`v1.0.16` “Ignition” (build 1175, release commit `f131b9c`) is a public GitHub
 release, signed and notarized by CI, and installed at `/Applications/Ice.app` on
-the owner's machine. Its consent panel is visible above normal windows while
-Fire stays accessory-only, and Permissions now refreshes stale TCC state. It is
-still **NO-SHIP**: reopening Fire from Finder/CLI promotes the app to regular,
-but macOS 26 rejects focus activation and leaves Settings dormant. `v1.0.16`
-(build 1175) explicitly orders only Settings onto the active Space after SwiftUI
-opens it.
+the owner's machine. It is **NO-SHIP**: reopening Fire from Finder/CLI promotes
+the app to regular, but Settings remains dormant. Ordering the dormant AppKit
+window after the request did not fix it. The root cause is that AppState creates
+a fresh `EnvironmentValues()` outside the view hierarchy instead of using the
+live scene's `OpenWindowAction`. `v1.0.17` (build 1176) captures the real SwiftUI
+open/dismiss actions and queues requests made before they are ready.
 None of these versions is on the Sparkle appcast. The live appcast still
 ends at `v0.11.13-fire.10.7.3` (build 1158), so existing users have not received
 Fire 1.0 through updates.
 
-The signed 1.0.15 candidate passed deep codesign, stapler, Gatekeeper, preserved
+The signed 1.0.16 candidate passed deep codesign, stapler, Gatekeeper, preserved
 the existing TCC identity, `fire doctor` (13 tools), repeated `contexts`,
 `list_triggers`, authenticated local-socket/XPC smoke, and embedded-skill hash
 comparison. Public SwiftLint and the complete signed/notarized CI workflow are
@@ -49,11 +49,11 @@ both scenes are installed, verify `contexts`, focus behavior, and Sentry, then
 publish with:
 
 ```bash
-scripts/publish-appcast.sh v1.0.16 --notes-file docs/releases/1.0.16.html
+scripts/publish-appcast.sh v1.0.17 --notes-file docs/releases/1.0.17.html
 ```
 
 The owner must handle the local Sparkle Keychain prompt. Verify raw GitHub and
-Pages both contain short version `1.0.16`, build `1175`, before calling Ignition
+Pages both contain short version `1.0.17`, build `1176`, before calling Ignition
 live. The public issues still open are #5, #7, #11, and #13; #7's item-frame
 query stays live by design.
 
