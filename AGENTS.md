@@ -17,38 +17,34 @@ shipped-history and deep context** — read its top CURRENT STATE first. The dat
 
 ## ✅ LIVE NOW / NEXT
 
-**`v1.0.18` “Ignition” (build 1177, release commit `e152e9f`) is the installed,
-signed, notarized GitHub candidate but remains NO-SHIP while one Sentry follow-up
-lands. It fixed the macOS 26 zero-size window regression: signed fresh launch is
-accessory with no normal window; normal reopen is regular/active with Settings
-visible at 1150×782. Sentry CLI then identified FIRE-W (3 events, 1 user across
-1.0.15–1.0.17): `MenuBarManager.updateAverageColorInfo → captureWindows →
-CGImageRef.averageColor` blocked the main thread. `v1.0.19` (build 1178) moves
-capture plus pixel averaging for Settings and search to serial background queues
-and coalesces overlapping refreshes. FIRE-X is not a shipped regression: both
-events came from a local `DerivedData/.../Release/Ice.app` without its CI dSYM.
-None of the 1.0 candidates is on the Sparkle appcast yet.** The appcast still
-serves `v0.11.13-fire.10.7.3` (build 1158), so existing Sparkle users have not
-received Fire 1.0.
+**`v1.0.19` “Ignition” (build 1178, release commit `d0c5165`) is the installed,
+signed, notarized GitHub candidate but remains NO-SHIP.** It fixed the macOS 26
+zero-size window regression and moved Sentry-confirmed FIRE-W menu-bar capture
+plus pixel averaging away from the main thread. Signed Finder/CLI reopen,
+Settings, `fire doctor` (13 tools), `contexts`, `list_triggers`, and `list_items`
+all passed. Runtime inspection then found the Surfaces menu-bar layout stuck on
+“Loading menu bar items…” whenever macOS stopped exposing Fire's hidden-section
+divider to its own window-list query. Permissions were actually granted, the
+Control Center Menu Bar switch was enabled, CLI item discovery worked, and a
+forced helper restart did not repair it. None of the 1.0 candidates is on the
+Sparkle appcast yet; it still serves `v0.11.13-fire.10.7.3` (build 1158).
 
-The installed 1.0.18 `/Applications/Ice.app` passed deep codesign, stapler,
-Gatekeeper, preserved the existing TCC identity, and passes `fire doctor` (13
-tools), `fire contexts`, `list_triggers`, and `list_items`. Its embedded
-`program-fire` skill is byte-for-byte identical to the canonical repo skill.
-Public lint and the full signed/notarized CI workflow are green. Both XPC helpers
-previously recovered with new PIDs after SIGKILL. The exact 1.0.18 Sentry query
-was empty after window/CLI smoke. The signed 1.0.19 smoke, both reference scenes,
-VoiceOver/runtime accessibility, recovery controls, and a post-scene Sentry
-recheck remain the final pre-appcast runtime gates.
+**`v1.0.20` (build 1179) is the current local candidate.** It gives menu-bar
+caching explicit loading/ready/failure states instead of an infinite spinner and
+adds `Repair and Retry`: Fire re-registers only its own hidden divider, preserving
+the saved status-item position, permissions, and other applications' arrangement,
+then retries discovery. System Settings remains an explicit fallback. Local
+SwiftLint (135 files), all 40 FireLogic tests, and the unsigned all-target Xcode
+build are green. FIRE-X remains local DerivedData diagnostic noise, not a shipped
+regression.
 
-**NEXT is the signed 1.0.19 FIRE-W + window smoke, then the human consent +
-publish gate:** prove normal Finder/CLI reopen for Settings, exercise visible
-Settings/search without a main-thread capture, then install the real `Coding` (Codex
-quota Fireline) and `Mail` (Fantastical Fireline) Context Scenes one at a time,
-verify their runtime behavior, then run
-`scripts/publish-appcast.sh v1.0.19 --notes-file docs/releases/1.0.19.html`.
+**NEXT is the signed 1.0.20 Surfaces self-repair + FIRE-W/window smoke, then the
+human consent + publish gate:** verify the actual signed recovery path, install
+the real `Coding` (Codex quota Fireline) and `Mail` (Fantastical Fireline) Context
+Scenes one at a time, verify runtime behavior and Sentry, then run
+`scripts/publish-appcast.sh v1.0.20 --notes-file docs/releases/1.0.20.html`.
 The owner must click the two Fire consent dialogs and the local Sparkle Keychain
-prompt. Do not bypass or pre-authorize those gates. After Pages serves 1.0.19,
+prompt. Do not bypass or pre-authorize those gates. After Pages serves 1.0.20,
 update this section from candidate to live.
 
 ## Commands (exact)

@@ -5,37 +5,34 @@ Owner (pdurlej) will tell me to read this in a fresh session. **Codex / other
 agents: start with `AGENTS.md` at the repo root** — it has the current live/main
 state and the gotchas; this file is the deep history.
 
-## ✅ CURRENT STATE (2026-07-14) — 1.0.19 FIRE-W fix in progress
+## ✅ CURRENT STATE (2026-07-14) — 1.0.20 Surfaces recovery candidate
 
-`v1.0.18` “Ignition” (build 1177, release commit `e152e9f`) is a public GitHub
+`v1.0.19` “Ignition” (build 1178, release commit `d0c5165`) is a public GitHub
 release, signed and notarized by CI, and installed at `/Applications/Ice.app` on
-the owner's machine. It fixed the macOS 26 zero-size window regression: signed
-fresh launch is accessory with no normal window; normal reopen is regular/active
-with Settings visible at 1150×782. It is still **NO-SHIP** because Sentry CLI
-identified FIRE-W (3 events, 1 user across 1.0.15–1.0.17): menu-bar window
-capture plus `CGImageRef.averageColor` can block the main thread while Settings
-is visible. `v1.0.19` (build 1178) moves capture and pixel averaging for Settings
-and search to serial background queues and coalesces overlapping refreshes.
-FIRE-X is local diagnostic noise: both events came from a
-`DerivedData/.../Release/Ice.app` without the CI dSYM. None of the 1.0 versions is
-on the Sparkle appcast. The live appcast still ends at
-`v0.11.13-fire.10.7.3` (build 1158), so existing users have not received Fire 1.0
-through updates.
+the owner's machine. It fixed the macOS 26 zero-size window regression and moved
+Sentry-confirmed FIRE-W menu-bar capture plus pixel averaging off the main
+thread. Signed Finder/CLI reopen, full-size Settings, `fire doctor` (13 tools),
+`contexts`, `list_triggers`, `list_items`, deep codesign, stapler, Gatekeeper,
+TCC preservation, and helper recovery passed. FIRE-X is local DerivedData noise,
+not a shipped regression. None of the 1.0 versions is on the Sparkle appcast;
+the live appcast still ends at `v0.11.13-fire.10.7.3` (build 1158).
 
-The signed 1.0.18 candidate passed deep codesign, stapler, Gatekeeper, preserved
-the existing TCC identity, `fire doctor` (13 tools), repeated `contexts`,
-`list_triggers`, authenticated local-socket/XPC smoke, and embedded-skill hash
-comparison. Public SwiftLint and the complete signed/notarized CI workflow are
-green. The exact Sentry query for `com.jordanbaird.Ice@1.0.18+1177` was empty
-after window/CLI smoke. One Coding scene proposal expired fail-closed and left
-`contexts` empty because the owner did not click the consent modal. Both XPC
-helpers previously recovered with new PIDs after SIGKILL while signed `doctor`
-and `list_items` stayed green. The signed 1.0.19 FIRE-W/window smoke, two
-reference scenes, VoiceOver/runtime accessibility, recovery controls, and a
-post-scene Sentry recheck are the remaining release gates. FIRE-V was a false
-App Hang caused by the expected 1.0.9 authorization modal; 1.0.10 and later fix it with a narrow,
-capture-time `ExpectedAuthorizationModal` marker rather than unreliable
-client-side symbol matching.
+Runtime inspection found one further no-ship defect: Surfaces could stay forever
+on “Loading menu bar items…” when macOS stopped exposing Fire's hidden-section
+divider to the app-local window-list query. Both permissions were granted, the
+Control Center Menu Bar switch was on, CLI discovery worked, and restarting the
+signed MenuBarItemService helper did not repair it. `v1.0.20` (build 1179) is the
+local candidate: it gives caching explicit states and adds an in-app `Repair and
+Retry` path that re-registers only Fire's own hidden divider while preserving
+its preferred position. System Settings is a fallback rather than the first
+instruction. SwiftLint (135 files), all 40 FireLogic tests, `git diff --check`,
+and the unsigned all-target Xcode build pass.
+
+The signed 1.0.20 self-repair/FIRE-W/window smoke, two reference scenes,
+VoiceOver/runtime accessibility, recovery controls, and a release-specific
+Sentry recheck remain the final gates. FIRE-V was a false authorization-modal
+App Hang; 1.0.10 and later suppress it only while the narrow capture-time marker
+is active.
 
 ### Pending human gate (do not bypass)
 
@@ -53,11 +50,11 @@ both scenes are installed, verify `contexts`, focus behavior, and Sentry, then
 publish with:
 
 ```bash
-scripts/publish-appcast.sh v1.0.19 --notes-file docs/releases/1.0.19.html
+scripts/publish-appcast.sh v1.0.20 --notes-file docs/releases/1.0.20.html
 ```
 
 The owner must handle the local Sparkle Keychain prompt. Verify raw GitHub and
-Pages both contain short version `1.0.19`, build `1178`, before calling Ignition
+Pages both contain short version `1.0.20`, build `1179`, before calling Ignition
 live. The public issues still open are #5, #7, #11, and #13; #7's item-frame
 query stays live by design.
 

@@ -450,6 +450,23 @@ final class ControlItem {
         ControlItemDefaults[.preferredPosition, autosaveName] = cached
     }
 
+    /// Re-registers the status item with macOS while preserving its saved position.
+    ///
+    /// Control Center can occasionally stop exposing a status item to the window
+    /// list even though the item is still present. Removing and immediately adding
+    /// Fire's own item gives macOS a fresh registration without affecting other
+    /// menu bar items or the user's permissions.
+    func refreshMenuBarRegistration() async {
+        guard isAddedToMenuBar else {
+            return
+        }
+
+        removeFromMenuBar()
+        await Task.yield()
+        addToMenuBar()
+        updateStatusItem()
+    }
+
     /// Performs the control item's action.
     @objc private func performAction() {
         guard

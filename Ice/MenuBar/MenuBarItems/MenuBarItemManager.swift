@@ -11,8 +11,19 @@ import Semaphore
 /// Manager for menu bar items.
 @MainActor
 final class MenuBarItemManager: ObservableObject {
+    enum CacheState: Equatable {
+        case idle
+        case loading
+        case repairingControlItem
+        case ready
+        case missingControlItem
+    }
+
     /// The current cache of menu bar items.
     @Published private(set) var itemCache = ItemCache(displayID: nil)
+
+    /// The state of the most recent cache operation.
+    @Published private(set) var cacheState = CacheState.idle
 
     /// Logger for the menu bar item manager.
     private nonisolated let logger = Logger.menuBarItemManager
@@ -378,6 +389,8 @@ extension MenuBarItemManager {
                 return
             }
 
+            cacheState = .loading
+
             let displayID = Bridging.getActiveMenuBarDisplayID()
             var items = await MenuBarItem.getMenuBarItems(option: .activeSpace)
 
@@ -388,12 +401,33 @@ extension MenuBarItemManager {
                 // ???: Is clearing the cache the best thing to do here?
                 logger.warning("Missing control item for hidden section, clearing menu bar item cache")
                 itemCache = ItemCache(displayID: nil)
+                cacheState = .missingControlItem
                 return
             }
 
             await enforceControlItemOrder(controlItems: controlItems)
             await uncheckedCacheItems(items: items, controlItems: controlItems, displayID: displayID)
+            cacheState = .ready
         }
+    }
+
+    /// Re-registers Fire's hidden-section divider with macOS and retries the cache.
+    func repairControlItemRegistration() async {
+        guard
+            let controlItem = appState?.menuBarManager.controlItem(withName: .hidden),
+            controlItem.isAddedToMenuBar
+        else {
+            cacheState = .missingControlItem
+            return
+        }
+
+        cacheState = .repairingControlItem
+        logger.info("Re-registering hidden-section control item before retrying cache")
+        await controlItem.refreshMenuBarRegistration()
+        // Wait past the movement guard so this explicit repair cannot be skipped
+        // and leave the Surfaces pane in its transient repairing state.
+        try? await Task.sleep(for: .milliseconds(1_100))
+        await cacheItemsRegardless()
     }
 
     /// Caches the current menu bar items, if the items have changed
