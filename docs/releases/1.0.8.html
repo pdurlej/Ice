@@ -1,0 +1,15 @@
+<h2>Fire 1.0.8 “Ignition”</h2>
+<p>Fire is a local, agent-first control plane for the space around your Mac's menu bar. This is the recommended Fire 1.0 release.</p>
+<ul>
+  <li><strong>Context Scenes</strong> let coding agents propose approved behavior for the app, time, or battery context you are in.</li>
+  <li><strong>Fireline</strong> shows one useful thing below the notch or menu bar, such as a local AI quota or a selected menu bar item.</li>
+  <li><strong>Fire CLI and agent skill</strong> provide guided setup, diagnostics, exact selectors, and recovery.</li>
+</ul>
+<h3>Fire 1.0.8 reliability</h3>
+<ul>
+  <li>Consent prompts expire fail-closed before their MCP client deadline, so an unanswered prompt cannot leave the Context Scene relay occupied.</li>
+  <li>Agent-facing XPC requests hand off async replies so Context Scene reads and approvals do not deadlock their main-app relay.</li>
+  <li>Fresh sessions use a private, mutually authenticated local socket through the running Fire app.</li>
+  <li>Blocking socket semantics and bounded helper timeouts prevent hangs and recover on the next call.</li>
+</ul>
+<p>Your existing preferences, permissions, saved layouts, update path, and approvals are preserved. For compatibility, macOS System Settings may still list Fire as <strong>Ice</strong>.</p>
