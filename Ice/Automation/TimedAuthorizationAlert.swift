@@ -38,6 +38,21 @@ enum ExpectedAuthorizationModal {
 @MainActor
 enum TimedAuthorizationAlert {
     static func run(_ alert: NSAlert, timeout: TimeInterval) -> NSApplication.ModalResponse {
+        // Fire normally runs as an accessory app. `activate(ignoringOtherApps:)`
+        // does not reliably bring an accessory-owned modal forward when no
+        // Fire window is already open, leaving the request alive but invisible.
+        // Promote only for the lifetime of the consent UI, then restore the
+        // previous policy so Fire does not remain in the Dock or app switcher.
+        let previousActivationPolicy = NSApp.activationPolicy()
+        if previousActivationPolicy != .regular {
+            NSApp.setActivationPolicy(.regular)
+        }
+        if let frontmost = NSWorkspace.shared.frontmostApplication {
+            NSRunningApplication.current.activate(from: frontmost)
+        } else {
+            NSRunningApplication.current.activate()
+        }
+
         ExpectedAuthorizationModal.begin()
         let timer = Timer(timeInterval: timeout, repeats: false) { [weak alert] _ in
             guard let alert, NSApp.modalWindow === alert.window else {
@@ -52,6 +67,9 @@ enum TimedAuthorizationAlert {
         defer {
             timer.invalidate()
             ExpectedAuthorizationModal.end()
+            if previousActivationPolicy != .regular {
+                NSApp.setActivationPolicy(previousActivationPolicy)
+            }
         }
         return alert.runModal()
     }

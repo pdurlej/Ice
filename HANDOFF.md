@@ -5,21 +5,29 @@ Owner (pdurlej) will tell me to read this in a fresh session. **Codex / other
 agents: start with `AGENTS.md` at the repo root** — it has the current live/main
 state and the gotchas; this file is the deep history.
 
-## ✅ CURRENT STATE (2026-07-14) — Fire 1.0.10 installed candidate; appcast pending
+## ✅ CURRENT STATE (2026-07-14) — Fire 1.0.12 no-ship; 1.0.13 fix in progress
 
-`v1.0.10` “Ignition” (build 1169, release commit `01f2bc6`) is a public GitHub
+`v1.0.12` “Ignition” (build 1171, release commit `d0a87b2`) is a public GitHub
 release, signed and notarized by CI, and installed at `/Applications/Ice.app` on
-the owner's machine. It is **not on the Sparkle appcast**. The live appcast still
+the owner's machine. It is **NO-SHIP**: a consent request can wait for its full
+timeout without showing a visible alert while Fire has accessory activation
+policy. `v1.0.13` (build 1172) promotes Fire only for the lifetime of the modal
+and restores its prior policy afterward. Neither version is on the Sparkle appcast. The live appcast still
 ends at `v0.11.13-fire.10.7.3` (build 1158), so existing users have not received
 Fire 1.0 through updates.
 
-The signed 1.0.10 candidate passed deep codesign, stapler, Gatekeeper, preserved
-Accessibility + Screen Recording TCC grants, `fire doctor` (13 tools), repeated
-`contexts`, `list_triggers`, and authenticated local-socket/XPC smoke. An
+The signed 1.0.12 candidate passed deep codesign, stapler, Gatekeeper, preserved
+the existing TCC identity, `fire doctor` (13 tools), repeated `contexts`,
+`list_triggers`, authenticated local-socket/XPC smoke, and embedded-skill hash
+comparison. Public SwiftLint and the complete signed/notarized CI workflow are
+green. The initial Sentry CLI query returned zero issues for
+`com.jordanbaird.Ice@1.0.12+1171`. An
 unanswered scene proposal expires at 120 s before the 130 s client deadline and
 the relay recovers immediately without a restart. Sentry currently has zero
-events for `com.jordanbaird.Ice@1.0.10+1169`. FIRE-V was a false App Hang caused
-by the expected 1.0.9 authorization modal; 1.0.10 fixes it with a narrow,
+events for the previously field-tested `com.jordanbaird.Ice@1.0.10+1169`.
+The two reference scenes and a post-scene 1.0.12 recheck are the remaining
+release gates. FIRE-V was a false App Hang caused by the expected 1.0.9 authorization modal;
+1.0.10 and later fix it with a narrow,
 capture-time `ExpectedAuthorizationModal` marker rather than unreliable
 client-side symbol matching.
 
@@ -39,11 +47,11 @@ both scenes are installed, verify `contexts`, focus behavior, and Sentry, then
 publish with:
 
 ```bash
-scripts/publish-appcast.sh v1.0.10 --notes-file docs/releases/1.0.10.html
+scripts/publish-appcast.sh v1.0.13 --notes-file docs/releases/1.0.13.html
 ```
 
 The owner must handle the local Sparkle Keychain prompt. Verify raw GitHub and
-Pages both contain short version `1.0.10`, build `1169`, before calling Ignition
+Pages both contain short version `1.0.13`, build `1172`, before calling Ignition
 live. The public issues still open are #5, #7, #11, and #13; #7's item-frame
 query stays live by design.
 

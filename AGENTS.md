@@ -17,24 +17,30 @@ shipped-history and deep context** — read its top CURRENT STATE first. The dat
 
 ## ✅ LIVE NOW / NEXT
 
-**`v1.0.10` “Ignition” (build 1169, release commit `01f2bc6`) is the installed,
-signed, notarized final candidate and public GitHub release. It is NOT on the
+**`v1.0.12` “Ignition” (build 1171, release commit `d0a87b2`) is the installed,
+signed, notarized GitHub candidate but is NO-SHIP: its Fire-authored consent
+modal can remain invisible while the app runs with accessory activation policy.
+The fix is being prepared as `v1.0.13` (build 1172). Neither version is on the
 Sparkle appcast yet.** The appcast still serves `v0.11.13-fire.10.7.3` (build
 1158), so existing Sparkle users have not received Fire 1.0.
 
 The installed `/Applications/Ice.app` passed deep codesign, stapler, Gatekeeper,
-TCC (Accessibility + Screen Recording), `fire doctor` (13 tools), `contexts`,
-and `list_triggers`. An unanswered Context Scene proposal expired fail-closed in
-120.20 s and both reads recovered in under 0.2 s without restarting the app.
-Sentry has zero events for `com.jordanbaird.Ice@1.0.10+1169` after two such
-modal tests. `FIRE-V` was a 1.0.9 false App Hang from the expected consent modal;
-1.0.10 suppresses that narrow interval at capture time using a thread-safe
-marker, without suppressing genuine hangs elsewhere.
+preserved the existing TCC identity, and passes `fire doctor` (13 tools),
+`contexts`, and `list_triggers`. Its embedded `program-fire` skill is byte-for-byte
+identical to the canonical repo skill. Public lint and the full signed/notarized
+CI workflow are green. An unanswered Context Scene proposal previously expired
+fail-closed in 120.20 s and both reads recovered in under 0.2 s without restarting
+the app. `FIRE-V` was a 1.0.9 false App Hang from the expected consent modal;
+the capture-time marker shipped in 1.0.10 remains in 1.0.12 and suppresses only
+that narrow interval, without suppressing genuine hangs elsewhere. The initial
+Sentry CLI query returned zero issues for `com.jordanbaird.Ice@1.0.12+1171`;
+The consent-visibility fix, both reference scenes, and a post-scene Sentry
+recheck remain the final pre-appcast runtime gates.
 
 **NEXT is a human consent + publish gate:** install and enable the real `Coding`
 (Codex quota Fireline) and `Mail` (Fantastical Fireline) Context Scenes one at a
 time, verify their runtime behavior, then run
-`scripts/publish-appcast.sh v1.0.10 --notes-file docs/releases/1.0.10.html`.
+`scripts/publish-appcast.sh v1.0.13 --notes-file docs/releases/1.0.13.html`.
 The owner must click the two Fire consent dialogs and the local Sparkle Keychain
 prompt. Do not bypass or pre-authorize those gates. After Pages serves 1.0.10,
 update this section from candidate to live.
