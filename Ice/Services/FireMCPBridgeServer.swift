@@ -106,6 +106,19 @@ final class FireMCPBridgeServer: @unchecked Sendable {
                 return
             }
 
+            // Darwin propagates the listener's O_NONBLOCK flag to accepted
+            // sockets. The bridge writes immediately after connect, but the
+            // client worker can still win that race and see EAGAIN before the
+            // first byte arrives. Client handling is intentionally performed
+            // on the concurrent worker queue, so restore blocking semantics
+            // before handing the descriptor off.
+            let flags = fcntl(clientFD, F_GETFL)
+            guard flags >= 0, fcntl(clientFD, F_SETFL, flags & ~O_NONBLOCK) == 0 else {
+                logger.error("Could not configure MCP bridge client socket: errno \(errno)")
+                close(clientFD)
+                continue
+            }
+
             var noSigPipe: Int32 = 1
             _ = setsockopt(
                 clientFD,
