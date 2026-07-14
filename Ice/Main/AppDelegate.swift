@@ -3,6 +3,7 @@
 //  Ice
 //
 
+import Combine
 import OSLog
 import Sentry
 import SwiftUI
@@ -11,6 +12,9 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The shared app state.
     let appState = AppState()
+
+    /// Keeps the one-shot settings-window presentation observer alive.
+    private var settingsWindowPresentationCancellable: AnyCancellable?
 
     // MARK: NSApplicationDelegate Methods
 
@@ -99,6 +103,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [appState] in
             appState.activate(withPolicy: .regular)
             appState.openWindow(.settings)
+
+            // macOS 26 can reject programmatic focus activation even for a
+            // user-initiated LaunchServices reopen. SwiftUI still opens the
+            // window, but leaves it dormant unless we explicitly order that
+            // one window forward after `openWindow` reaches the main loop.
+            self.settingsWindowPresentationCancellable = appState.publisherForWindow(.settings)
+                .compactMap { $0 }
+                .first()
+                .sink { window in
+                    DispatchQueue.main.async {
+                        window.collectionBehavior.insert(.moveToActiveSpace)
+                        window.orderFrontRegardless()
+                    }
+                }
         }
     }
 

@@ -17,35 +17,33 @@ shipped-history and deep context** — read its top CURRENT STATE first. The dat
 
 ## ✅ LIVE NOW / NEXT
 
-**`v1.0.14` “Ignition” (build 1173, release commit `2b3b127`) is the installed,
-signed, notarized GitHub candidate but is NO-SHIP: earlier Fire-authored consent
-modals could remain invisible while the app ran with accessory activation policy.
-`v1.0.13` and `v1.0.14` made the modal visible but could not make Fire frontmost
-under macOS 26 focus-stealing prevention and briefly exposed dormant SwiftUI
-windows. The complete accessory-panel fix is being prepared as `v1.0.15`
-(build 1174). None of these versions is on the
+**`v1.0.15` “Ignition” (build 1174, release commit `b413719`) is the installed,
+signed, notarized GitHub candidate but is NO-SHIP: its accessory consent panel
+is visible and fail-closed, but reopening Fire from Finder/CLI leaves Settings
+dormant when macOS 26 refuses programmatic focus activation. The targeted
+Settings presentation fix is being prepared as `v1.0.16` (build 1175). None of
+these versions is on the
 Sparkle appcast yet.** The appcast still serves `v0.11.13-fire.10.7.3` (build
 1158), so existing Sparkle users have not received Fire 1.0.
 
-The installed `/Applications/Ice.app` passed deep codesign, stapler, Gatekeeper,
+The installed 1.0.15 `/Applications/Ice.app` passed deep codesign, stapler, Gatekeeper,
 preserved the existing TCC identity, and passes `fire doctor` (13 tools),
 `contexts`, and `list_triggers`. Its embedded `program-fire` skill is byte-for-byte
 identical to the canonical repo skill. Public lint and the full signed/notarized
-CI workflow are green. An unanswered Context Scene proposal previously expired
-fail-closed in 120.20 s and both reads recovered in under 0.2 s without restarting
-the app. `FIRE-V` was a 1.0.9 false App Hang from the expected consent modal;
-the capture-time marker shipped in 1.0.10 remains in 1.0.12 and suppresses only
-that narrow interval, without suppressing genuine hangs elsewhere. The initial
-Sentry CLI query returned zero issues for `com.jordanbaird.Ice@1.0.12+1171`;
-The consent-visibility fix, both reference scenes, and a post-scene Sentry
+CI workflow are green. Both XPC helpers recovered with new PIDs after SIGKILL,
+and signed `doctor` + `list_items` stayed green. Two unanswered 1.0.15 Context
+Scene proposals expired fail-closed and left `contexts` empty. Sentry CLI reports
+zero events/issues for `com.jordanbaird.Ice@1.0.15+1174`; older FIRE-V/T are
+expected consent modals from 1.0.7–1.0.9. The Settings reopen fix, both reference
+scenes, VoiceOver/runtime accessibility, and a post-scene Sentry
 recheck remain the final pre-appcast runtime gates.
 
 **NEXT is a human consent + publish gate:** install and enable the real `Coding`
 (Codex quota Fireline) and `Mail` (Fantastical Fireline) Context Scenes one at a
 time, verify their runtime behavior, then run
-`scripts/publish-appcast.sh v1.0.15 --notes-file docs/releases/1.0.15.html`.
+`scripts/publish-appcast.sh v1.0.16 --notes-file docs/releases/1.0.16.html`.
 The owner must click the two Fire consent dialogs and the local Sparkle Keychain
-prompt. Do not bypass or pre-authorize those gates. After Pages serves 1.0.15,
+prompt. Do not bypass or pre-authorize those gates. After Pages serves 1.0.16,
 update this section from candidate to live.
 
 ## Commands (exact)

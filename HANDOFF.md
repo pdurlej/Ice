@@ -5,33 +5,31 @@ Owner (pdurlej) will tell me to read this in a fresh session. **Codex / other
 agents: start with `AGENTS.md` at the repo root** — it has the current live/main
 state and the gotchas; this file is the deep history.
 
-## ✅ CURRENT STATE (2026-07-14) — consent UI no-ship; 1.0.15 fix in progress
+## ✅ CURRENT STATE (2026-07-14) — Settings reopen no-ship; 1.0.16 in progress
 
-`v1.0.14` “Ignition” (build 1173, release commit `2b3b127`) is a public GitHub
+`v1.0.15` “Ignition” (build 1174, release commit `b413719`) is a public GitHub
 release, signed and notarized by CI, and installed at `/Applications/Ice.app` on
-the owner's machine. It is **NO-SHIP**: earlier consent requests could wait for
-their full timeout without showing a visible alert while Fire had accessory
-activation policy. `v1.0.13` and `v1.0.14` made the alert visible but macOS 26 still refused
-focus stealing (`activate` returned success while Fire stayed inactive), and
-the temporary regular policy exposed dormant SwiftUI scenes. `v1.0.15` (build
-1174) keeps Fire accessory-only and presents consent as a non-hiding modal panel
-above normal windows on the current Space.
+the owner's machine. Its consent panel is visible above normal windows while
+Fire stays accessory-only, and Permissions now refreshes stale TCC state. It is
+still **NO-SHIP**: reopening Fire from Finder/CLI promotes the app to regular,
+but macOS 26 rejects focus activation and leaves Settings dormant. `v1.0.16`
+(build 1175) explicitly orders only Settings onto the active Space after SwiftUI
+opens it.
 None of these versions is on the Sparkle appcast. The live appcast still
 ends at `v0.11.13-fire.10.7.3` (build 1158), so existing users have not received
 Fire 1.0 through updates.
 
-The signed 1.0.12 candidate passed deep codesign, stapler, Gatekeeper, preserved
+The signed 1.0.15 candidate passed deep codesign, stapler, Gatekeeper, preserved
 the existing TCC identity, `fire doctor` (13 tools), repeated `contexts`,
 `list_triggers`, authenticated local-socket/XPC smoke, and embedded-skill hash
 comparison. Public SwiftLint and the complete signed/notarized CI workflow are
-green. The initial Sentry CLI query returned zero issues for
-`com.jordanbaird.Ice@1.0.12+1171`. An
-unanswered scene proposal expires at 120 s before the 130 s client deadline and
-the relay recovers immediately without a restart. Sentry currently has zero
-events for the previously field-tested `com.jordanbaird.Ice@1.0.10+1169`.
-The two reference scenes and a post-scene 1.0.12 recheck are the remaining
-release gates. FIRE-V was a false App Hang caused by the expected 1.0.9 authorization modal;
-1.0.10 and later fix it with a narrow,
+green. Sentry CLI reports zero events/issues for
+`com.jordanbaird.Ice@1.0.15+1174`. Two unanswered scene proposals expired
+fail-closed and left `contexts` empty. Both XPC helpers recovered with new PIDs
+after SIGKILL while signed `doctor` and `list_items` stayed green. The Settings
+reopen fix, two reference scenes, VoiceOver/runtime accessibility, and a
+post-scene Sentry recheck are the remaining release gates. FIRE-V was a false
+App Hang caused by the expected 1.0.9 authorization modal; 1.0.10 and later fix it with a narrow,
 capture-time `ExpectedAuthorizationModal` marker rather than unreliable
 client-side symbol matching.
 
@@ -51,11 +49,11 @@ both scenes are installed, verify `contexts`, focus behavior, and Sentry, then
 publish with:
 
 ```bash
-scripts/publish-appcast.sh v1.0.15 --notes-file docs/releases/1.0.15.html
+scripts/publish-appcast.sh v1.0.16 --notes-file docs/releases/1.0.16.html
 ```
 
 The owner must handle the local Sparkle Keychain prompt. Verify raw GitHub and
-Pages both contain short version `1.0.15`, build `1174`, before calling Ignition
+Pages both contain short version `1.0.16`, build `1175`, before calling Ignition
 live. The public issues still open are #5, #7, #11, and #13; #7's item-frame
 query stays live by design.
 
