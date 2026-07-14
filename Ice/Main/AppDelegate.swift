@@ -169,6 +169,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 guard isAppHang else { return event }
 
+                // Unlike symbol matching below, this marker is available at
+                // capture time. It covers only Fire's explicit authorization
+                // alerts while their AppKit modal run loop is active.
+                if ExpectedAuthorizationModal.isActive {
+                    return nil
+                }
+
                 let modalMarkers = [
                     "runModal", "runModalSession", "beginSheetModal",
                     "SPUStandardUserDriver", "NSAlert", "_NSShowStopAlertPanel",
