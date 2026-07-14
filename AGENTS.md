@@ -17,36 +17,38 @@ shipped-history and deep context** — read its top CURRENT STATE first. The dat
 
 ## ✅ LIVE NOW / NEXT
 
-**`v1.0.16` “Ignition” (build 1175, release commit `f131b9c`) is the installed,
-signed, notarized GitHub candidate but is NO-SHIP: reopening Fire from Finder/CLI
-still leaves Settings dormant. The candidate proved that ordering the dormant
-AppKit window after the request is not sufficient. The root fix is being prepared
-as `v1.0.17` (build 1176): AppState must use `OpenWindowAction` and
-`DismissWindowAction` captured from the live SwiftUI scene, never actions from a
-fresh `EnvironmentValues()`. None of these versions is on the
-Sparkle appcast yet.** The appcast still serves `v0.11.13-fire.10.7.3` (build
-1158), so existing Sparkle users have not received Fire 1.0.
+**`v1.0.17` “Ignition” (build 1176, release commit `510452c`) is the installed,
+signed, notarized GitHub candidate but is NO-SHIP: its live scene actions still
+produce zero-size dormant Settings and Permissions windows. The root cause was
+the older `IceWindow` precreation trick: opening and dismissing a SwiftUI window
+in the same run-loop cycle poisons later presentation on macOS 26. `v1.0.18`
+(build 1177) removes that trick and reinforces the real `openWindow` result only
+after SwiftUI creates it. A clean local LaunchServices test proved visible
+Permissions at 540×708 and Settings/Home at 1128×766. None of the 1.0 candidates
+is on the Sparkle appcast yet.** The appcast still serves
+`v0.11.13-fire.10.7.3` (build 1158), so existing Sparkle users have not received
+Fire 1.0.
 
-The installed 1.0.16 `/Applications/Ice.app` passed deep codesign, stapler, Gatekeeper,
-preserved the existing TCC identity, and passes `fire doctor` (13 tools),
-`contexts`, and `list_triggers`. Its embedded `program-fire` skill is byte-for-byte
-identical to the canonical repo skill. Public lint and the full signed/notarized
-CI workflow are green. Both XPC helpers recovered with new PIDs after SIGKILL,
-and signed `doctor` + `list_items` stayed green. Two unanswered 1.0.15 Context
-Scene proposals expired fail-closed and left `contexts` empty. Sentry CLI reports
-zero events/issues for `com.jordanbaird.Ice@1.0.15+1174`; older FIRE-V/T are
-expected consent modals from 1.0.7–1.0.9. The Settings reopen fix, both reference
-scenes, VoiceOver/runtime accessibility, and a post-scene Sentry
-recheck remain the final pre-appcast runtime gates.
+The installed 1.0.17 `/Applications/Ice.app` passed deep codesign, stapler,
+Gatekeeper, preserved the existing TCC identity, and passes `fire doctor` (13
+tools), `contexts`, and `list_triggers`. Its embedded `program-fire` skill is
+byte-for-byte identical to the canonical repo skill. Public lint and the full
+signed/notarized CI workflow are green. Both XPC helpers recovered with new PIDs
+after SIGKILL, and signed `doctor` + `list_items` stayed green. Two unanswered
+1.0.15 Context Scene proposals expired fail-closed and left `contexts` empty.
+Sentry CLI reports zero events/issues for `com.jordanbaird.Ice@1.0.15+1174`;
+older FIRE-V/T are expected consent modals from 1.0.7–1.0.9. The signed 1.0.18
+window smoke, both reference scenes, VoiceOver/runtime accessibility, and a
+post-scene Sentry recheck remain the final pre-appcast runtime gates.
 
-**NEXT is the signed 1.0.17 window smoke, then the human consent + publish
-gate:** first prove fresh-launch silence plus Finder/CLI reopen for Settings and
-the missing-permissions path. Then install and enable the real `Coding` (Codex
+**NEXT is the signed 1.0.18 window smoke, then the human consent + publish
+gate:** prove normal Finder/CLI reopen for Settings and the missing-permissions
+path in the signed candidate. Then install and enable the real `Coding` (Codex
 quota Fireline) and `Mail` (Fantastical Fireline) Context Scenes one at a time,
 verify their runtime behavior, then run
-`scripts/publish-appcast.sh v1.0.17 --notes-file docs/releases/1.0.17.html`.
+`scripts/publish-appcast.sh v1.0.18 --notes-file docs/releases/1.0.18.html`.
 The owner must click the two Fire consent dialogs and the local Sparkle Keychain
-prompt. Do not bypass or pre-authorize those gates. After Pages serves 1.0.17,
+prompt. Do not bypass or pre-authorize those gates. After Pages serves 1.0.18,
 update this section from candidate to live.
 
 ## Commands (exact)

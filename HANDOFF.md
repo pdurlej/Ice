@@ -5,29 +5,30 @@ Owner (pdurlej) will tell me to read this in a fresh session. **Codex / other
 agents: start with `AGENTS.md` at the repo root** — it has the current live/main
 state and the gotchas; this file is the deep history.
 
-## ✅ CURRENT STATE (2026-07-14) — SwiftUI window-action no-ship; 1.0.17 in progress
+## ✅ CURRENT STATE (2026-07-14) — 1.0.18 window fix locally proven
 
-`v1.0.16` “Ignition” (build 1175, release commit `f131b9c`) is a public GitHub
+`v1.0.17` “Ignition” (build 1176, release commit `510452c`) is a public GitHub
 release, signed and notarized by CI, and installed at `/Applications/Ice.app` on
-the owner's machine. It is **NO-SHIP**: reopening Fire from Finder/CLI promotes
-the app to regular, but Settings remains dormant. Ordering the dormant AppKit
-window after the request did not fix it. The root cause is that AppState creates
-a fresh `EnvironmentValues()` outside the view hierarchy instead of using the
-live scene's `OpenWindowAction`. `v1.0.17` (build 1176) captures the real SwiftUI
-open/dismiss actions and queues requests made before they are ready.
-None of these versions is on the Sparkle appcast. The live appcast still
-ends at `v0.11.13-fire.10.7.3` (build 1158), so existing users have not received
-Fire 1.0 through updates.
+the owner's machine. It is **NO-SHIP**: its live scene actions still leave
+Settings and Permissions as zero-size dormant windows. The root cause was the
+old `IceWindow` precreation trick: opening and dismissing a SwiftUI window in the
+same run-loop cycle poisons later presentation on macOS 26. `v1.0.18` (build
+1177) removes that trick and reinforces the concrete window only after
+`openWindow` creates it. A clean local LaunchServices test, with all diagnostic
+hooks removed, proved visible Permissions at 540×708 and Settings/Home at
+1128×766. None of the 1.0 versions is on the Sparkle appcast. The live appcast
+still ends at `v0.11.13-fire.10.7.3` (build 1158), so existing users have not
+received Fire 1.0 through updates.
 
-The signed 1.0.16 candidate passed deep codesign, stapler, Gatekeeper, preserved
+The signed 1.0.17 candidate passed deep codesign, stapler, Gatekeeper, preserved
 the existing TCC identity, `fire doctor` (13 tools), repeated `contexts`,
 `list_triggers`, authenticated local-socket/XPC smoke, and embedded-skill hash
 comparison. Public SwiftLint and the complete signed/notarized CI workflow are
 green. Sentry CLI reports zero events/issues for
 `com.jordanbaird.Ice@1.0.15+1174`. Two unanswered scene proposals expired
 fail-closed and left `contexts` empty. Both XPC helpers recovered with new PIDs
-after SIGKILL while signed `doctor` and `list_items` stayed green. The Settings
-reopen fix, two reference scenes, VoiceOver/runtime accessibility, and a
+after SIGKILL while signed `doctor` and `list_items` stayed green. The signed
+1.0.18 window smoke, two reference scenes, VoiceOver/runtime accessibility, and a
 post-scene Sentry recheck are the remaining release gates. FIRE-V was a false
 App Hang caused by the expected 1.0.9 authorization modal; 1.0.10 and later fix it with a narrow,
 capture-time `ExpectedAuthorizationModal` marker rather than unreliable
@@ -49,11 +50,11 @@ both scenes are installed, verify `contexts`, focus behavior, and Sentry, then
 publish with:
 
 ```bash
-scripts/publish-appcast.sh v1.0.17 --notes-file docs/releases/1.0.17.html
+scripts/publish-appcast.sh v1.0.18 --notes-file docs/releases/1.0.18.html
 ```
 
 The owner must handle the local Sparkle Keychain prompt. Verify raw GitHub and
-Pages both contain short version `1.0.17`, build `1176`, before calling Ignition
+Pages both contain short version `1.0.18`, build `1177`, before calling Ignition
 live. The public issues still open are #5, #7, #11, and #13; #7's item-frame
 query stays live by design.
 

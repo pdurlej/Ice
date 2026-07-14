@@ -18,7 +18,7 @@ struct IceWindow<Content: View>: Scene {
     /// The window's content view.
     let content: Content
 
-    /// Receives window actions connected to the live SwiftUI environment.
+    /// Receives actions connected to the live SwiftUI scene environment.
     let onWindowActionsReady: (OpenWindowAction, DismissWindowAction) -> Void
 
     /// Creates a window with an identifier constant.
@@ -39,23 +39,15 @@ struct IceWindow<Content: View>: Scene {
     var body: some Scene {
         windowScene.once {
             onWindowActionsReady(openWindow, dismissWindow)
-
-            // SwiftUI waits to create the underlying NSWindow until the scene
-            // is first presented. We may need a valid window reference before
-            // that point, so we open the window and immediately dismiss it.
-            //
-            // - Note: Both actions are called during the same run loop cycle,
-            //   so the window isn't actually opened.
-            openWindow(id: id)
-            dismissWindow(id: id)
         }
     }
 
     @ViewBuilder
     private var windowContentView: some View {
-        content.onWindowChange { window in
-            window?.collectionBehavior.insert(.moveToActiveSpace)
-        }
+        content
+            .onWindowChange { window in
+                window?.collectionBehavior.insert(.moveToActiveSpace)
+            }
     }
 
     private var windowScene: some Scene {

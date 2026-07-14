@@ -10,7 +10,7 @@ import SwiftUI
 /// The model for app-wide state.
 @MainActor
 final class AppState: ObservableObject {
-    /// A window request made before SwiftUI has supplied its environment actions.
+    /// A window request made before SwiftUI supplies live scene actions.
     private enum PendingWindowRequest {
         case open(IceWindowIdentifier)
         case dismiss(IceWindowIdentifier)
@@ -279,11 +279,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Installs the window actions from the live SwiftUI scene environment.
-    ///
-    /// Constructing a fresh `EnvironmentValues` outside a scene does not
-    /// provide an action connected to this app's windows. Keep the real
-    /// actions instead and replay any launch-time requests in order.
+    /// Installs window actions captured from the live scene environment.
     func registerWindowActions(open: OpenWindowAction, dismiss: DismissWindowAction) {
         windowActions = (open, dismiss)
 
@@ -312,7 +308,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Performs a request with the live scene actions, or queues it until the
+    /// Performs a request with live SwiftUI actions, or queues it until the
     /// scene has supplied them.
     private func performWindowRequest(_ request: PendingWindowRequest) {
         guard let windowActions else {
@@ -323,9 +319,41 @@ final class AppState: ObservableObject {
         switch request {
         case let .open(id):
             windowActions.open(id: id)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.presentWindow(id, attemptsRemaining: 20)
+            }
         case let .dismiss(id):
             windowActions.dismiss(id: id)
+            window(with: id)?.orderOut(nil)
         }
+    }
+
+    /// Reinforces presentation of a SwiftUI-created window through AppKit.
+    ///
+    /// The bounded retry covers the short interval between `openWindow` and
+    /// SwiftUI attaching the scene identifier to its concrete `NSWindow`.
+    private func presentWindow(_ id: IceWindowIdentifier, attemptsRemaining: Int) {
+        guard let window = window(with: id) else {
+            guard attemptsRemaining > 0 else {
+                logger.error("Could not find window with id: \(id, privacy: .public)")
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.presentWindow(id, attemptsRemaining: attemptsRemaining - 1)
+            }
+            return
+        }
+
+        window.collectionBehavior.insert(.moveToActiveSpace)
+        window.makeKeyAndOrderFront(nil)
+        if !NSApp.isActive {
+            window.orderFrontRegardless()
+        }
+    }
+
+    /// Returns the concrete AppKit window for a SwiftUI scene identifier.
+    private func window(with id: IceWindowIdentifier) -> NSWindow? {
+        NSApp.windows.first { $0.identifier?.rawValue == id.rawValue }
     }
 
     /// Activates the app and sets its activation policy.
