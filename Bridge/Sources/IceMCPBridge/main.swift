@@ -344,7 +344,7 @@ final class XPCClient: @unchecked Sendable {
         case .removeTrigger:
             70
         case .moveItem, .hideItem, .showItem, .applyLayout, .saveLayout:
-            20
+            70
         case .listTriggers:
             15
         default:

@@ -71,7 +71,7 @@ final class MCPWriteAuthorization {
         alert.addButton(withTitle: "Allow Once")          // .alertSecondButtonReturn
         alert.addButton(withTitle: "Allow for 5 Minutes") // .alertThirdButtonReturn
 
-        switch alert.runModal() {
+        switch TimedAuthorizationAlert.run(alert, timeout: 60) {
         case .alertSecondButtonReturn:
             logger.log("MCP write allowed once for \(command.id, privacy: .public)")
             return true

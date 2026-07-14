@@ -48,7 +48,7 @@ final class AutomationAuthorization {
         alert.addButton(withTitle: "Install and Enable")   // .alertThirdButtonReturn
 
         let enable: Bool
-        switch alert.runModal() {
+        switch TimedAuthorizationAlert.run(alert, timeout: 120) {
         case .alertSecondButtonReturn:
             enable = false
         case .alertThirdButtonReturn:
@@ -105,7 +105,7 @@ final class AutomationAuthorization {
         alert.addButton(withTitle: "Cancel")  // .alertFirstButtonReturn → default
         alert.addButton(withTitle: "Remove")   // .alertSecondButtonReturn
 
-        let approved = alert.runModal() == .alertSecondButtonReturn
+        let approved = TimedAuthorizationAlert.run(alert, timeout: 60) == .alertSecondButtonReturn
         logger.log("Automation removal \(approved ? "approved" : "cancelled") for \(rule.id, privacy: .public)")
         return approved
     }
