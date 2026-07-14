@@ -5,16 +5,17 @@ Owner (pdurlej) will tell me to read this in a fresh session. **Codex / other
 agents: start with `AGENTS.md` at the repo root** — it has the current live/main
 state and the gotchas; this file is the deep history.
 
-## ✅ CURRENT STATE (2026-07-14) — consent UI no-ship; 1.0.14 fix in progress
+## ✅ CURRENT STATE (2026-07-14) — consent UI no-ship; 1.0.15 fix in progress
 
-`v1.0.12` “Ignition” (build 1171, release commit `d0a87b2`) is a public GitHub
+`v1.0.14` “Ignition” (build 1173, release commit `2b3b127`) is a public GitHub
 release, signed and notarized by CI, and installed at `/Applications/Ice.app` on
-the owner's machine. It is **NO-SHIP**: a consent request can wait for its full
-timeout without showing a visible alert while Fire has accessory activation
-policy. `v1.0.13` (build 1172) made the alert visible but did not reliably make
-Fire active and also exposed dormant SwiftUI scenes. `v1.0.14` (build 1173)
-promotes Fire only for the consent lifetime, keeps previously hidden windows
-hidden, keys the alert on the current Space, and restores the prior policy.
+the owner's machine. It is **NO-SHIP**: earlier consent requests could wait for
+their full timeout without showing a visible alert while Fire had accessory
+activation policy. `v1.0.13` and `v1.0.14` made the alert visible but macOS 26 still refused
+focus stealing (`activate` returned success while Fire stayed inactive), and
+the temporary regular policy exposed dormant SwiftUI scenes. `v1.0.15` (build
+1174) keeps Fire accessory-only and presents consent as a non-hiding modal panel
+above normal windows on the current Space.
 None of these versions is on the Sparkle appcast. The live appcast still
 ends at `v0.11.13-fire.10.7.3` (build 1158), so existing users have not received
 Fire 1.0 through updates.
@@ -50,11 +51,11 @@ both scenes are installed, verify `contexts`, focus behavior, and Sentry, then
 publish with:
 
 ```bash
-scripts/publish-appcast.sh v1.0.14 --notes-file docs/releases/1.0.14.html
+scripts/publish-appcast.sh v1.0.15 --notes-file docs/releases/1.0.15.html
 ```
 
 The owner must handle the local Sparkle Keychain prompt. Verify raw GitHub and
-Pages both contain short version `1.0.14`, build `1173`, before calling Ignition
+Pages both contain short version `1.0.15`, build `1174`, before calling Ignition
 live. The public issues still open are #5, #7, #11, and #13; #7's item-frame
 query stays live by design.
 

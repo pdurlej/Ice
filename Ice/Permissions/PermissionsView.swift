@@ -41,6 +41,9 @@ struct PermissionsView: View {
         .padding(.horizontal)
         .frame(width: 550)
         .fixedSize()
+        .onAppear {
+            manager.refreshAll()
+        }
     }
 
     @ViewBuilder

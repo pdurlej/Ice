@@ -38,35 +38,19 @@ enum ExpectedAuthorizationModal {
 @MainActor
 enum TimedAuthorizationAlert {
     static func run(_ alert: NSAlert, timeout: TimeInterval) -> NSApplication.ModalResponse {
-        // Fire normally runs as an accessory app. `activate(ignoringOtherApps:)`
-        // does not reliably bring an accessory-owned modal forward when no
-        // Fire window is already open, leaving the request alive but invisible.
-        // Promote only for the lifetime of the consent UI, then restore the
-        // previous policy so Fire does not remain in the Dock or app switcher.
-        let previousActivationPolicy = NSApp.activationPolicy()
-        let previouslyVisibleWindows = Set(
-            NSApp.windows.lazy.filter(\.isVisible).map(ObjectIdentifier.init)
-        )
-        if previousActivationPolicy != .regular {
-            NSApp.setActivationPolicy(.regular)
-            // Promoting an LSUIElement app can also reveal dormant SwiftUI
-            // scenes. Keep every window that was hidden before consent hidden;
-            // `runModal()` will present only the alert below.
-            for window in NSApp.windows where !previouslyVisibleWindows.contains(ObjectIdentifier(window)) {
-                window.orderOut(nil)
-            }
+        // macOS 26 prevents background apps from stealing focus even when the
+        // legacy "ignoring other apps" option is requested. Promoting Fire
+        // from accessory to regular also reveals dormant SwiftUI scenes. Keep
+        // Fire accessory-only and present the consent panel above normal app
+        // windows instead; the user can click it without a focus-steal race.
+        let window = alert.window
+        window.level = .modalPanel
+        window.hidesOnDeactivate = false
+        window.collectionBehavior.formUnion([.moveToActiveSpace, .transient])
+        if let panel = window as? NSPanel {
+            panel.isFloatingPanel = true
         }
-        if let frontmost = NSWorkspace.shared.frontmostApplication {
-            NSRunningApplication.current.activate(from: frontmost)
-        } else {
-            NSRunningApplication.current.activate()
-        }
-        // The earlier activation request may have happened while Fire was
-        // still an accessory app. Repeat it after promotion and explicitly
-        // key the alert on the user's active Space.
-        alert.window.collectionBehavior.insert(.moveToActiveSpace)
-        NSApp.activate(ignoringOtherApps: true)
-        alert.window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
 
         ExpectedAuthorizationModal.begin()
         let timer = Timer(timeInterval: timeout, repeats: false) { [weak alert] _ in
@@ -82,9 +66,7 @@ enum TimedAuthorizationAlert {
         defer {
             timer.invalidate()
             ExpectedAuthorizationModal.end()
-            if previousActivationPolicy != .regular {
-                NSApp.setActivationPolicy(previousActivationPolicy)
-            }
+            window.orderOut(nil)
         }
         return alert.runModal()
     }

@@ -73,15 +73,18 @@ class Permission: ObservableObject, Identifiable {
 
     /// Sets up the internal observers for the permission.
     private func configureCancellables() {
-        timerCancellable = Timer.publish(every: 1, on: .main, in: .default)
+        timerCancellable = Timer.publish(every: 1, on: .main, in: .common)
             .autoconnect()
             .merge(with: Just(.now))
             .sink { [weak self] _ in
-                guard let self else {
-                    return
-                }
-                hasPermission = check()
+                self?.refresh()
             }
+    }
+
+    /// Refreshes the permission from the system instead of relying on a
+    /// result captured before System Settings applied the user's change.
+    func refresh() {
+        hasPermission = check()
     }
 
     /// Performs the request and opens the System Settings app to the appropriate pane.

@@ -17,12 +17,13 @@ shipped-history and deep context** — read its top CURRENT STATE first. The dat
 
 ## ✅ LIVE NOW / NEXT
 
-**`v1.0.12` “Ignition” (build 1171, release commit `d0a87b2`) is the installed,
-signed, notarized GitHub candidate but is NO-SHIP: its Fire-authored consent
-modal can remain invisible while the app runs with accessory activation policy.
-`v1.0.13` made the modal visible but did not reliably make it frontmost and
-briefly exposed dormant SwiftUI windows. The complete fix is being prepared as
-`v1.0.14` (build 1173). None of these versions is on the
+**`v1.0.14` “Ignition” (build 1173, release commit `2b3b127`) is the installed,
+signed, notarized GitHub candidate but is NO-SHIP: earlier Fire-authored consent
+modals could remain invisible while the app ran with accessory activation policy.
+`v1.0.13` and `v1.0.14` made the modal visible but could not make Fire frontmost
+under macOS 26 focus-stealing prevention and briefly exposed dormant SwiftUI
+windows. The complete accessory-panel fix is being prepared as `v1.0.15`
+(build 1174). None of these versions is on the
 Sparkle appcast yet.** The appcast still serves `v0.11.13-fire.10.7.3` (build
 1158), so existing Sparkle users have not received Fire 1.0.
 
@@ -42,9 +43,9 @@ recheck remain the final pre-appcast runtime gates.
 **NEXT is a human consent + publish gate:** install and enable the real `Coding`
 (Codex quota Fireline) and `Mail` (Fantastical Fireline) Context Scenes one at a
 time, verify their runtime behavior, then run
-`scripts/publish-appcast.sh v1.0.14 --notes-file docs/releases/1.0.14.html`.
+`scripts/publish-appcast.sh v1.0.15 --notes-file docs/releases/1.0.15.html`.
 The owner must click the two Fire consent dialogs and the local Sparkle Keychain
-prompt. Do not bypass or pre-authorize those gates. After Pages serves 1.0.10,
+prompt. Do not bypass or pre-authorize those gates. After Pages serves 1.0.15,
 update this section from candidate to live.
 
 ## Commands (exact)
