@@ -21,6 +21,15 @@ final class MenuBarSearchModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
 
+    /// Keeps SkyLight capture and pixel averaging off the main thread.
+    private let averageColorCaptureQueue = DispatchQueue(
+        label: "com.jordanbaird.Ice.MenuBarSearchModel.averageColorCapture",
+        qos: .userInitiated
+    )
+
+    /// Coalesces repeated panel updates while a capture is in flight.
+    private var isUpdatingAverageColorInfo = false
+
     let fuse = Fuse(threshold: 0.5)
 
     func performSetup(with panel: MenuBarSearchPanel) {
@@ -46,6 +55,9 @@ final class MenuBarSearchModel: ObservableObject {
     }
 
     private func updateAverageColorInfo(for screen: NSScreen) async {
+        guard !isUpdatingAverageColorInfo else { return }
+        isUpdatingAverageColorInfo = true
+
         // createWindows enumerates the window server synchronously; fetch
         // off-main so it can't freeze the main thread (fire.10.4.1).
         let windows = await Task.detached { WindowInfo.createWindows(option: .onScreen) }.value
@@ -55,24 +67,30 @@ final class MenuBarSearchModel: ObservableObject {
             let menuBarWindow = WindowInfo.menuBarWindow(from: windows, for: displayID),
             let wallpaperWindow = WindowInfo.wallpaperWindow(from: windows, for: displayID)
         else {
+            isUpdatingAverageColorInfo = false
             return
         }
 
-        guard
-            let image = ScreenCapture.captureWindows(
-                with: [menuBarWindow.windowID, wallpaperWindow.windowID],
-                screenBounds: withMutableCopy(of: wallpaperWindow.bounds) { $0.size.height = 1 },
+        let windowIDs = [menuBarWindow.windowID, wallpaperWindow.windowID]
+        let captureBounds = withMutableCopy(of: wallpaperWindow.bounds) { $0.size.height = 1 }
+
+        averageColorCaptureQueue.async { [weak self] in
+            let color = ScreenCapture.captureWindows(
+                with: windowIDs,
+                screenBounds: captureBounds,
                 option: .nominalResolution
-            ),
-            let color = image.averageColor(option: .ignoreAlpha)
-        else {
-            return
-        }
+            )?.averageColor(option: .ignoreAlpha)
 
-        let info = MenuBarAverageColorInfo(color: color, source: .menuBarWindow)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.isUpdatingAverageColorInfo = false
+                guard let color else { return }
 
-        if averageColorInfo != info {
-            averageColorInfo = info
+                let info = MenuBarAverageColorInfo(color: color, source: .menuBarWindow)
+                if self.averageColorInfo != info {
+                    self.averageColorInfo = info
+                }
+            }
         }
     }
 }

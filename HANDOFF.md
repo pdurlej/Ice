@@ -5,30 +5,33 @@ Owner (pdurlej) will tell me to read this in a fresh session. **Codex / other
 agents: start with `AGENTS.md` at the repo root** — it has the current live/main
 state and the gotchas; this file is the deep history.
 
-## ✅ CURRENT STATE (2026-07-14) — 1.0.18 window fix locally proven
+## ✅ CURRENT STATE (2026-07-14) — 1.0.19 FIRE-W fix in progress
 
-`v1.0.17` “Ignition” (build 1176, release commit `510452c`) is a public GitHub
+`v1.0.18` “Ignition” (build 1177, release commit `e152e9f`) is a public GitHub
 release, signed and notarized by CI, and installed at `/Applications/Ice.app` on
-the owner's machine. It is **NO-SHIP**: its live scene actions still leave
-Settings and Permissions as zero-size dormant windows. The root cause was the
-old `IceWindow` precreation trick: opening and dismissing a SwiftUI window in the
-same run-loop cycle poisons later presentation on macOS 26. `v1.0.18` (build
-1177) removes that trick and reinforces the concrete window only after
-`openWindow` creates it. A clean local LaunchServices test, with all diagnostic
-hooks removed, proved visible Permissions at 540×708 and Settings/Home at
-1128×766. None of the 1.0 versions is on the Sparkle appcast. The live appcast
-still ends at `v0.11.13-fire.10.7.3` (build 1158), so existing users have not
-received Fire 1.0 through updates.
+the owner's machine. It fixed the macOS 26 zero-size window regression: signed
+fresh launch is accessory with no normal window; normal reopen is regular/active
+with Settings visible at 1150×782. It is still **NO-SHIP** because Sentry CLI
+identified FIRE-W (3 events, 1 user across 1.0.15–1.0.17): menu-bar window
+capture plus `CGImageRef.averageColor` can block the main thread while Settings
+is visible. `v1.0.19` (build 1178) moves capture and pixel averaging for Settings
+and search to serial background queues and coalesces overlapping refreshes.
+FIRE-X is local diagnostic noise: both events came from a
+`DerivedData/.../Release/Ice.app` without the CI dSYM. None of the 1.0 versions is
+on the Sparkle appcast. The live appcast still ends at
+`v0.11.13-fire.10.7.3` (build 1158), so existing users have not received Fire 1.0
+through updates.
 
-The signed 1.0.17 candidate passed deep codesign, stapler, Gatekeeper, preserved
+The signed 1.0.18 candidate passed deep codesign, stapler, Gatekeeper, preserved
 the existing TCC identity, `fire doctor` (13 tools), repeated `contexts`,
 `list_triggers`, authenticated local-socket/XPC smoke, and embedded-skill hash
 comparison. Public SwiftLint and the complete signed/notarized CI workflow are
-green. Sentry CLI reports zero events/issues for
-`com.jordanbaird.Ice@1.0.15+1174`. Two unanswered scene proposals expired
-fail-closed and left `contexts` empty. Both XPC helpers recovered with new PIDs
-after SIGKILL while signed `doctor` and `list_items` stayed green. The signed
-1.0.18 window smoke, two reference scenes, VoiceOver/runtime accessibility, and a
+green. The exact Sentry query for `com.jordanbaird.Ice@1.0.18+1177` was empty
+after window/CLI smoke. One Coding scene proposal expired fail-closed and left
+`contexts` empty because the owner did not click the consent modal. Both XPC
+helpers previously recovered with new PIDs after SIGKILL while signed `doctor`
+and `list_items` stayed green. The signed 1.0.19 FIRE-W/window smoke, two
+reference scenes, VoiceOver/runtime accessibility, recovery controls, and a
 post-scene Sentry recheck are the remaining release gates. FIRE-V was a false
 App Hang caused by the expected 1.0.9 authorization modal; 1.0.10 and later fix it with a narrow,
 capture-time `ExpectedAuthorizationModal` marker rather than unreliable
@@ -50,11 +53,11 @@ both scenes are installed, verify `contexts`, focus behavior, and Sentry, then
 publish with:
 
 ```bash
-scripts/publish-appcast.sh v1.0.18 --notes-file docs/releases/1.0.18.html
+scripts/publish-appcast.sh v1.0.19 --notes-file docs/releases/1.0.19.html
 ```
 
 The owner must handle the local Sparkle Keychain prompt. Verify raw GitHub and
-Pages both contain short version `1.0.18`, build `1177`, before calling Ignition
+Pages both contain short version `1.0.19`, build `1178`, before calling Ignition
 live. The public issues still open are #5, #7, #11, and #13; #7's item-frame
 query stays live by design.
 
