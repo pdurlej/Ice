@@ -3,11 +3,21 @@
 //  Shared
 //
 
+import Darwin
 import Foundation
 import Security
 
 enum MenuBarItemService {
     static let name = "com.jordanbaird.Ice.MenuBarItemService"
+
+    /// Private per-login rendezvous for the embedded MCP bridge. The parent
+    /// temporary directory is user-owned and mode 0700 on macOS; the socket is
+    /// additionally chmod 0600 and both peers validate audit-token identities.
+    static var bridgeSocketPath: String {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("com.jordanbaird.Ice.fire-mcp.\(getuid()).sock")
+            .path
+    }
 
     /// Returns the Team Identifier of the currently running process, or
     /// `nil` if the binary is unsigned, ad-hoc signed, or the team
@@ -24,9 +34,12 @@ enum MenuBarItemService {
     /// forever on "Loading menu bar items…". This is the same class as
     /// upstream issues #744 and #891.
     static func ownTeamIdentifier() -> String? {
+        var dynamicCode: SecCode?
         var staticCode: SecStaticCode?
         guard
-            SecStaticCodeCreateWithPath(Bundle.main.bundleURL as CFURL, [], &staticCode) == errSecSuccess,
+            SecCodeCopySelf([], &dynamicCode) == errSecSuccess,
+            let dynamicCode,
+            SecCodeCopyStaticCode(dynamicCode, [], &staticCode) == errSecSuccess,
             let code = staticCode
         else {
             return nil
@@ -50,6 +63,66 @@ enum MenuBarItemService {
             return nil
         }
         return teamID
+    }
+
+    /// Validates a connected Unix-domain-socket peer against the kernel audit
+    /// token, the current process's Developer ID team, and one exact executable
+    /// path. The audit token binds the check to the connected process and avoids
+    /// PID-reuse races. Ad-hoc builds require an ad-hoc peer at the exact path;
+    /// Developer ID builds require the same non-empty team identifier.
+    static func isTrustedSocketPeer(
+        _ socketFD: Int32,
+        expectedExecutableURL: URL
+    ) -> Bool {
+        var peerUID: uid_t = 0
+        var peerGID: gid_t = 0
+        guard getpeereid(socketFD, &peerUID, &peerGID) == 0, peerUID == geteuid() else {
+            return false
+        }
+
+        var token = audit_token_t()
+        var tokenLength = socklen_t(MemoryLayout<audit_token_t>.size)
+        guard withUnsafeMutablePointer(to: &token, { pointer in
+            getsockopt(socketFD, SOL_LOCAL, LOCAL_PEERTOKEN, pointer, &tokenLength)
+        }) == 0, tokenLength == MemoryLayout<audit_token_t>.size else {
+            return false
+        }
+
+        let tokenData = withUnsafeBytes(of: token) { Data($0) }
+        let attributes = [kSecGuestAttributeAudit as String: tokenData] as CFDictionary
+        var dynamicCode: SecCode?
+        guard
+            SecCodeCopyGuestWithAttributes(nil, attributes, [], &dynamicCode) == errSecSuccess,
+            let dynamicCode,
+            SecCodeCheckValidity(dynamicCode, [], nil) == errSecSuccess
+        else {
+            return false
+        }
+
+        var staticCode: SecStaticCode?
+        var info: CFDictionary?
+        guard
+            SecCodeCopyStaticCode(dynamicCode, [], &staticCode) == errSecSuccess,
+            let staticCode,
+            SecCodeCopySigningInformation(
+                staticCode,
+                SecCSFlags(rawValue: kSecCSSigningInformation),
+                &info
+            ) == errSecSuccess,
+            let dictionary = info as? [String: Any],
+            let executable = dictionary[kSecCodeInfoMainExecutable as String] as? URL
+        else {
+            return false
+        }
+
+        let actualPath = executable.standardizedFileURL.resolvingSymlinksInPath().path
+        let expectedPath = expectedExecutableURL.standardizedFileURL.resolvingSymlinksInPath().path
+        guard actualPath == expectedPath else {
+            return false
+        }
+
+        let peerTeam = dictionary[kSecCodeInfoTeamIdentifier as String] as? String
+        return peerTeam == ownTeamIdentifier()
     }
 }
 
@@ -401,6 +474,20 @@ extension MenuBarItemService.Request {
              .setTrigger, .removeTrigger:
             return true
         case .listItems, .listLayouts, .listTriggers,
+             .start, .sourcePID, .relayFetch, .relayComplete:
+            return false
+        }
+    }
+
+    /// Whether this request needs the GUI app's relay handlers to be ready.
+    /// Read-only item/layout discovery is answered directly by MCPBackend;
+    /// mutations and Context Scene requests are fulfilled by the main app.
+    var requiresMainAppRelay: Bool {
+        switch self {
+        case .moveItem, .hideItem, .showItem, .applyLayout, .saveLayout,
+             .setTrigger, .listTriggers, .removeTrigger:
+            return true
+        case .listItems, .listLayouts,
              .start, .sourcePID, .relayFetch, .relayComplete:
             return false
         }

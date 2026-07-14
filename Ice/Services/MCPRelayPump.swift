@@ -42,7 +42,7 @@ final class MCPRelayPump {
     private var busy = false
 
     private let logger = Logger(category: "MCPRelayPump")
-    private let client = RelayXPCClient(serviceName: "com.jordanbaird.Ice.MCPBackend")
+    private let client = MCPBackendXPCClient.relay
 
     /// All blocking XPC calls happen here, never on the main thread.
     private static let xpcQueue = DispatchQueue(
@@ -229,7 +229,10 @@ final class MCPRelayPump {
 /// recreated after any wire error. All calls happen on the pump's single
 /// serial queue, so the failure-state flags need no locking of their own.
 @available(macOS 26.0, *)
-private final class RelayXPCClient: @unchecked Sendable {
+final class MCPBackendXPCClient: @unchecked Sendable {
+    static let agent = MCPBackendXPCClient()
+    static let relay = MCPBackendXPCClient()
+
     private struct SessionHandle: @unchecked Sendable {
         let id: UUID
         let session: XPCSession
@@ -248,8 +251,8 @@ private final class RelayXPCClient: @unchecked Sendable {
     /// Connection-state flag so a dead service logs once, not at 5 Hz.
     private var lastFetchFailed = false
 
-    init(serviceName: String) {
-        self.serviceName = serviceName
+    private init() {
+        self.serviceName = "com.jordanbaird.Ice.MCPBackend"
     }
 
     private func getOrCreateSession() throws -> SessionHandle {
@@ -279,14 +282,14 @@ private final class RelayXPCClient: @unchecked Sendable {
         return SessionHandle(id: id, session: new)
     }
 
-    private func send(_ request: MenuBarItemService.Request) throws -> MenuBarItemService.Response {
+    func send(_ request: MenuBarItemService.Request) throws -> MenuBarItemService.Response {
         let handle = try getOrCreateSession()
         do {
             return try XPCSyncDeadline.send(
                 request,
                 as: MenuBarItemService.Response.self,
                 through: handle.session,
-                timeout: 5,
+                timeout: Self.timeout(for: request),
                 queue: blockingQueue
             ) { [weak self] in
                 self?.cancelSession(handle, reason: "Relay sendSync deadline exceeded")
@@ -294,6 +297,23 @@ private final class RelayXPCClient: @unchecked Sendable {
         } catch {
             clearSession(id: handle.id)
             throw error
+        }
+    }
+
+    private static func timeout(for request: MenuBarItemService.Request) -> TimeInterval {
+        switch request {
+        case .setTrigger:
+            130
+        case .removeTrigger:
+            70
+        case .moveItem, .hideItem, .showItem, .applyLayout, .saveLayout:
+            20
+        case .listTriggers:
+            15
+        case .relayFetch, .relayComplete:
+            5
+        default:
+            10
         }
     }
 

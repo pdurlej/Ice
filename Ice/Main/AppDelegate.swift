@@ -27,6 +27,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if #available(macOS 26.0, *) {
+            FireMCPBridgeServer.shared.start()
+        }
+
         // Hide the main menu's items to add additional space to the
         // menu bar when we are the focused app.
         for item in NSApp.mainMenu?.items ?? [] {
@@ -79,6 +83,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         return true
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if #available(macOS 26.0, *) {
+            FireMCPBridgeServer.shared.stop()
+        }
     }
 
     // MARK: Other Methods

@@ -42,6 +42,7 @@
 //      Bridge/.build/release/IceMCPBridge
 //
 
+import Darwin
 import Foundation
 import MCP
 import OSLog
@@ -217,84 +218,123 @@ private enum ToolError: Swift.Error, CustomStringConvertible {
 
 // MARK: - XPC client
 
-/// Sends `MenuBarItemService.Request` values to the Ice XPC service.
-///
-/// Mirrors the pattern in `Ice/MenuBar/MenuBarItems/MenuBarItemServiceConnection.swift`:
-/// lazy `XPCSession` creation, peer-requirement gated on whether we
-/// actually have a Team Identifier (ad-hoc-signed builds otherwise
-/// reject themselves — upstream issues #744 / #891), one shared
-/// session re-used across requests, recreated on cancel/error.
+/// Sends requests to the running Fire app over its authenticated per-user
+/// Unix socket. Fire forwards them through the same MCPBackend XPC session as
+/// its consent relay, so reads and approved writes share one backend instance.
 @available(macOS 26.0, *)
 final class XPCClient: @unchecked Sendable {
-    private struct SessionHandle: @unchecked Sendable {
-        let id: UUID
-        let session: XPCSession
+    private enum SocketError: LocalizedError {
+        case appNotRunning
+        case authenticationFailed
+        case closed
+        case invalidReply
+        case remote(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .appNotRunning:
+                "Fire is not running or its local MCP socket is unavailable."
+            case .authenticationFailed:
+                "Fire's local MCP socket failed code-signing authentication."
+            case .closed:
+                "Fire closed the local MCP connection before replying."
+            case .invalidReply:
+                "Fire returned an invalid local MCP response."
+            case .remote(let message):
+                message
+            }
+        }
     }
 
-    private let serviceName: String
-    private let queue: DispatchQueue
-    private let blockingQueue: DispatchQueue
-    private var session: XPCSession?
-    private var sessionID: UUID?
+    private struct SocketReply: Codable {
+        let response: MenuBarItemService.Response?
+        let error: String?
+    }
+
+    private var socketFD: Int32 = -1
+    private var readBuffer = Data()
     private let lock = NSLock()
 
-    init(serviceName: String) {
-        self.serviceName = serviceName
-        self.queue = DispatchQueue(
-            label: "com.jordanbaird.Ice.mcp.xpc",
-            qos: .userInitiated,
-            attributes: .concurrent
-        )
-        self.blockingQueue = DispatchQueue(
-            label: "com.jordanbaird.Ice.mcp.sendSync",
-            qos: .userInitiated,
-            attributes: .concurrent
-        )
+    init(serviceName _: String) {}
+
+    deinit {
+        closeSocket()
     }
 
-    private func getOrCreateSession() throws -> SessionHandle {
+    private func getOrCreateSocket() throws -> Int32 {
+        if socketFD >= 0 { return socketFD }
+
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { throw SocketError.appNotRunning }
+
+        var noSigPipe: Int32 = 1
+        _ = setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout.size(ofValue: noSigPipe)))
+        guard Self.connect(fd, to: MenuBarItemService.bridgeSocketPath) else {
+            close(fd)
+            throw SocketError.appNotRunning
+        }
+
+        let bridge = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
+        let expectedApp = bridge.deletingLastPathComponent().appendingPathComponent("Ice")
+        guard MenuBarItemService.isTrustedSocketPeer(fd, expectedExecutableURL: expectedApp) else {
+            close(fd)
+            throw SocketError.authenticationFailed
+        }
+
+        socketFD = fd
+        return fd
+    }
+
+    /// Sends a request synchronously and decodes Fire's response.
+    func send(_ request: MenuBarItemService.Request) throws -> MenuBarItemService.Response {
         lock.lock()
         defer { lock.unlock() }
-        if let existing = session, let sessionID {
-            return SessionHandle(id: sessionID, session: existing)
-        }
-        let id = UUID()
-        let new = try XPCSession(xpcService: serviceName, options: .inactive) { [weak self] error in
-            guard let self else { return }
-            log.warning("XPC session cancelled: \(error.localizedDescription, privacy: .public)")
-            self.clearSession(id: id)
-        }
-        if MenuBarItemService.ownTeamIdentifier() != nil {
-            new.setPeerRequirement(.isFromSameTeam())
-        }
-        new.setTargetQueue(queue)
-        try new.activate()
-        session = new
-        sessionID = id
-        return SessionHandle(id: id, session: new)
-    }
 
-    /// Sends a request synchronously and decodes the reply as a
-    /// `MenuBarItemService.Response`.
-    func send(_ request: MenuBarItemService.Request) throws -> MenuBarItemService.Response {
-        let handle = try getOrCreateSession()
         do {
-            return try XPCSyncDeadline.send(
-                request,
-                as: MenuBarItemService.Response.self,
-                through: handle.session,
-                timeout: Self.timeout(for: request),
-                queue: blockingQueue
-            ) { [weak self] in
-                self?.cancelSession(handle, reason: "MCP tool sendSync deadline exceeded")
+            let fd = try getOrCreateSocket()
+            Self.setTimeout(Self.timeout(for: request) + 2, on: fd)
+            try Self.writeLine(JSONEncoder().encode(request), to: fd)
+            let reply = try JSONDecoder().decode(SocketReply.self, from: readLine(from: fd))
+            if let error = reply.error {
+                throw SocketError.remote(error)
             }
+            guard let response = reply.response else {
+                throw SocketError.invalidReply
+            }
+            return response
         } catch {
-            // Drop the session so the next call recreates it after a
-            // wire error — matches the connection-recreation pattern
-            // in Ice/MenuBar/MenuBarItems/MenuBarItemServiceConnection.swift.
-            clearSession(id: handle.id)
+            closeSocket()
             throw ToolError.xpcUnavailable(error.localizedDescription)
         }
+    }
+
+    private func readLine(from fd: Int32) throws -> Data {
+        while true {
+            if let newline = readBuffer.firstIndex(of: 0x0A) {
+                let line = Data(readBuffer[..<newline])
+                readBuffer.removeSubrange(...newline)
+                if !line.isEmpty { return line }
+            }
+
+            var chunk = [UInt8](repeating: 0, count: 16_384)
+            let count = chunk.withUnsafeMutableBytes { rawBuffer in
+                Darwin.read(fd, rawBuffer.baseAddress, rawBuffer.count)
+            }
+            if count == 0 { throw SocketError.closed }
+            if count < 0 {
+                if errno == EINTR { continue }
+                throw SocketError.closed
+            }
+            readBuffer.append(contentsOf: chunk.prefix(count))
+        }
+    }
+
+    private func closeSocket() {
+        if socketFD >= 0 {
+            close(socketFD)
+            socketFD = -1
+        }
+        readBuffer.removeAll(keepingCapacity: true)
     }
 
     private static func timeout(for request: MenuBarItemService.Request) -> TimeInterval {
@@ -312,17 +352,51 @@ final class XPCClient: @unchecked Sendable {
         }
     }
 
-    private func clearSession(id: UUID) {
-        lock.lock()
-        defer { lock.unlock() }
-        guard sessionID == id else { return }
-        session = nil
-        sessionID = nil
+    private static func setTimeout(_ seconds: TimeInterval, on fd: Int32) {
+        var timeout = timeval(tv_sec: Int(seconds), tv_usec: 0)
+        let length = socklen_t(MemoryLayout.size(ofValue: timeout))
+        _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, length)
+        _ = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, length)
     }
 
-    private func cancelSession(_ handle: SessionHandle, reason: String) {
-        clearSession(id: handle.id)
-        handle.session.cancel(reason: reason)
+    private static func connect(_ fd: Int32, to path: String) -> Bool {
+        let bytes = Array(path.utf8)
+        guard bytes.count < MemoryLayout.size(ofValue: sockaddr_un().sun_path) else {
+            return false
+        }
+
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        withUnsafeMutableBytes(of: &address.sun_path) { destination in
+            destination.copyBytes(from: bytes)
+            destination[bytes.count] = 0
+        }
+        let length = socklen_t(MemoryLayout<sa_family_t>.size + bytes.count + 1)
+        return withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.connect(fd, $0, length) == 0
+            }
+        }
+    }
+
+    private static func writeLine(_ data: Data, to fd: Int32) throws {
+        var framed = data
+        framed.append(0x0A)
+        let success = framed.withUnsafeBytes { rawBuffer in
+            guard var pointer = rawBuffer.baseAddress else { return false }
+            var remaining = rawBuffer.count
+            while remaining > 0 {
+                let written = Darwin.write(fd, pointer, remaining)
+                if written < 0 {
+                    if errno == EINTR { continue }
+                    return false
+                }
+                remaining -= written
+                pointer = pointer.advanced(by: written)
+            }
+            return true
+        }
+        if !success { throw SocketError.closed }
     }
 }
 

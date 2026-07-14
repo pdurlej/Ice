@@ -115,6 +115,7 @@ final class AppState: ObservableObject {
         // (XPCSession). Must start after the fulfillers it dispatches to.
         if #available(macOS 26.0, *) {
             MCPRelayPump.shared.performSetup(with: self)
+            FireMCPBridgeServer.shared.markRelayReady()
         }
 
         configureCancellables()
