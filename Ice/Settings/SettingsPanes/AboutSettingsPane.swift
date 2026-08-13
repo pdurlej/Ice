@@ -16,15 +16,26 @@ struct AboutSettingsPane: View {
     }
 
     private var contributeURL: URL {
-        URL(string: "https://github.com/jordanbaird/Ice")!
+        githubURL("/pdurlej/fire-from-ice")
     }
 
     private var issuesURL: URL {
         contributeURL.appendingPathComponent("issues")
     }
 
-    private var donateURL: URL {
-        URL(string: "https://icemenubar.app/Donate")!
+    private var upstreamURL: URL {
+        githubURL("/jordanbaird/Ice")
+    }
+
+    private func githubURL(_ path: String) -> URL {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "github.com"
+        components.path = path
+        guard let url = components.url else {
+            preconditionFailure("Invalid static GitHub URL")
+        }
+        return url
     }
 
     private var lastUpdateCheckString: String {
@@ -83,7 +94,7 @@ struct AboutSettingsPane: View {
                 }
 
                 VStack(alignment: .leading) {
-                    Text("Ice")
+                    Text("Fire")
                         .font(.system(size: 80))
                         .foregroundStyle(.primary)
 
@@ -94,6 +105,10 @@ struct AboutSettingsPane: View {
                     Text(Constants.copyrightString)
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary.opacity(0.67))
+
+                    Text("Built on Ice by Jordan Baird")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
                 }
                 .fontWeight(.medium)
             }
@@ -143,7 +158,7 @@ struct AboutSettingsPane: View {
     @ViewBuilder
     private func bottomBar(containerShape: some InsettableShape) -> some View {
         HStack {
-            Button("Quit Ice") {
+            Button("Quit Fire") {
                 NSApp.terminate(nil)
             }
             Spacer()
@@ -156,8 +171,8 @@ struct AboutSettingsPane: View {
             Button("Report a Bug") {
                 openURL(issuesURL)
             }
-            Button("Support Ice", systemImage: "heart.circle.fill") {
-                openURL(donateURL)
+            Button("Upstream Ice", systemImage: "arrow.up.right.circle") {
+                openURL(upstreamURL)
             }
         }
         .padding(8)
