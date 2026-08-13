@@ -135,100 +135,31 @@ enum TriggerSpecTranslator {
     ) throws -> TriggerAction {
         switch spec.type {
         case "setSection":
-            let items = try makeItems(selectors: spec.selectors, bundleIDs: spec.bundleIDs, allowEmpty: false)
+            let rawIDs = spec.bundleIDs ?? []
+            guard !rawIDs.isEmpty else {
+                throw TranslationError(message: "setSection requires at least one bundleID")
+            }
+            // Reject (not silently drop) any malformed id, so the consent
+            // prompt's item list is always exactly what the agent asked for.
+            var bundleIDs: [String] = []
+            for raw in rawIDs {
+                guard let valid = AgentInput.validBundleID(raw) else {
+                    throw TranslationError(message: "every bundleID must be reverse-DNS (letters, digits, dot, hyphen)")
+                }
+                bundleIDs.append(valid)
+            }
             guard let rawSection = spec.section, let section = TriggerSection(rawValue: rawSection) else {
                 let valid = TriggerSection.allCases.map(\.rawValue).joined(separator: ", ")
                 throw TranslationError(message: "section must be one of: \(valid)")
             }
+            let items = bundleIDs.map { ItemIdentity(bundleID: $0) }
             return .setSection(items: items, section: section)
-
-        case "activateContext":
-            let items = try makeItems(selectors: spec.selectors, bundleIDs: spec.bundleIDs, allowEmpty: true)
-            let moves: [MovePlan]
-            if items.isEmpty {
-                moves = []
-            } else {
-                guard let rawSection = spec.section, let section = TriggerSection(rawValue: rawSection) else {
-                    let valid = TriggerSection.allCases.map(\.rawValue).joined(separator: ", ")
-                    throw TranslationError(message: "activateContext with menu bar items requires section: \(valid)")
-                }
-                moves = items.map { MovePlan(item: $0, toSection: section) }
-            }
-
-            let fireline: FirelinePayload
-            switch spec.firelineType {
-            case "hidden":
-                fireline = .hidden
-            case "quota":
-                guard
-                    let rawProvider = spec.firelineProvider,
-                    let provider = FirelineQuotaProvider(rawValue: rawProvider)
-                else {
-                    let valid = FirelineQuotaProvider.allCases.map(\.rawValue).joined(separator: ", ")
-                    throw TranslationError(message: "quota Fireline requires provider: \(valid)")
-                }
-                fireline = .quota(provider)
-            case "menuBarItem":
-                guard let selector = spec.firelineSelector else {
-                    throw TranslationError(message: "menuBarItem Fireline requires fireline_selector from list_items")
-                }
-                fireline = .menuBarItem(try makeIdentity(selector))
-            default:
-                throw TranslationError(message: "activateContext requires fireline_type: hidden, quota, or menuBarItem")
-            }
-
-            guard !moves.isEmpty || fireline != .hidden else {
-                throw TranslationError(message: "activateContext must move an item or show a Fireline payload")
-            }
-            return .activateContext(ContextSceneAction(moves: moves, fireline: fireline))
 
         default:
             throw TranslationError(
-                message: "unknown action type \"\(spec.type)\"; expected setSection or activateContext"
+                message: "unknown action type \"\(spec.type)\"; P1 supports only setSection"
             )
         }
-    }
-
-    private static func makeItems(
-        selectors: [MenuBarItemService.ItemSelector]?,
-        bundleIDs: [String]?,
-        allowEmpty: Bool
-    ) throws -> [ItemIdentity] {
-        let suppliedSelectors = selectors ?? []
-        let rawIDs = bundleIDs ?? []
-        guard suppliedSelectors.isEmpty || rawIDs.isEmpty else {
-            throw TranslationError(message: "provide selectors or bundleIDs, not both")
-        }
-        guard allowEmpty || !suppliedSelectors.isEmpty || !rawIDs.isEmpty else {
-            throw TranslationError(message: "at least one selector or bundleID is required")
-        }
-        if !suppliedSelectors.isEmpty {
-            return try suppliedSelectors.map(makeIdentity)
-        }
-        return try rawIDs.map { raw in
-            guard let valid = AgentInput.validBundleID(raw) else {
-                throw TranslationError(message: "every bundleID must be reverse-DNS (letters, digits, dot, hyphen)")
-            }
-            return ItemIdentity(bundleID: valid)
-        }
-    }
-
-    private static func makeIdentity(
-        _ selector: MenuBarItemService.ItemSelector
-    ) throws -> ItemIdentity {
-        guard selector.version == 1 else {
-            throw TranslationError(message: "selector version must be 1")
-        }
-        guard
-            let namespace = selector.namespace.flatMap({ AgentInput.validName($0, maxLength: 256) }),
-            let title = selector.title.flatMap({ AgentInput.validName($0, maxLength: 256) }),
-            let bundleID = AgentInput.validBundleID(selector.sourceBundleID)
-        else {
-            throw TranslationError(
-                message: "every selector requires safe namespace, title, and source_bundle_id fields from list_items"
-            )
-        }
-        return ItemIdentity(bundleID: bundleID, namespace: namespace, title: title)
     }
 
     // MARK: - Helpers

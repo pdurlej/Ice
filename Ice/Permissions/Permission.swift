@@ -24,9 +24,6 @@ class Permission: ObservableObject, Identifiable {
     /// A Boolean value that indicates if the app can work without this permission.
     let isRequired: Bool
 
-    /// Recovery guidance shown while the permission is still missing.
-    let recoveryHint: String?
-
     /// The URL of the settings pane to open.
     private let settingsURL: URL?
 
@@ -55,7 +52,6 @@ class Permission: ObservableObject, Identifiable {
         title: String,
         details: [String],
         isRequired: Bool,
-        recoveryHint: String? = nil,
         settingsURL: URL?,
         check: @escaping () -> Bool,
         request: @escaping () -> Void
@@ -63,7 +59,6 @@ class Permission: ObservableObject, Identifiable {
         self.title = title
         self.details = details
         self.isRequired = isRequired
-        self.recoveryHint = recoveryHint
         self.settingsURL = settingsURL
         self.check = check
         self.request = request
@@ -73,18 +68,15 @@ class Permission: ObservableObject, Identifiable {
 
     /// Sets up the internal observers for the permission.
     private func configureCancellables() {
-        timerCancellable = Timer.publish(every: 1, on: .main, in: .common)
+        timerCancellable = Timer.publish(every: 1, on: .main, in: .default)
             .autoconnect()
             .merge(with: Just(.now))
             .sink { [weak self] _ in
-                self?.refresh()
+                guard let self else {
+                    return
+                }
+                hasPermission = check()
             }
-    }
-
-    /// Refreshes the permission from the system instead of relying on a
-    /// result captured before System Settings applied the user's change.
-    func refresh() {
-        hasPermission = check()
     }
 
     /// Performs the request and opens the System Settings app to the appropriate pane.
@@ -135,10 +127,7 @@ final class AccessibilityPermission: Permission {
                 "Arrange menu bar items.",
             ],
             isRequired: true,
-            recoveryHint: "If Ice is already enabled in System Settings, turn it off and back on, then return to Fire.",
-            settingsURL: URL(
-                string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-            ),
+            settingsURL: nil,
             check: {
                 AXHelpers.isProcessTrusted()
             },

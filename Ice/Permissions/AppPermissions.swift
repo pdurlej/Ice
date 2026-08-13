@@ -3,7 +3,6 @@
 //  Ice
 //
 
-import AppKit
 import Combine
 import Foundation
 import OSLog
@@ -37,7 +36,7 @@ final class AppPermissions: ObservableObject {
     @Published private(set) var permissionsState: PermissionsState = .missing
 
     /// Storage for internal observers.
-    private var cancellables = Set<AnyCancellable>()
+    private var cancellable: AnyCancellable?
 
     /// The permissions required for full app functionality.
     var allPermissions: [Permission] {
@@ -52,19 +51,11 @@ final class AppPermissions: ObservableObject {
     /// Creates a new permissions manager.
     init() {
         self.updatePermissionsState()
-        Publishers.MergeMany(allPermissions.map { $0.$hasPermission })
+        self.cancellable = Publishers.MergeMany(allPermissions.map { $0.$hasPermission })
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.updatePermissionsState()
             }
-            .store(in: &cancellables)
-
-        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.refreshAll()
-            }
-            .store(in: &cancellables)
     }
 
     /// Updates the current permissions state.
@@ -75,13 +66,6 @@ final class AppPermissions: ObservableObject {
             permissionsState = .hasRequired
         } else {
             permissionsState = .missing
-        }
-    }
-
-    /// Refreshes all permission values after returning from System Settings.
-    func refreshAll() {
-        for permission in allPermissions {
-            permission.refresh()
         }
     }
 

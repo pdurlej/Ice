@@ -98,7 +98,8 @@ final class MCPBackendStateManager {
                 displayBounds.contains(CGPoint(x: window.bounds.midX, y: window.bounds.midY))
             }
 
-            guard let hiddenBoundary,
+            guard let visibleBoundary,
+                  let hiddenBoundary,
                   let alwaysHiddenBoundary
             else {
                 logger.notice(
@@ -165,22 +166,10 @@ final class MCPBackendStateManager {
         let app = NSRunningApplication(processIdentifier: resolvedPID)
         let bundleID = app?.bundleIdentifier ?? window.ownerName ?? "unknown"
         let displayName = app?.localizedName ?? window.title ?? window.ownerName
-        let namespace = app?.bundleIdentifier ?? app?.localizedName
-        let selector: MenuBarItemService.ItemSelector?
-        if let namespace, !namespace.isEmpty, let title = window.title, !title.isEmpty {
-            selector = MenuBarItemService.ItemSelector(
-                namespace: namespace,
-                title: title,
-                sourceBundleID: bundleID
-            )
-        } else {
-            selector = nil
-        }
 
         return MenuBarItemService.ItemInfo(
             bundleID: bundleID,
             displayName: displayName,
-            selector: selector,
             windowID: window.windowID,
             section: section,
             position: position,
@@ -228,7 +217,6 @@ final class MCPBackendStateManager {
     /// (the Layout-editor code path), so it handles every section.
     func moveItem(
         bundleID: String,
-        selector: MenuBarItemService.ItemSelector? = nil,
         toSection: MenuBarItemService.ItemSection,
         toIndex: Int?
     ) async -> (success: Bool, message: String?) {
@@ -240,22 +228,14 @@ final class MCPBackendStateManager {
         // round-tripping to Ice, so we can return a fast, clear error.
         let windowIDs = Bridging.getMenuBarWindowList(option: .itemsOnly)
         let allWindows = WindowInfo.createWindows(from: windowIDs)
-        let candidates = findWindows(bundleID: bundleID, selector: selector, in: allWindows)
-        guard !candidates.isEmpty else {
-            return (false, "Item '\(selectorDescription(bundleID: bundleID, selector: selector))' not found in menu bar")
-        }
-        if selector == nil, candidates.count > 1 {
-            return (
-                false,
-                "Bundle ID '\(bundleID)' matches \(candidates.count) menu bar items. Use the exact selector returned by list_items."
-            )
+        guard findWindow(for: bundleID, in: allWindows) != nil else {
+            return (false, "Item with bundle ID '\(bundleID)' not found in menu bar")
         }
 
         let command = MCPWriteChannel.Command(
             id: UUID().uuidString,
             op: "move",
             bundleID: bundleID,
-            selector: selector,
             toSection: toSection.rawValue,
             toIndex: toIndex,
             createdAt: Date().timeIntervalSince1970
@@ -265,25 +245,19 @@ final class MCPBackendStateManager {
         guard case .move(let result)? = await RelayQueue.shared.submitAndWait(.move(command), timeout: 15) else {
             return (
                 false,
-                "Fire did not respond within 15s. Make sure Fire is running and has Accessibility permission."
+                "Ice did not respond within 15s. Make sure Ice (Fire) is running and has Accessibility permission."
             )
         }
         logger.info("moveItem relay result for \(bundleID): success=\(result.success)")
         return (result.success, result.message)
     }
 
-    func hideItem(
-        bundleID: String,
-        selector: MenuBarItemService.ItemSelector? = nil
-    ) async -> (success: Bool, message: String?) {
-        await moveItem(bundleID: bundleID, selector: selector, toSection: .hidden, toIndex: nil)
+    func hideItem(bundleID: String) async -> (success: Bool, message: String?) {
+        await moveItem(bundleID: bundleID, toSection: .hidden, toIndex: nil)
     }
 
-    func showItem(
-        bundleID: String,
-        selector: MenuBarItemService.ItemSelector? = nil
-    ) async -> (success: Bool, message: String?) {
-        await moveItem(bundleID: bundleID, selector: selector, toSection: .alwaysVisible, toIndex: nil)
+    func showItem(bundleID: String) async -> (success: Bool, message: String?) {
+        await moveItem(bundleID: bundleID, toSection: .alwaysVisible, toIndex: nil)
     }
 
     /// Applies a previously saved layout by replaying each item's
@@ -319,7 +293,7 @@ final class MCPBackendStateManager {
             for entry in sorted {
                 guard let bundleID = entry["bundleID"] as? String else { continue }
                 let result = await moveItem(
-                    bundleID: bundleID, selector: nil, toSection: section, toIndex: nil
+                    bundleID: bundleID, toSection: section, toIndex: nil
                 )
                 if result.success {
                     moved += 1
@@ -343,48 +317,26 @@ final class MCPBackendStateManager {
     /// Checks both ownerPID (pre-macOS 26 / non-Control-Center items)
     /// and sourcePID via SourcePIDCache (macOS 26 Control Center
     /// reparented items).
-    private func findWindows(
-        bundleID: String,
-        selector: MenuBarItemService.ItemSelector?,
-        in windows: [WindowInfo]
-    ) -> [WindowInfo] {
+    private func findWindow(
+        for bundleID: String, in windows: [WindowInfo]
+    ) -> WindowInfo? {
         guard bundleID != Self.iceBundleID else {
-            return []
+            return nil
         }
-        return windows.filter { window in
-            let sourcePID = SourcePIDCache.shared.pid(for: window)
-            let source = sourcePID.flatMap(NSRunningApplication.init(processIdentifier:))
-            let owner = NSRunningApplication(processIdentifier: window.ownerPID)
-            let resolvedBundleID = source?.bundleIdentifier ?? owner?.bundleIdentifier
-
-            if let selector, selector.isExact {
-                let namespace = source?.bundleIdentifier ?? source?.localizedName
-                    ?? owner?.bundleIdentifier ?? window.ownerName ?? owner?.localizedName
-                return namespace == selector.namespace
-                    && (window.title ?? "") == selector.title
-                    && resolvedBundleID == selector.sourceBundleID
-            }
-
+        return windows.first { window in
             // Try ownerPID first (cheap).
-            if owner?.bundleIdentifier == bundleID {
+            if let owner = NSRunningApplication(processIdentifier: window.ownerPID),
+               owner.bundleIdentifier == bundleID {
                 return true
             }
             // Fall back to sourcePID (AX scan).
-            if source?.bundleIdentifier == bundleID {
+            if let sourcePID = SourcePIDCache.shared.pid(for: window),
+               let source = NSRunningApplication(processIdentifier: sourcePID),
+               source.bundleIdentifier == bundleID {
                 return true
             }
             return false
         }
-    }
-
-    private func selectorDescription(
-        bundleID: String,
-        selector: MenuBarItemService.ItemSelector?
-    ) -> String {
-        guard let selector, let namespace = selector.namespace, let title = selector.title else {
-            return bundleID
-        }
-        return "\(namespace):\(title)"
     }
 
     // MARK: - Save Layout / List Layouts (read-side write - implemented)
@@ -394,7 +346,7 @@ final class MCPBackendStateManager {
 
         let items = await listItems(section: nil)
         guard !items.isEmpty else {
-            logger.error("saveLayout: no items to snapshot - Fire may not be running")
+            logger.error("saveLayout: no items to snapshot - Ice may not be running")
             return nil
         }
 
@@ -484,17 +436,14 @@ final class MCPBackendStateManager {
         )
         guard let result = await sendTriggerProposal(proposal, timeout: 120) else {
             return (false, nil, false,
-                    "Fire did not respond. Make sure Fire is running, then approve the prompt within two minutes.")
+                    "Ice did not respond. Make sure Fire is running, then approve the prompt within two minutes.")
         }
         return (result.success, result.triggerID, result.enabled, result.message)
     }
 
     /// Lists installed triggers by asking Ice main app (the authoritative
     /// `TriggerStore` owner). Read-only; short deadline.
-    func listTriggers() async -> (
-        triggers: [MenuBarItemService.TriggerSummary],
-        error: String?
-    ) {
+    func listTriggers() async -> [MenuBarItemService.TriggerSummary] {
         logger.debug("listTriggers() via bridge")
         let proposal = MCPTriggerChannel.Proposal(
             id: UUID().uuidString,
@@ -504,12 +453,9 @@ final class MCPBackendStateManager {
             createdAt: Date().timeIntervalSince1970
         )
         guard let result = await sendTriggerProposal(proposal, timeout: 10) else {
-            return (
-                [],
-                "Fire did not respond within 10s. Make sure Fire is running and its local MCP server is enabled."
-            )
+            return []
         }
-        return (result.triggers ?? [], nil)
+        return result.triggers ?? []
     }
 
     /// Proposes removing a trigger by id. The main app confirms before deleting.
@@ -531,7 +477,7 @@ final class MCPBackendStateManager {
         )
         guard let result = await sendTriggerProposal(proposal, timeout: 60) else {
             return (false, nil,
-                    "Fire did not respond. Make sure Fire is running, then confirm the removal prompt.")
+                    "Ice did not respond. Make sure Fire is running, then confirm the removal prompt.")
         }
         return (result.success, result.triggerID, result.message)
     }

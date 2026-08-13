@@ -4,6 +4,7 @@
 //
 
 import Combine
+import Foundation
 import SwiftUI
 
 // MARK: - AdvancedSettings
@@ -71,6 +72,10 @@ final class AdvancedSettings: ObservableObject {
     /// are `true`.
     @Published var mcpNotifyOnWrite = true
 
+    /// Top-level opt-in for every agent/context runtime. Menu bar management
+    /// stays fully functional while this is off.
+    @Published var contextsAndAgentsEnabled = false
+
     /// Storage for internal observers.
     private var cancellables = Set<AnyCancellable>()
 
@@ -93,9 +98,17 @@ final class AdvancedSettings: ObservableObject {
         Defaults.ifPresent(key: .showOnHoverDelay, assign: &showOnHoverDelay)
         Defaults.ifPresent(key: .tempShowInterval, assign: &tempShowInterval)
         Defaults.ifPresent(key: .shareDiagnostics, assign: &shareDiagnostics)
-        Defaults.ifPresent(key: .mcpServerEnabled, assign: &mcpServerEnabled)
-        Defaults.ifPresent(key: .mcpAllowWrites, assign: &mcpAllowWrites)
         Defaults.ifPresent(key: .mcpNotifyOnWrite, assign: &mcpNotifyOnWrite)
+        let optionalFeatureState = FireFeaturePolicy.initialOptionalFeatureState(
+            storedContextsAndAgentsEnabled: Defaults.object(forKey: .contextsAndAgentsEnabled) as? Bool,
+            storedMCPServerEnabled: Defaults.object(forKey: .mcpServerEnabled) as? Bool,
+            storedMCPAllowWrites: Defaults.object(forKey: .mcpAllowWrites) as? Bool,
+            legacyAIQuotasEnabled: Defaults.bool(forKey: .enableAIQuotas),
+            hasStoredTriggers: UserDefaults.standard.data(forKey: "Triggers") != nil
+        )
+        contextsAndAgentsEnabled = optionalFeatureState.contextsAndAgentsEnabled
+        mcpServerEnabled = optionalFeatureState.mcpServerEnabled
+        mcpAllowWrites = optionalFeatureState.mcpAllowWrites
 
         Defaults.ifPresent(key: .sectionDividerStyle) { rawValue in
             if let style = SectionDividerStyle(rawValue: rawValue) {
@@ -182,6 +195,13 @@ final class AdvancedSettings: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { notify in
                 Defaults.set(notify, forKey: .mcpNotifyOnWrite)
+            }
+            .store(in: &c)
+
+        $contextsAndAgentsEnabled
+            .receive(on: DispatchQueue.main)
+            .sink { enabled in
+                Defaults.set(enabled, forKey: .contextsAndAgentsEnabled)
             }
             .store(in: &c)
 

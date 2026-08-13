@@ -15,35 +15,6 @@
 import Foundation
 
 enum TriggerNarrator {
-    static func capabilityName(_ action: TriggerAction) -> String {
-        if case .activateContext = action {
-            return "Context Scene"
-        }
-        return "menu-bar automation"
-    }
-
-    static func installDescription(_ rule: TriggerRule) -> String {
-        """
-        \(rule.name)
-
-        When \(describe(rule.condition)), Fire will \(describe(rule.onEnter)).
-
-        This \(capabilityName(rule.onEnter)) can then run without asking again. \
-        Any change to its condition, items, destination, or Fireline payload \
-        requires your approval again.
-        """
-    }
-
-    static func removalDescription(_ rule: TriggerRule) -> String {
-        """
-        \(rule.name)
-
-        This \(capabilityName(rule.onEnter)) (when \(describe(rule.condition)), \
-        \(describe(rule.onEnter))) will be deleted. You can re-create it later, \
-        but its approval will need to be granted again.
-        """
-    }
-
     /// A human sentence fragment for a condition, e.g.
     /// "“com.tinyspeck.slackmacgap” becomes the frontmost app".
     static func describe(_ condition: TriggerCondition) -> String {
@@ -74,12 +45,7 @@ enum TriggerNarrator {
         guard !moves.isEmpty else { return "make no changes" }
         let grouped = Dictionary(grouping: moves, by: { $0.toSection })
         let parts = grouped.map { section, items -> String in
-            let names = items.map { move -> String in
-                if let title = move.item.title {
-                    return "“\(title)” (\(move.bundleID))"
-                }
-                return "“\(move.bundleID)”"
-            }.joined(separator: ", ")
+            let names = items.map { "“\($0.bundleID)”" }.joined(separator: ", ")
             return "move \(names) to \(Self.sectionName(section))"
         }
         return parts.sorted().joined(separator: "; ")
@@ -87,25 +53,7 @@ enum TriggerNarrator {
 
     /// A human sentence fragment for a whole action.
     static func describe(_ action: TriggerAction) -> String {
-        switch action {
-        case .setSection, .applyLayoutSnapshot:
-            return describe(action.writeSet)
-        case .activateContext(let context):
-            var parts: [String] = []
-            if !context.moves.isEmpty {
-                parts.append(describe(context.moves))
-            }
-            switch context.fireline {
-            case .hidden:
-                parts.append("hide Fireline")
-            case .quota(let provider):
-                parts.append("show \(provider.rawValue.capitalized) limits in Fireline")
-            case .menuBarItem(let item):
-                let name = item.title ?? item.bundleID
-                parts.append("show “\(name)” in Fireline")
-            }
-            return parts.joined(separator: "; ")
-        }
+        describe(action.writeSet)
     }
 
     static func sectionName(_ section: TriggerSection) -> String {

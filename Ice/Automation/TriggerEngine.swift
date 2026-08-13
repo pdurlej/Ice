@@ -20,17 +20,18 @@ import OSLog
 
 @MainActor
 final class TriggerEngine {
-    private weak var appState: AppState?
     private var cancellables = Set<AnyCancellable>()
 
     /// In-memory edge state (per-tick level), not persisted on every poll.
     private var levelState: [UUID: Bool] = [:]
     private var lastFired: [UUID: Date] = [:]
+    private var isRunning = false
 
     private let logger = Logger(category: "TriggerEngine")
 
-    func performSetup(with appState: AppState) {
-        self.appState = appState
+    func performSetup() {
+        guard !isRunning else { return }
+        isRunning = true
         TriggerStore.shared.load()
 
         // Seed edge + cooldown state from persistence WITHOUT firing — BEFORE
@@ -54,6 +55,15 @@ final class TriggerEngine {
         logger.debug("Trigger engine active (\(TriggerStore.shared.rules.count) rule(s))")
     }
 
+    func stop() {
+        guard isRunning else { return }
+        isRunning = false
+        cancellables.removeAll()
+        levelState.removeAll()
+        lastFired.removeAll()
+        logger.debug("Trigger engine stopped")
+    }
+
     /// Seeds in-memory edge state (`levelState`) and cross-launch cooldown
     /// (`lastFired`) from persistence WITHOUT firing. Two fixes in one:
     /// - No re-fire on launch: an automation whose condition is already true at
@@ -75,11 +85,9 @@ final class TriggerEngine {
     /// Re-reads rules after an install / remove / enable change.
     func reload() {
         TriggerStore.shared.load()
-        if FirelineActivationState.shouldDeactivate(
-            activeRuleID: appState?.firelineContextController.activeRuleID,
-            rules: TriggerStore.shared.rules
-        ) {
-            appState?.firelineContextController.deactivate()
+        guard TriggerRuntimePolicy.shouldEvaluate(isRunning: isRunning) else {
+            logger.debug("Trigger rules reloaded while runtime is paused")
+            return
         }
         evaluateAll(reason: "reload")
     }
@@ -87,6 +95,7 @@ final class TriggerEngine {
     // MARK: Evaluation
 
     private func evaluateAll(reason: String) {
+        guard TriggerRuntimePolicy.shouldEvaluate(isRunning: isRunning) else { return }
         for rule in TriggerStore.shared.rules where rule.enabled {
             let now = currentLevel(rule)
             let previous = levelState[rule.id] ?? false
@@ -122,9 +131,6 @@ final class TriggerEngine {
         Task {
             let result = await MenuBarMutationCoordinator.shared.enqueue(job)
             logger.log("Trigger \(rule.id, privacy: .public) result success=\(result.success) moved=\(result.movedCount)")
-            if result.success {
-                appState?.firelineContextController.activate(rule: rule)
-            }
         }
     }
 

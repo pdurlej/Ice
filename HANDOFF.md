@@ -5,58 +5,27 @@ Owner (pdurlej) will tell me to read this in a fresh session. **Codex / other
 agents: start with `AGENTS.md` at the repo root** — it has the current live/main
 state and the gotchas; this file is the deep history.
 
-## ✅ CURRENT STATE (2026-07-14) — 1.0.20 Surfaces recovery candidate
+## ✅ CURRENT STATE (2026-08-14) — fire.10.7.3 live; 10.8 Safe Core local
 
-`v1.0.19` “Ignition” (build 1178, release commit `d0c5165`) is a public GitHub
-release, signed and notarized by CI, and installed at `/Applications/Ice.app` on
-the owner's machine. It fixed the macOS 26 zero-size window regression and moved
-Sentry-confirmed FIRE-W menu-bar capture plus pixel averaging off the main
-thread. Signed Finder/CLI reopen, full-size Settings, `fire doctor` (13 tools),
-`contexts`, `list_triggers`, `list_items`, deep codesign, stapler, Gatekeeper,
-TCC preservation, and helper recovery passed. FIRE-X is local DerivedData noise,
-not a shipped regression. None of the 1.0 versions is on the Sparkle appcast;
-the live appcast still ends at `v0.11.13-fire.10.7.3` (build 1158).
+`v0.11.13-fire.10.7.3` (build 1158, release commit `3865907`) is the newest
+signed version on the Sparkle appcast and the only release base for 10.8. The
+Ignition line remains preserved for reference but is not fixed forward.
 
-Runtime inspection found one further no-ship defect: Surfaces could stay forever
-on “Loading menu bar items…” when macOS stopped exposing Fire's hidden-section
-divider to the app-local window-list query. Both permissions were granted, the
-Control Center Menu Bar switch was on, CLI discovery worked, and restarting the
-signed MenuBarItemService helper did not repair it. `v1.0.20` (build 1179) is the
-local candidate: it gives caching explicit states and adds an in-app `Repair and
-Retry` path that re-registers only Fire's own hidden divider while preserving
-its preferred position. System Settings is a fallback rather than the first
-instruction. SwiftLint (135 files), all 40 FireLogic tests, `git diff --check`,
-and the unsigned all-target Xcode build pass.
+`codex/fire-10.8` is an unshipped Safe Core candidate based directly on
+`3865907`. Public issue #18 is its release contract; #19–#21 define the next
+three releases. The candidate keeps the core menu bar runtime independent from
+one top-level Contexts & Agents opt-in, ports bounded XPC deadlines, and hardens
+CI/release/appcast gates. Fireline is deliberately absent. No push, tag,
+prerelease, install, Latest promotion, or appcast update is implied by this
+handoff.
 
-The signed 1.0.20 self-repair/FIRE-W/window smoke, two reference scenes,
-VoiceOver/runtime accessibility, recovery controls, and a release-specific
-Sentry recheck remain the final gates. FIRE-V was a false authorization-modal
-App Hang; 1.0.10 and later suppress it only while the narrow capture-time marker
-is active.
-
-### Pending human gate (do not bypass)
-
-With the owner present, run these one at a time and have him click **Install and
-Enable** in Fire:
-
-```bash
-/Applications/Ice.app/Contents/MacOS/fire call set_context '{"name":"Coding","condition":{"type":"appFocus","bundle_id":"com.openai.codex","focus_state":"active"},"action":{"type":"activateContext","fireline_type":"quota","fireline_provider":"codex"},"cooldown_seconds":5}'
-
-/Applications/Ice.app/Contents/MacOS/fire call set_context '{"name":"Mail","condition":{"type":"appFocus","bundle_id":"com.apple.mail","focus_state":"active"},"action":{"type":"activateContext","fireline_type":"menuBarItem","fireline_selector":{"version":1,"namespace":"85C27NK92C.com.flexibits.fantastical2.mac.helper","title":"Fantastical","source_bundle_id":"85C27NK92C.com.flexibits.fantastical2.mac.helper"}},"cooldown_seconds":5}'
-```
-
-The selectors were revalidated against the live signed app on 2026-07-14. After
-both scenes are installed, verify `contexts`, focus behavior, and Sentry, then
-publish with:
-
-```bash
-scripts/publish-appcast.sh v1.0.20 --notes-file docs/releases/1.0.20.html
-```
-
-The owner must handle the local Sparkle Keychain prompt. Verify raw GitHub and
-Pages both contain short version `1.0.20`, build `1179`, before calling Ignition
-live. The public issues still open are #5, #7, #11, and #13; #7's item-frame
-query stays live by design.
+Sentry checkpoint (2026-07-13 03:09 CEST): 10.7.2 has zero error events;
+FIRE-P/N remain quiet. FIRE-Q (open `NSMenu`) and archived FIRE-J (modal dialog)
+are false App Hangs, but the client-side `beforeSend` filter based on
+`frame.function` did not suppress them reliably. The historical sections below
+describe the intent at the time, not proof that filtering works. It is plausible
+but unproven that final function names arrive only after server-side
+symbolication.
 
 ## 🧭 RESUME HERE (2026-06-19, HEAD `ac135a5`, tree CLEAN)
 
@@ -105,7 +74,7 @@ query stays live by design.
   in `runModal`/`SPUStandardUserDriver`/`NSAlert` (crashes never dropped). So our
   consent prompts + Sparkle modals no longer generate ANR noise.
 - **Tests:** `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun
-  swift test --package-path FireLogic` (29 tests; needs the Xcode toolchain —
+  swift test --package-path FireLogic` (use the runner's reported count; needs the Xcode toolchain —
   plain `swift test` lacks XCTest). Compile-gate the app:
   `DEVELOPER_DIR=…/Xcode xcodebuild -project Ice.xcodeproj -scheme Ice
   -configuration Debug -destination 'platform=macOS' CODE_SIGN_IDENTITY=""

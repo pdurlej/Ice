@@ -75,13 +75,13 @@ struct GeneralSettingsPane: View {
 
     @ViewBuilder
     private var showIceIcon: some View {
-        Toggle("Show Fire icon", isOn: $settings.showIceIcon)
-            .annotation("Click to show hidden menu bar items. Right-click to access Fire settings.")
+        Toggle("Show Ice icon", isOn: $settings.showIceIcon)
+            .annotation("Click to show hidden menu bar items. Right-click to access Ice's settings.")
     }
 
     @ViewBuilder
     private var iceIconPicker: some View {
-        let labelKey = LocalizedStringKey("Fire icon")
+        let labelKey = LocalizedStringKey("Ice icon")
 
         IceMenu(labelKey) {
             Picker(labelKey, selection: $settings.iceIcon) {
@@ -155,7 +155,7 @@ struct GeneralSettingsPane: View {
     @ViewBuilder
     private func iceIconMenuItem(for imageSet: ControlItemImageSet) -> some View {
         Label {
-            Text(imageSet.name == .iceCube ? "Cube" : imageSet.name.rawValue)
+            Text(imageSet.name.rawValue)
         } icon: {
             if let nsImage = imageSet.hidden.nsImage(for: appState) {
                 switch imageSet.name {
@@ -182,7 +182,7 @@ struct GeneralSettingsPane: View {
 
     @ViewBuilder
     private var useIceBar: some View {
-        Toggle("Use Hidden Items Bar", isOn: $settings.useIceBar)
+        Toggle("Use Ice Bar", isOn: $settings.useIceBar)
             .annotation("Show hidden menu bar items in a separate bar below the menu bar.")
     }
 
@@ -196,11 +196,11 @@ struct GeneralSettingsPane: View {
         .annotation {
             switch settings.iceBarLocation {
             case .dynamic:
-                Text("The Hidden Items Bar location changes based on context.")
+                Text("The Ice Bar's location changes based on context.")
             case .mousePointer:
-                Text("The Hidden Items Bar is centered below the mouse pointer.")
+                Text("The Ice Bar is centered below the mouse pointer.")
             case .iceIcon:
-                Text("The Hidden Items Bar is centered below the Fire icon.")
+                Text("The Ice Bar is centered below the Ice icon.")
             }
         }
     }

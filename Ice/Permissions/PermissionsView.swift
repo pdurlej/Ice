@@ -41,9 +41,6 @@ struct PermissionsView: View {
         .padding(.horizontal)
         .frame(width: 550)
         .fixedSize()
-        .onAppear {
-            manager.refreshAll()
-        }
     }
 
     @ViewBuilder
@@ -65,14 +62,11 @@ struct PermissionsView: View {
     private var explanationBox: some View {
         IceSection {
             VStack {
-                Text("Fire needs your permission to manage the menu bar.")
+                Text("Ice needs your permission to manage the menu bar.")
                     .fontWeight(.medium)
                 Text("Absolutely no personal information is collected or stored.")
                     .bold()
                     .foregroundStyle(Color(red: 0.5, green: 0.75, blue: 1))
-                Text("macOS may list Fire as Ice to preserve your existing permission grants.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
             .padding()
         }
@@ -141,7 +135,7 @@ struct PermissionsView: View {
                     .underline()
 
                 VStack(spacing: 2) {
-                    Text("Fire needs this to:")
+                    Text("Ice needs this to:")
                         .font(.title3)
                         .bold()
 
@@ -172,16 +166,8 @@ struct PermissionsView: View {
                 }
                 .allowsHitTesting(!permission.hasPermission)
 
-                if !permission.hasPermission, let recoveryHint = permission.recoveryHint {
-                    Text(recoveryHint)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .accessibilityLabel(recoveryHint)
-                }
-
                 if !permission.isRequired {
-                    CalloutBox("Fire can work in a limited mode without this permission.") {
+                    CalloutBox("Ice can work in a limited mode without this permission.") {
                         Image(systemName: "checkmark.shield")
                             .foregroundStyle(.green)
                     }

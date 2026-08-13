@@ -57,9 +57,6 @@ struct LocalTime: Codable, Equatable {
 /// widened action set later (privilege expansion). Bind to content.
 enum TriggerAction: Codable, Equatable {
     case setSection(items: [ItemIdentity], section: TriggerSection)
-    /// Fire 1.0 Context Scene: an exact set of optional menu-bar moves plus
-    /// one ambient Fireline payload. The whole action is sealed together.
-    case activateContext(ContextSceneAction)
     /// Layout bound by content digest. If the layout changes, the trigger is
     /// disabled until re-approved.
     case applyLayoutSnapshot(layoutID: UUID, layoutDigest: String, moves: [MovePlan])
@@ -69,120 +66,22 @@ enum TriggerAction: Codable, Equatable {
     var writeSet: [MovePlan] {
         switch self {
         case .setSection(let items, let section):
-            return items.map { MovePlan(item: $0, toSection: section) }
-        case .activateContext(let context):
-            return context.moves
+            return items.map { MovePlan(bundleID: $0.bundleID, toSection: section) }
         case .applyLayoutSnapshot(_, _, let moves):
             return moves
         }
     }
-
-    /// Whether this action can remain in the pre-1.0 `Triggers` defaults
-    /// payload. Fire 10.7.3 decodes that array atomically, so one new enum case
-    /// or exact selector would otherwise hide every legacy automation after a
-    /// rollback until Fire 1.0 was reinstalled.
-    var isLegacyStorageCompatible: Bool {
-        switch self {
-        case .setSection(let items, _):
-            return items.allSatisfy { !$0.isExact }
-        case .applyLayoutSnapshot(_, _, let moves):
-            return moves.allSatisfy { !$0.item.isExact }
-        case .activateContext:
-            return false
-        }
-    }
 }
 
-struct ContextSceneAction: Codable, Equatable {
-    let moves: [MovePlan]
-    let fireline: FirelinePayload
-}
-
-enum FirelinePayload: Codable, Equatable {
-    case hidden
-    case quota(FirelineQuotaProvider)
-    case menuBarItem(ItemIdentity)
-}
-
-enum FirelineQuotaProvider: String, Codable, Equatable, CaseIterable {
-    case codex
-    case claude
-    case antigravity
-    case ollama
-}
-
-/// Stable identity for one menu bar item.
-///
-/// Fire 1.0 persists the existing tag identity (`namespace + title`) so two
-/// status items from the same app cannot be confused. `bundleID` remains
-/// required for compatibility with pre-1.0 rules and for useful diagnostics.
-/// A legacy bundle-only identity is permitted, but execution must reject it if
-/// it resolves to zero or multiple manageable items.
+/// Stable identity for a menu bar item. P1: bundle ID; window/title later.
 struct ItemIdentity: Codable, Equatable {
     let bundleID: String
-    let namespace: String?
-    let title: String?
-
-    init(bundleID: String, namespace: String? = nil, title: String? = nil) {
-        self.bundleID = bundleID
-        self.namespace = namespace
-        self.title = title
-    }
-
-    var isExact: Bool {
-        namespace != nil && title != nil
-    }
-
-    /// Canonical key used by sealed grants. Legacy identities intentionally
-    /// keep the old bundle-only key so existing approvals remain valid.
-    var canonicalKey: String {
-        guard let namespace, let title else { return bundleID }
-        return "v1:\(namespace.utf8.count):\(namespace):\(title.utf8.count):\(title):\(bundleID.utf8.count):\(bundleID)"
-    }
 }
 
-/// One resolved move in an action plan.
+/// One resolved move in an action plan: move `bundleID` to `toSection`.
 struct MovePlan: Codable, Equatable {
-    let item: ItemIdentity
+    let bundleID: String
     let toSection: TriggerSection
-
-    /// Compatibility accessor for existing diagnostics and callers.
-    var bundleID: String { item.bundleID }
-
-    init(item: ItemIdentity, toSection: TriggerSection) {
-        self.item = item
-        self.toSection = toSection
-    }
-
-    init(bundleID: String, toSection: TriggerSection) {
-        self.init(item: ItemIdentity(bundleID: bundleID), toSection: toSection)
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case item, bundleID, toSection
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        if let item = try container.decodeIfPresent(ItemIdentity.self, forKey: .item) {
-            self.item = item
-        } else {
-            // Decode grants/layout snapshots written before Fire 1.0.
-            self.item = ItemIdentity(bundleID: try container.decode(String.self, forKey: .bundleID))
-        }
-        self.toSection = try container.decode(TriggerSection.self, forKey: .toSection)
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        if item.isExact {
-            try container.encode(item, forKey: .item)
-        } else {
-            // Preserve the legacy canonical wire shape for bundle-only rules.
-            try container.encode(item.bundleID, forKey: .bundleID)
-        }
-        try container.encode(toSection, forKey: .toSection)
-    }
 }
 
 /// P1 ships only edge-on-enter actions; no false-edge reversion (deceptively
@@ -231,13 +130,6 @@ struct TriggerRule: Codable, Identifiable, Equatable {
         self.priority = priority
         self.cooldown = cooldown
         self.lastFiredAt = lastFiredAt
-    }
-}
-
-enum FirelineActivationState {
-    static func shouldDeactivate(activeRuleID: UUID?, rules: [TriggerRule]) -> Bool {
-        guard let activeRuleID else { return false }
-        return !rules.contains { $0.id == activeRuleID && $0.enabled }
     }
 }
 

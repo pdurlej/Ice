@@ -27,10 +27,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if #available(macOS 26.0, *) {
-            FireMCPBridgeServer.shared.start()
-        }
-
         // Hide the main menu's items to add additional space to the
         // menu bar when we are the focused app.
         for item in NSApp.mainMenu?.items ?? [] {
@@ -83,12 +79,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
         return true
-    }
-
-    func applicationWillTerminate(_ notification: Notification) {
-        if #available(macOS 26.0, *) {
-            FireMCPBridgeServer.shared.stop()
-        }
     }
 
     // MARK: Other Methods
@@ -168,13 +158,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         || (exception.type?.localizedCaseInsensitiveContains("app hang") ?? false)
                 }
                 guard isAppHang else { return event }
-
-                // Unlike symbol matching below, this marker is available at
-                // capture time. It covers only Fire's explicit authorization
-                // alerts while their AppKit modal run loop is active.
-                if ExpectedAuthorizationModal.isActive {
-                    return nil
-                }
 
                 let modalMarkers = [
                     "runModal", "runModalSession", "beginSheetModal",

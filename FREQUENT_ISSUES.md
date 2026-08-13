@@ -11,18 +11,23 @@ By default, macOS adds new items to the far left of the menu bar, which is also 
 to remember the positions of their items, but some are not. macOS treats the items of these apps as new items each time they appear. This results in
 these items appearing in the always-hidden section, even if they have been previously been moved.
 
-Ice does not currently manage individual items, and in fact cannot, as of the current release. Once issues
-[#6](https://github.com/jordanbaird/Ice/issues/6) and [#26](https://github.com/jordanbaird/Ice/issues/26) are implemented, Ice will be able to
-monitor the items in the menu bar, and move the ones it recognizes to their previous locations, even if macOS rearranges them.
+Fire can inspect and move individual items through its Layout editor and its
+optional MCP integration. It does not automatically restore every item that an
+application recreates or that macOS moves. Use Settings → Menu Bar Layout to
+place the item again; agent writes remain off unless explicitly enabled.
 
 ## Ice removed an item
 
-Ice does not have the ability to move or remove items. It likely got placed in the always-hidden section by macOS. Option + click the Ice icon to show
-the always-hidden section, then Command + drag the item into a different section.
+Fire does not uninstall another app's status item. It may be in the
+always-hidden section after macOS recreated or repositioned it. Option + click
+the Fire icon to reveal that section, then Command + drag the item into the
+desired section, or use Settings → Menu Bar Layout.
 
 ## Ice does not remember the order of items
 
-This is not a bug, but a missing feature. It is being tracked in [#26](https://github.com/jordanbaird/Ice/issues/26).
+Fire persists the positions of its own section controls. Individual apps and
+macOS may recreate their status items with new positions, so order restoration
+is not guaranteed for every item.
 
 ## How do I solve the `Ice cannot arrange menu bar items in automatically hidden menu bars` error?
 

@@ -288,7 +288,7 @@ final class MenuBarItemImageCache: ObservableObject {
             guard
                 await appState.navigationState.isAppFrontmost,
                 await appState.navigationState.isSettingsPresented,
-                await appState.navigationState.settingsNavigationIdentifier == .surfaces
+                await appState.navigationState.settingsNavigationIdentifier == .menuBarLayout
             else {
                 return
             }

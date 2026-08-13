@@ -13,10 +13,7 @@ struct SettingsWindow: Scene {
     @StateObject private var model = SettingsWindowModel()
 
     var body: some Scene {
-        IceWindow(
-            id: .settings,
-            onWindowActionsReady: appState.registerWindowActions
-        ) {
+        IceWindow(id: .settings) {
             SettingsView(navigationState: appState.navigationState)
                 .onWindowChange { window in
                     model.observeWindowToolbar(window)

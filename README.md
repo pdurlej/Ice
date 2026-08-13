@@ -1,7 +1,7 @@
 <div align="center">
-    <img src="Resources/Banner.png" alt="Fire - a flame inside an ice cube on a blue-to-ember gradient">
-    <h1>Fire 🔥</h1>
-    <p><em>An AI-native macOS menu bar, built on <a href="https://github.com/jordanbaird/Ice">Ice</a>. Program the space around the menu bar with local agents and approved Context Scenes.</em></p>
+    <img src="Resources/Banner.png" alt="Fire from Ice - ice cube with inner flame on a blue-to-ember gradient">
+    <h1>Fire from Ice 🔥🧊</h1>
+    <p><em>AI-native maintained fork of <a href="https://github.com/jordanbaird/Ice">jordanbaird/Ice</a> - macOS 26 Tahoe support, signed/notarized DMGs, and an embedded MCP server so AI assistants can read your menu bar</em></p>
 </div>
 
 > [!IMPORTANT]
@@ -17,7 +17,9 @@ Multiple maintained forks of Ice exist - that's healthy for the ecosystem.
 - **Fire (this repo)** is an *AI-native* fork. The differentiator is the embedded MCP server (Model Context Protocol) - AI assistants like Claude, Cursor, and Codex can read and (in fire.7+) modify your menu bar layout. **Pick Fire** if you want to experiment with AI-assisted menu bar management.
 - **upstream [jordanbaird/Ice](https://github.com/jordanbaird/Ice)** remains the canonical project - both Thaw and Fire honor that. Bugs found in either fork that exist upstream should be filed upstream first.
 
-Fire is maintained by Piotr Durlej with AI coding agents as implementation collaborators. The product keeps Ice's excellent menu bar management foundation, then adds a local, approval-gated programming surface for Codex, Claude Code, OpenCode, and other MCP clients.
+Fire is maintained by a non-developer running product / vision, with Claude (Anthropic's AI) as the implementation collaborator. That's the experiment - keeping useful software alive when the maintainer cohort isn't there to write the code by hand.
+
+Ice is a powerful menu bar management tool for macOS. While its primary function is hiding and showing menu bar items, it covers many additional features that make it one of the most versatile menu bar tools available.
 
 ![Banner](https://github.com/user-attachments/assets/4423085c-4e4b-4f3d-ad0f-90a217c03470)
 
@@ -26,15 +28,7 @@ Fire is maintained by Piotr Durlej with AI coding agents as implementation colla
 ![Signed](https://img.shields.io/badge/Developer%20ID-signed%20%2B%20notarized-success?style=flat-square)
 [![License](https://img.shields.io/github/license/pdurlej/fire-from-ice?style=flat-square)](LICENSE)
 
-## Fire 1.0 “Ignition”
-
-- **Context Scenes** bind an app, time, or battery condition to exact menu bar moves and one Fireline payload.
-- **Fireline** shows one useful thing below the notch or menu bar, such as local Codex quota or an exact status item.
-- **CLI and agent first:** Fire ships `fire doctor`, an MCP bridge, and one canonical `program-fire` skill for Codex, Claude Code, and OpenCode.
-- **Fire-authored approval:** agents propose; Fire displays and seals the exact condition, items, destinations, and Fireline payload before anything is installed.
-- **Local by design:** no network listener, no cloud account, and no telemetry expansion.
-
-## What the fork fixed
+## What this fork fixes
 
 | Symptom | Upstream issue | Fixed in |
 |---|---|---|
@@ -46,8 +40,8 @@ Fire is maintained by Piotr Durlej with AI coding agents as implementation colla
 
 ### Download the signed DMG
 
-1. Grab the latest `Fire-vX.Y.Z.dmg` from [Releases](https://github.com/pdurlej/fire-from-ice/releases/latest).
-2. Open the DMG. Drag **Fire** to your `Applications` folder. Its compatibility-preserving on-disk name remains `Ice.app`.
+1. Grab the latest `Ice-v0.11.13-fire.X.dmg` from [Releases](https://github.com/pdurlej/fire-from-ice/releases/latest).
+2. Open the DMG. Drag **Ice.app** to your `Applications` folder.
 3. Launch from `/Applications`. On first run, macOS may prompt for **Accessibility** and **Screen Recording** - grant both.
 
 The DMG is **signed** with `Developer ID Application: Piotr Durlej (R47JTHX25P)` and **stapled** with an offline notarization ticket. First launch works without an internet round-trip; Gatekeeper accepts on macOS 14 (Sonoma) and later, including Tahoe 26.x.
@@ -55,13 +49,12 @@ The DMG is **signed** with `Developer ID Application: Piotr Durlej (R47JTHX25P)`
 ### Verify the download (optional)
 
 ```sh
-shasum -a 256 Fire-v1.0.2.dmg
-spctl -avv --type install Fire-v1.0.2.dmg
-# expected: accepted, source=Notarized Developer ID,
-# origin=Developer ID Application: Piotr Durlej (R47JTHX25P)
-```
+shasum -a 256 Ice-v0.11.13-fire.4.dmg
+# expected: 231cbd038fb41242d7a298cdb7d46ac5f0f7c8a05ccef633668a13147a4b0e09
 
-The release page publishes GitHub's SHA-256 digest next to every asset; compare against that value rather than a checksum copied from an older README.
+spctl -avv --type install Ice-v0.11.13-fire.4.dmg
+# expected: accepted, source=Notarized Developer ID, origin=Developer ID Application: Piotr Durlej (R47JTHX25P)
+```
 
 ### Upgrading from upstream Ice, or from any Fire ad-hoc build (fire.0/.1/.2/.3)
 
@@ -75,11 +68,11 @@ open /Applications/Ice.app
 # then re-grant Accessibility (and Screen Recording if used) in System Settings
 ```
 
-All subsequent signed Fire updates preserve permissions automatically - no further reset is needed.
+All subsequent Fire updates (`fire.5+`, signed under the same Team ID) preserve permissions automatically - no further reset needed.
 
 ## Auto-updates (Sparkle)
 
-Fire ships with **Sparkle 2** wired to a custom appcast at <https://pdurlej.github.io/fire-releases/appcast.xml>. After installing Fire, **Check for Updates** in the Fire menu discovers new signed releases.
+Fire ships with **Sparkle 2.9.2** wired to a custom appcast at <https://pdurlej.github.io/fire-releases/appcast.xml>. After installing Ice, **Check for Updates** (Ice menu → Check for Updates) will auto-discover new Fire releases.
 
 The appcast is signed with **EdDSA** - the public key is embedded in the app's `Info.plist` (`SUPublicEDKey`), and the matching private key lives only in the maintainer's macOS Keychain. A network attacker who tampers with the GitHub Pages feed cannot inject a malicious update.
 
@@ -87,7 +80,7 @@ The appcast is signed with **EdDSA** - the public key is embedded in the app's `
 
 This fork keeps the upstream bundle ID `com.jordanbaird.Ice`, so it is a **drop-in replacement** for upstream Ice. Your existing Ice settings (`~/Library/Preferences/com.jordanbaird.Ice.plist`), hotkeys, and menu bar layout persist on upgrade.
 
-The compatibility identity is intentional in 1.0: the user-visible product is Fire, while `Ice.app`, `com.jordanbaird.Ice`, existing Defaults keys, Keychain services, and XPC service names remain unchanged so preferences, TCC grants, layouts, and Sparkle continuity survive the update.
+When Fire moves to Phase 4 of the [roadmap](FORK.md#phasing) (proper "Fire" rebrand with a new bundle ID and icon), a first-launch migration will copy your settings across so no state is lost.
 
 ## Building from source
 
@@ -102,9 +95,9 @@ The resulting `Ice.app` is unsigned (`ad-hoc`) and will need `tccutil reset` on 
 
 ## MCP Server
 
-Fire ships an embedded MCP server so you can ask a local AI assistant to manage your menu bar. Wire Claude Code, OpenCode, Cursor, or Codex to `/Applications/Ice.app/Contents/MacOS/IceMCPBridge` and 13 tools become available: direct layout tools, compatible automations, and Context Scenes (`set_context`, `list_contexts`, `remove_context`). Every write is consent-gated in Fire itself. See [docs/mcp/CLIENT-SETUP.md](docs/mcp/CLIENT-SETUP.md) for setup.
+Fire ships an embedded MCP server so you can ask an AI assistant to manage your menu bar. Wire Claude Desktop, Claude Code, Cursor, or Codex to `/Applications/Ice.app/Contents/MacOS/IceMCPBridge` and 10 tools become available: layout (`list_items`, `hide_item`, `show_item`, `move_item`, `save_layout`, `apply_layout`, `list_layouts`) and automations (`set_trigger`, `list_triggers`, `remove_trigger`). Every write is consent-gated in Fire itself. See [docs/mcp/CLIENT-SETUP.md](docs/mcp/CLIENT-SETUP.md) for setup.
 
-Ask your assistant for *“when I work in Codex, show my quota in Fireline”* or *“when I open Mail, surface Fantastical”*. Fire discovers exact identities, shows its own approval, and stores a tamper-evident grant. Contexts remain edge-triggered and never continuously fight manual menu bar changes; manage them in **Fire → Settings → Contexts**.
+**Automations (fire.10+):** ask your assistant for *"when Slack is frontmost, hide my password manager"*, approve the change once in Fire's consent prompt, and it runs on its own from then on - on app focus, low battery, or a weekly schedule. An automation is a sealed, user-approved capability bound to the exact items and destination you saw in the prompt; manage them in Settings → Automations.
 
 ## Privacy & Diagnostics
 

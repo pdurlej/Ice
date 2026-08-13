@@ -18,36 +18,34 @@ struct IceWindow<Content: View>: Scene {
     /// The window's content view.
     let content: Content
 
-    /// Receives actions connected to the live SwiftUI scene environment.
-    let onWindowActionsReady: (OpenWindowAction, DismissWindowAction) -> Void
-
     /// Creates a window with an identifier constant.
     ///
     /// - Parameters:
     ///   - id: A custom identifier constant.
     ///   - content: The content view to display in the window.
-    init(
-        id: IceWindowIdentifier,
-        onWindowActionsReady: @escaping (OpenWindowAction, DismissWindowAction) -> Void = { _, _ in },
-        @ViewBuilder content: () -> Content
-    ) {
+    init(id: IceWindowIdentifier, @ViewBuilder content: () -> Content) {
         self.id = id
-        self.onWindowActionsReady = onWindowActionsReady
         self.content = content()
     }
 
     var body: some Scene {
         windowScene.once {
-            onWindowActionsReady(openWindow, dismissWindow)
+            // SwiftUI waits to create the underlying NSWindow until the scene
+            // is first presented. We may need a valid window reference before
+            // that point, so we open the window and immediately dismiss it.
+            //
+            // - Note: Both actions are called during the same run loop cycle,
+            //   so the window isn't actually opened.
+            openWindow(id: id)
+            dismissWindow(id: id)
         }
     }
 
     @ViewBuilder
     private var windowContentView: some View {
-        content
-            .onWindowChange { window in
-                window?.collectionBehavior.insert(.moveToActiveSpace)
-            }
+        content.onWindowChange { window in
+            window?.collectionBehavior.insert(.moveToActiveSpace)
+        }
     }
 
     private var windowScene: some Scene {
@@ -93,7 +91,7 @@ enum IceWindowIdentifier: String, Sendable, CustomStringConvertible {
     /// - Note: Use ``titleKey`` to get the localized title.
     var titleString: String {
         switch self {
-        case .settings: "Fire"
+        case .settings: "Ice"
         case .permissions: "Permissions"
         }
     }

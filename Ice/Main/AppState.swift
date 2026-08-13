@@ -10,12 +10,6 @@ import SwiftUI
 /// The model for app-wide state.
 @MainActor
 final class AppState: ObservableObject {
-    /// A window request made before SwiftUI supplies live scene actions.
-    private enum PendingWindowRequest {
-        case open(IceWindowIdentifier)
-        case dismiss(IceWindowIdentifier)
-    }
-
     /// Information for the active space.
     @Published private(set) var activeSpace = SpaceInfo.activeSpace()
 
@@ -49,9 +43,6 @@ final class AppState: ObservableObject {
     /// Manager for the optional AI Quotas menu-bar feature.
     let aiQuotaManager = AIQuotaManager()
 
-    /// Ambient surface for the active, user-approved Context Scene.
-    let firelineContextController = FirelineContextController()
-
     /// AI-Native Triggers engine (fire.10 P1): evaluates conditions and fires
     /// user-approved automations through the shared mutation coordinator.
     let triggerEngine = TriggerEngine()
@@ -83,11 +74,9 @@ final class AppState: ObservableObject {
     /// Storage for internal observers.
     private var cancellables = Set<AnyCancellable>()
 
-    /// Window actions captured from the live SwiftUI scene environment.
-    private var windowActions: (open: OpenWindowAction, dismiss: DismissWindowAction)?
-
-    /// Requests made during launch before the live scene environment is ready.
-    private var pendingWindowRequests = [PendingWindowRequest]()
+    /// The MCP/trigger handlers are configured once, then their pollers and
+    /// evaluators may be started and stopped by the top-level feature gate.
+    private var optionalRuntimeInitialized = false
 
     /// Logger for the app state.
     private let logger = Logger(category: "AppState")
@@ -98,12 +87,6 @@ final class AppState: ObservableObject {
 
         settings.performSetup(with: self)
         menuBarManager.performSetup(with: self)
-
-        // Set up early — before any of the `await` calls below — because
-        // it only needs `appState` and starts an independent poll timer.
-        // (It was previously buried after itemManager.performSetup, which
-        // on some builds delayed/blocked reaching it.)
-        mcpWriteCommandHandler.performSetup(with: self)
 
         if #available(macOS 26.0, *) {
             await MenuBarItemService.Connection.shared.start()
@@ -117,18 +100,7 @@ final class AppState: ObservableObject {
         updatesManager.performSetup(with: self)
         userNotificationManager.performSetup(with: self)
         competingManagerMonitor.performSetup(with: self)
-        aiQuotaManager.performSetup(with: self)
-        firelineContextController.performSetup(with: self)
-        triggerEngine.performSetup(with: self)
-        mcpTriggerCommandHandler.performSetup(with: self)
-
-        // fire.10.2: the authenticated XPC relay that feeds both MCP
-        // fulfillers above. macOS 26-only, like the rest of the MCP surface
-        // (XPCSession). Must start after the fulfillers it dispatches to.
-        if #available(macOS 26.0, *) {
-            MCPRelayPump.shared.performSetup(with: self)
-            FireMCPBridgeServer.shared.markRelayReady()
-        }
+        aiQuotaManager.performSetup(with: self, runtimeEnabled: false)
 
         configureCancellables()
     }
@@ -229,6 +201,13 @@ final class AppState: ObservableObject {
         }
         .store(in: &c)
 
+        settings.advanced.$contextsAndAgentsEnabled
+            .removeDuplicates()
+            .sink { [weak self] enabled in
+                self?.setOptionalRuntimeEnabled(enabled)
+            }
+            .store(in: &c)
+
         menuBarManager.objectWillChange
             .sink { [weak self] in
                 self?.objectWillChange.send()
@@ -251,6 +230,31 @@ final class AppState: ObservableObject {
             .store(in: &c)
 
         cancellables = c
+    }
+
+    /// Starts or stops every optional runtime behind one user-visible switch.
+    /// Persisted settings and sealed grants are deliberately left untouched.
+    private func setOptionalRuntimeEnabled(_ enabled: Bool) {
+        let runtimeState = enabled ? "starting" : "stopping"
+        logger.notice("Optional Contexts & Agents runtime \(runtimeState, privacy: .public)")
+        aiQuotaManager.setRuntimeEnabled(enabled)
+
+        if enabled {
+            if !optionalRuntimeInitialized {
+                mcpWriteCommandHandler.performSetup(with: self)
+                mcpTriggerCommandHandler.performSetup(with: self)
+                optionalRuntimeInitialized = true
+            }
+            triggerEngine.performSetup()
+            if #available(macOS 26.0, *) {
+                MCPRelayPump.shared.performSetup(with: self)
+            }
+        } else {
+            triggerEngine.stop()
+            if #available(macOS 26.0, *) {
+                MCPRelayPump.shared.stop()
+            }
+        }
     }
 
     /// Returns a Boolean value indicating whether the app has been
@@ -279,23 +283,12 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Installs window actions captured from the live scene environment.
-    func registerWindowActions(open: OpenWindowAction, dismiss: DismissWindowAction) {
-        windowActions = (open, dismiss)
-
-        let requests = pendingWindowRequests
-        pendingWindowRequests.removeAll()
-        for request in requests {
-            performWindowRequest(request)
-        }
-    }
-
     /// Opens the window with the given identifier.
     func openWindow(_ id: IceWindowIdentifier) {
         // Async prevents conflicts with SwiftUI.
         DispatchQueue.main.async {
             self.logger.debug("Opening window with id: \(id, privacy: .public)")
-            self.performWindowRequest(.open(id))
+            EnvironmentValues().openWindow(id: id)
         }
     }
 
@@ -304,56 +297,8 @@ final class AppState: ObservableObject {
         // Async prevents conflicts with SwiftUI.
         DispatchQueue.main.async {
             self.logger.debug("Dismissing window with id: \(id, privacy: .public)")
-            self.performWindowRequest(.dismiss(id))
+            EnvironmentValues().dismissWindow(id: id)
         }
-    }
-
-    /// Performs a request with live SwiftUI actions, or queues it until the
-    /// scene has supplied them.
-    private func performWindowRequest(_ request: PendingWindowRequest) {
-        guard let windowActions else {
-            pendingWindowRequests.append(request)
-            return
-        }
-
-        switch request {
-        case let .open(id):
-            windowActions.open(id: id)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                self.presentWindow(id, attemptsRemaining: 20)
-            }
-        case let .dismiss(id):
-            windowActions.dismiss(id: id)
-            window(with: id)?.orderOut(nil)
-        }
-    }
-
-    /// Reinforces presentation of a SwiftUI-created window through AppKit.
-    ///
-    /// The bounded retry covers the short interval between `openWindow` and
-    /// SwiftUI attaching the scene identifier to its concrete `NSWindow`.
-    private func presentWindow(_ id: IceWindowIdentifier, attemptsRemaining: Int) {
-        guard let window = window(with: id) else {
-            guard attemptsRemaining > 0 else {
-                logger.error("Could not find window with id: \(id, privacy: .public)")
-                return
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                self.presentWindow(id, attemptsRemaining: attemptsRemaining - 1)
-            }
-            return
-        }
-
-        window.collectionBehavior.insert(.moveToActiveSpace)
-        window.makeKeyAndOrderFront(nil)
-        if !NSApp.isActive {
-            window.orderFrontRegardless()
-        }
-    }
-
-    /// Returns the concrete AppKit window for a SwiftUI scene identifier.
-    private func window(with id: IceWindowIdentifier) -> NSWindow? {
-        NSApp.windows.first { $0.identifier?.rawValue == id.rawValue }
     }
 
     /// Activates the app and sets its activation policy.

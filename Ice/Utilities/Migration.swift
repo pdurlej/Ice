@@ -397,8 +397,8 @@ extension MigrationManager {
 // MARK: - Migrate MCP toggles (fire.10.4)
 
 extension MigrationManager {
-    /// The three MCP toggles (now in Settings → Agents) became authoritative
-    /// in fire.10.4. Before
+    /// The three Advanced → MCP toggles (Enable MCP server / Allow write
+    /// operations / Notify on write) became authoritative in fire.10.4. Before
     /// this the MCP server answered regardless of them, so a plain upgrade must
     /// not silently disable a working integration.
     ///

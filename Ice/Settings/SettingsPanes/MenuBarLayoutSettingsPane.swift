@@ -3,12 +3,15 @@
 //  Ice
 //
 
-import AppKit
 import SwiftUI
 
 struct MenuBarLayoutSettingsPane: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var itemManager: MenuBarItemManager
+
+    private var hasItems: Bool {
+        !itemManager.itemCache.managedItems.isEmpty
+    }
 
     var body: some View {
         if !ScreenCapture.cachedCheckPermissions() {
@@ -16,22 +19,9 @@ struct MenuBarLayoutSettingsPane: View {
         } else if appState.menuBarManager.isMenuBarHiddenBySystemUserDefaults {
             cannotArrange
         } else {
-            switch itemManager.cacheState {
-            case .idle, .loading:
-                loadingMenuBarItems
-            case .repairingControlItem:
-                repairingControlItem
-            case .ready:
-                IceForm(spacing: 20) {
-                    header
-                    if itemManager.itemCache.managedItems.isEmpty {
-                        noMenuBarItems
-                    } else {
-                        layoutBars
-                    }
-                }
-            case .missingControlItem:
-                missingControlItem
+            IceForm(spacing: 20) {
+                header
+                layoutBars
             }
         }
     }
@@ -57,11 +47,19 @@ struct MenuBarLayoutSettingsPane: View {
                 layoutBar(for: section)
             }
         }
+        .opacity(hasItems ? 1 : 0.75)
+        .blur(radius: hasItems ? 0 : 5)
+        .allowsHitTesting(hasItems)
+        .overlay {
+            if !hasItems {
+                loadingMenuBarItems
+            }
+        }
     }
 
     @ViewBuilder
     private var cannotArrange: some View {
-        Text("Fire cannot arrange menu bar items in automatically hidden menu bars.")
+        Text("Ice cannot arrange menu bar items in automatically hidden menu bars.")
             .font(.title3)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
@@ -88,59 +86,6 @@ struct MenuBarLayoutSettingsPane: View {
             ProgressView()
         }
         .font(.title)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    @ViewBuilder
-    private var repairingControlItem: some View {
-        VStack {
-            Text("Repairing Fire's menu bar registration…")
-            ProgressView()
-        }
-        .font(.title)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    @ViewBuilder
-    private var noMenuBarItems: some View {
-        ContentUnavailableView(
-            "No manageable menu bar items",
-            systemImage: "menubar.rectangle",
-            description: Text("Open an app with a menu bar item, then try again.")
-        )
-    }
-
-    @ViewBuilder
-    private var missingControlItem: some View {
-        ContentUnavailableView {
-            Label("Fire cannot see its section dividers", systemImage: "menubar.rectangle")
-        } description: {
-            Text(
-                """
-                Your permissions are already granted. Fire can safely refresh its own menu bar \
-                registration without changing the arrangement of other apps.
-                """
-            )
-        } actions: {
-            HStack {
-                Button("Repair and Retry") {
-                    Task {
-                        await itemManager.repairControlItemRegistration()
-                    }
-                }
-                .accessibilityLabel("Repair Fire menu bar registration and retry")
-
-                Button("Open Menu Bar Settings") {
-                    guard let url = URL(
-                        string: "x-apple.systempreferences:com.apple.ControlCenter-Settings.extension"
-                    ) else {
-                        return
-                    }
-                    NSWorkspace.shared.open(url)
-                }
-                .accessibilityLabel("Open macOS Menu Bar settings")
-            }
-        }
     }
 
     @ViewBuilder

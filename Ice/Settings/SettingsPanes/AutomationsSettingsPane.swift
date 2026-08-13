@@ -2,8 +2,7 @@
 //  AutomationsSettingsPane.swift
 //  Ice
 //
-//  Settings ▸ Contexts — the manage surface for Context Scenes and compatible
-//  legacy automations.
+//  Settings ▸ Automations — the manage surface for AI-Native Triggers
 //  (fire.10 P1). Lists installed automations and lets the user enable/disable,
 //  re-approve (when a grant has expired), delete, and globally disable all.
 //
@@ -46,13 +45,16 @@ struct AutomationsSettingsPane: View {
             ),
             presenting: pendingDelete
         ) { rule in
-            Button("Remove Context", role: .destructive) {
+            Button("Remove Automation", role: .destructive) {
                 remove(rule)
                 pendingDelete = nil
             }
             Button("Cancel", role: .cancel) { pendingDelete = nil }
         } message: { _ in
-            Text("This deletes the Context Scene and its sealed approval. You can ask an agent to re-create it later.")
+            Text("This deletes the automation and its approval. You can re-create it later.")
+        }
+        .onAppear {
+            TriggerStore.shared.load()
         }
     }
 
@@ -60,18 +62,26 @@ struct AutomationsSettingsPane: View {
 
     @ViewBuilder
     private var introSection: some View {
-        IceSection("Context Scenes") {
+        IceSection("AI-Native Automations") {
             Text(
                 """
-                Context Scenes program the menu bar and one Fireline payload for \
-                the work happening now. Ask a connected local agent to propose \
-                one, review Fire's exact condition and affected items, then \
-                approve it once. Every enabled scene is sealed to that exact \
-                capability; editing it requires approval again.
+                Automations rearrange your menu bar for you when something \
+                happens — an app comes to the front, the battery runs low, or a \
+                weekly time window begins. Ask an AI assistant connected to Fire \
+                (via MCP) to create one, approve it once, and it runs on its own. \
+                Every automation here was approved by you and is bound to the exact \
+                items and destination shown.
                 """
             )
             .fixedSize(horizontal: false, vertical: true)
             .padding(.trailing, 75)
+
+            if !appState.settings.advanced.contextsAndAgentsEnabled {
+                CalloutBox(
+                    "Automations are paused while Contexts & Agents is off.",
+                    systemImage: "pause.circle"
+                )
+            }
 
             if hasEnabled {
                 HStack {
@@ -91,14 +101,9 @@ struct AutomationsSettingsPane: View {
                 Image(systemName: "wand.and.rays")
                     .font(.system(size: 28))
                     .foregroundStyle(.secondary)
-                Text("No Context Scenes yet")
+                Text("No automations yet")
                     .font(.headline)
-                Text(
-                    """
-                    Ask a connected agent to set one up, e.g. “when I work in \
-                    Codex, show my quota in Fireline.”
-                    """
-                )
+                Text(emptyStateGuidance)
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -106,6 +111,13 @@ struct AutomationsSettingsPane: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
         }
+    }
+
+    private var emptyStateGuidance: String {
+        if appState.settings.advanced.contextsAndAgentsEnabled {
+            return "Ask an AI assistant connected to Fire to set one up, e.g. “when Slack is frontmost, hide my password manager.”"
+        }
+        return "Turn on Contexts & Agents in Advanced settings before creating an automation with an AI assistant."
     }
 
     // MARK: - Rule row
@@ -131,16 +143,13 @@ struct AutomationsSettingsPane: View {
                         .labelsHidden()
                         .toggleStyle(.switch)
                         .disabled(!rule.enabled && !store.hasValidGrant(for: rule))
-                        .accessibilityLabel("\(rule.name) enabled")
-                        .accessibilityHint("Controls whether this Context Scene may activate")
                     Button {
                         pendingDelete = rule
                     } label: {
                         Image(systemName: "trash")
                     }
                     .buttonStyle(.borderless)
-                    .help("Remove this Context Scene")
-                    .accessibilityLabel("Remove \(rule.name)")
+                    .help("Remove this automation")
                 }
             }
 
@@ -169,7 +178,7 @@ struct AutomationsSettingsPane: View {
         HStack(spacing: 6) {
             Image(systemName: "lock.trianglebadge.exclamationmark")
                 .foregroundStyle(.orange)
-            Text("Approval expired — this context changed and needs to be approved again before it can run.")
+            Text("Approval expired — this automation was changed and needs to be approved again before it can run.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)

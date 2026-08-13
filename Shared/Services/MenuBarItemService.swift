@@ -3,21 +3,11 @@
 //  Shared
 //
 
-import Darwin
 import Foundation
 import Security
 
 enum MenuBarItemService {
     static let name = "com.jordanbaird.Ice.MenuBarItemService"
-
-    /// Private per-login rendezvous for the embedded MCP bridge. The parent
-    /// temporary directory is user-owned and mode 0700 on macOS; the socket is
-    /// additionally chmod 0600 and both peers validate audit-token identities.
-    static var bridgeSocketPath: String {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent("com.jordanbaird.Ice.fire-mcp.\(getuid()).sock")
-            .path
-    }
 
     /// Returns the Team Identifier of the currently running process, or
     /// `nil` if the binary is unsigned, ad-hoc signed, or the team
@@ -34,12 +24,9 @@ enum MenuBarItemService {
     /// forever on "Loading menu bar items…". This is the same class as
     /// upstream issues #744 and #891.
     static func ownTeamIdentifier() -> String? {
-        var dynamicCode: SecCode?
         var staticCode: SecStaticCode?
         guard
-            SecCodeCopySelf([], &dynamicCode) == errSecSuccess,
-            let dynamicCode,
-            SecCodeCopyStaticCode(dynamicCode, [], &staticCode) == errSecSuccess,
+            SecStaticCodeCreateWithPath(Bundle.main.bundleURL as CFURL, [], &staticCode) == errSecSuccess,
             let code = staticCode
         else {
             return nil
@@ -64,66 +51,6 @@ enum MenuBarItemService {
         }
         return teamID
     }
-
-    /// Validates a connected Unix-domain-socket peer against the kernel audit
-    /// token, the current process's Developer ID team, and one exact executable
-    /// path. The audit token binds the check to the connected process and avoids
-    /// PID-reuse races. Ad-hoc builds require an ad-hoc peer at the exact path;
-    /// Developer ID builds require the same non-empty team identifier.
-    static func isTrustedSocketPeer(
-        _ socketFD: Int32,
-        expectedExecutableURL: URL
-    ) -> Bool {
-        var peerUID: uid_t = 0
-        var peerGID: gid_t = 0
-        guard getpeereid(socketFD, &peerUID, &peerGID) == 0, peerUID == geteuid() else {
-            return false
-        }
-
-        var token = audit_token_t()
-        var tokenLength = socklen_t(MemoryLayout<audit_token_t>.size)
-        guard withUnsafeMutablePointer(to: &token, { pointer in
-            getsockopt(socketFD, SOL_LOCAL, LOCAL_PEERTOKEN, pointer, &tokenLength)
-        }) == 0, tokenLength == MemoryLayout<audit_token_t>.size else {
-            return false
-        }
-
-        let tokenData = withUnsafeBytes(of: token) { Data($0) }
-        let attributes = [kSecGuestAttributeAudit as String: tokenData] as CFDictionary
-        var dynamicCode: SecCode?
-        guard
-            SecCodeCopyGuestWithAttributes(nil, attributes, [], &dynamicCode) == errSecSuccess,
-            let dynamicCode,
-            SecCodeCheckValidity(dynamicCode, [], nil) == errSecSuccess
-        else {
-            return false
-        }
-
-        var staticCode: SecStaticCode?
-        var info: CFDictionary?
-        guard
-            SecCodeCopyStaticCode(dynamicCode, [], &staticCode) == errSecSuccess,
-            let staticCode,
-            SecCodeCopySigningInformation(
-                staticCode,
-                SecCSFlags(rawValue: kSecCSSigningInformation),
-                &info
-            ) == errSecSuccess,
-            let dictionary = info as? [String: Any],
-            let executable = dictionary[kSecCodeInfoMainExecutable as String] as? URL
-        else {
-            return false
-        }
-
-        let actualPath = executable.standardizedFileURL.resolvingSymlinksInPath().path
-        let expectedPath = expectedExecutableURL.standardizedFileURL.resolvingSymlinksInPath().path
-        guard actualPath == expectedPath else {
-            return false
-        }
-
-        let peerTeam = dictionary[kSecCodeInfoTeamIdentifier as String] as? String
-        return peerTeam == ownTeamIdentifier()
-    }
 }
 
 extension MenuBarItemService {
@@ -134,7 +61,7 @@ extension MenuBarItemService {
         // MARK: - MCP Server Extension
         //
         // These cases are the agent-facing surface. They are answered ONLY by
-        // MCPBackend.xpc, which enforces the Settings → Agents kill-switch
+        // MCPBackend.xpc, which enforces the Advanced → MCP kill-switch
         // (fire.10.4) and relays writes to the Ice main app's consent gate.
         // MenuBarItemService.xpc REJECTS every one of them (fire.10.5, issue
         // #8) — it serves only the `.start` + `.sourcePID` handshake for the
@@ -148,15 +75,15 @@ extension MenuBarItemService {
         /// Moves an item identified by bundle ID to a target section,
         /// optionally at a specific index within that section. Maps to
         /// MCP `move_item` tool.
-        case moveItem(bundleID: String, selector: ItemSelector?, toSection: ItemSection, toIndex: Int?)
+        case moveItem(bundleID: String, toSection: ItemSection, toIndex: Int?)
 
         /// Convenience: moves an item to the `.hidden` section. Maps to
         /// MCP `hide_item` tool.
-        case hideItem(bundleID: String, selector: ItemSelector?)
+        case hideItem(bundleID: String)
 
         /// Convenience: moves an item to the `.alwaysVisible` section.
         /// Maps to MCP `show_item` tool.
-        case showItem(bundleID: String, selector: ItemSelector?)
+        case showItem(bundleID: String)
 
         /// Applies a previously saved layout by name. Layouts are stored
         /// in the existing Ice plist (architecture decision Q2).
@@ -265,7 +192,7 @@ extension MenuBarItemService {
         /// has the MCP server turned off, or has not allowed write
         /// operations. `String` is a user-facing reason the bridge surfaces
         /// to the agent verbatim. This is the honest counterpart to the
-        /// three Settings → Agents toggles, which before fire.10.4 were inert.
+        /// three Advanced → MCP toggles, which before fire.10.4 were inert.
         case denied(String)
     }
 
@@ -282,41 +209,6 @@ extension MenuBarItemService {
         case alwaysHidden
     }
 
-    /// A versioned, persistable selector for one menu bar item.
-    ///
-    /// `namespace + title` mirrors Fire's existing `MenuBarItemTag` identity
-    /// and distinguishes multiple status items owned by the same app. The
-    /// source bundle id is retained as a human-readable diagnostic and as the
-    /// legacy compatibility key; it is never enough to choose silently when
-    /// more than one item matches.
-    struct ItemSelector: Codable, Sendable, Equatable {
-        let version: Int
-        let namespace: String?
-        let title: String?
-        let sourceBundleID: String
-
-        init(
-            version: Int = 1,
-            namespace: String? = nil,
-            title: String? = nil,
-            sourceBundleID: String
-        ) {
-            self.version = version
-            self.namespace = namespace
-            self.title = title
-            self.sourceBundleID = sourceBundleID
-        }
-
-        var isExact: Bool {
-            version == 1 && namespace != nil && title != nil
-        }
-
-        private enum CodingKeys: String, CodingKey {
-            case version, namespace, title
-            case sourceBundleID = "source_bundle_id"
-        }
-    }
-
     /// Snapshot of a single menu bar item, returned by `.listItems`.
     struct ItemInfo: Codable, Sendable {
         /// Bundle identifier of the owning process (e.g. `com.apple.controlcenter`).
@@ -324,9 +216,6 @@ extension MenuBarItemService {
         /// Human-readable name (typically the app name) — may be `nil`
         /// if the owning process exposes none.
         let displayName: String?
-        /// Stable selector to use for writes and Context Scenes. Older peers
-        /// ignore this additive field; bundleID remains for compatibility.
-        let selector: ItemSelector?
         /// CGWindowID of the item's status window.
         let windowID: UInt32
         /// Which section the item currently belongs to.
@@ -382,23 +271,13 @@ extension MenuBarItemService {
         }
 
         struct ActionSpec: Codable, Sendable {
-            /// "setSection" (legacy automation) or "activateContext".
+            /// P1 ships only "setSection" (applyLayoutSnapshot is UI-built so it
+            /// can bind a content digest the agent has no way to compute).
             let type: String
             /// Bundle ids to move.
             let bundleIDs: [String]?
-            /// Exact selectors from `list_items`. Preferred over bundleIDs;
-            /// legacy bundle-only actions remain accepted when unambiguous.
-            let selectors: [ItemSelector]?
             /// Destination section raw value (alwaysVisible | hidden | alwaysHidden).
             let section: String?
-
-            // activateContext Fireline payload
-            /// "hidden", "quota", or "menuBarItem".
-            let firelineType: String?
-            /// quota only: codex | claude | antigravity | ollama.
-            let firelineProvider: String?
-            /// menuBarItem only: exact selector from list_items.
-            let firelineSelector: ItemSelector?
         }
     }
 
@@ -466,7 +345,7 @@ extension MenuBarItemService.Request {
 
     /// Whether this request changes state (menu-bar layout, saved layouts, or
     /// installed automations) and therefore requires the "Allow write
-    /// approved changes" consent in addition to the server being enabled. Reads
+    /// operations" consent in addition to the server being enabled. Reads
     /// (`listItems`/`listLayouts`/`listTriggers`) are not writes.
     var isAgentWrite: Bool {
         switch self {
@@ -478,27 +357,13 @@ extension MenuBarItemService.Request {
             return false
         }
     }
-
-    /// Whether this request needs the GUI app's relay handlers to be ready.
-    /// Read-only item/layout discovery is answered directly by MCPBackend;
-    /// mutations and Context Scene requests are fulfilled by the main app.
-    var requiresMainAppRelay: Bool {
-        switch self {
-        case .moveItem, .hideItem, .showItem, .applyLayout, .saveLayout,
-             .setTrigger, .listTriggers, .removeTrigger:
-            return true
-        case .listItems, .listLayouts,
-             .start, .sourcePID, .relayFetch, .relayComplete:
-            return false
-        }
-    }
 }
 
 extension MenuBarItemService.RelayWork {
     /// Whether this queued item changes state. A `.move` always does; a
     /// `.trigger` does unless it's a `.list` (read). The main app's relay
     /// pump uses this for its defense-in-depth write gate so a relayed
-    /// `list_triggers` is never blocked by the "Allow approved changes"
+    /// `list_triggers` is never blocked by the "Allow write operations"
     /// toggle.
     var isAgentWrite: Bool {
         switch self {

@@ -17,35 +17,21 @@ shipped-history and deep context** — read its top CURRENT STATE first. The dat
 
 ## ✅ LIVE NOW / NEXT
 
-**`v1.0.19` “Ignition” (build 1178, release commit `d0c5165`) is the installed,
-signed, notarized GitHub candidate but remains NO-SHIP.** It fixed the macOS 26
-zero-size window regression and moved Sentry-confirmed FIRE-W menu-bar capture
-plus pixel averaging away from the main thread. Signed Finder/CLI reopen,
-Settings, `fire doctor` (13 tools), `contexts`, `list_triggers`, and `list_items`
-all passed. Runtime inspection then found the Surfaces menu-bar layout stuck on
-“Loading menu bar items…” whenever macOS stopped exposing Fire's hidden-section
-divider to its own window-list query. Permissions were actually granted, the
-Control Center Menu Bar switch was enabled, CLI item discovery worked, and a
-forced helper restart did not repair it. None of the 1.0 candidates is on the
-Sparkle appcast yet; it still serves `v0.11.13-fire.10.7.3` (build 1158).
+**`v0.11.13-fire.10.7.3` (build 1158, release commit `3865907`) is the live,
+notarized build and the newest item on the Sparkle appcast.** It is the release
+spine for 10.8. The Ignition tags and `fire/main` history are reference material,
+not a base to fix forward.
 
-**`v1.0.20` (build 1179) is the current local candidate.** It gives menu-bar
-caching explicit loading/ready/failure states instead of an infinite spinner and
-adds `Repair and Retry`: Fire re-registers only its own hidden divider, preserving
-the saved status-item position, permissions, and other applications' arrangement,
-then retries discovery. System Settings remains an explicit fallback. Local
-SwiftLint (135 files), all 40 FireLogic tests, and the unsigned all-target Xcode
-build are green. FIRE-X remains local DerivedData diagnostic noise, not a shipped
-regression.
+**10.8 Safe Core is an unshipped candidate on `codex/fire-10.8`.** Its public
+contract is issue #18; issues #19–#21 define 10.9–10.11. It must remain a
+prerelease until signed desktop E2E. Do not describe local checks as shipped,
+and do not promote Latest or update the appcast from this note alone.
 
-**NEXT is the signed 1.0.20 Surfaces self-repair + FIRE-W/window smoke, then the
-human consent + publish gate:** verify the actual signed recovery path, install
-the real `Coding` (Codex quota Fireline) and `Mail` (Fantastical Fireline) Context
-Scenes one at a time, verify runtime behavior and Sentry, then run
-`scripts/publish-appcast.sh v1.0.20 --notes-file docs/releases/1.0.20.html`.
-The owner must click the two Fire consent dialogs and the local Sparkle Keychain
-prompt. Do not bypass or pre-authorize those gates. After Pages serves 1.0.20,
-update this section from candidate to live.
+Sentry showed no 10.7.2 error events at the 2026-07-13 03:09 CEST checkpoint.
+FIRE-Q and FIRE-J are benign modal-menu/dialog App Hangs, but the client-side
+`frame.function` filter did **not** suppress them reliably. It is a best-effort
+noise filter. A plausible, unproven explanation is that the final function names
+become available only after server-side symbolication.
 
 ## Commands (exact)
 
@@ -59,17 +45,18 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift build --package-path Bridge
 
 # Tests (needs the Xcode toolchain — plain `swift test` lacks XCTest)
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift test --package-path FireLogic  # 40 tests
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift test --package-path FireLogic
 ```
 
-**Ship flow** (per release): bump BOTH `MARKETING_VERSION` (`1.0.X`) +
+**Ship flow** (per release): bump BOTH `MARKETING_VERSION` (`0.11.13-fire.X`) +
 `CURRENT_PROJECT_VERSION` in `Ice.xcodeproj/project.pbxproj` (2 occurrences each)
-→ commit → `git tag -a v1.0.X` → `git push origin fire/main` + push tag
+→ commit → `git tag -a v0.11.13-fire.X` → `git push origin fire/main` + push tag
 → CI (`gh run list -R pdurlej/fire-from-ice`) builds/signs/notarizes/uploads-dSYMs
-and publishes the GitHub release → download DMG, `ditto` it over `/Applications/Ice.app`
-(quit Ice first), smoke it → **`scripts/publish-appcast.sh v1.0.X`** for
-the Sparkle appcast (one Keychain "Allow" for signing; idempotent; `--dry-run`
-and `--notes-file` supported).
+and creates or updates a **prerelease** → download DMG, `ditto` it over
+`/Applications/Ice.app` (quit Ice first), run signed smoke, inspect Sentry →
+explicitly promote GitHub Latest → **`scripts/publish-appcast.sh
+v0.11.13-fire.X`** for Sparkle (one Keychain "Allow"; an existing entry is
+accepted only when build, URL, length, and signature match).
 
 ## Hard rules
 
@@ -114,24 +101,20 @@ and `--notes-file` supported).
    in-effect.** If CI fails with HTTP 403 "agreement missing/expired", the owner
    accepts it at developer.apple.com, then `gh run rerun --failed <run-id>` (no
    code change).
-7. **Expected authorization modals need an explicit capture-time marker.** Sentry
-   client frames can be unsymbolicated, so `frame.function` matching alone did
-   not suppress FIRE-V. `TimedAuthorizationAlert` now increments the
-   thread-safe `ExpectedAuthorizationModal` marker around `runModal`; Sentry
-   drops only App Hang events while that marker is active. Keep the scope narrow.
 
 ## Open issues (`gh issue list -R pdurlej/fire-from-ice`)
 
 | # | P | needs | note |
 |---|---|---|---|
 | 7 | P2 | design | `isMouseInsideMenuBarItem` live SLS. Do NOT cache (see gotcha #2). If it ever hangs, make the QUERY cheaper. Never fired an App-Hang. |
-| 5 | P2 | careful pass | sendSync watchdog. **Deadlock trap** (documented in the issue): `send()` holds an `OSAllocatedUnfairLock`; no native timeout on macOS 26. Needs kill-STOP testing. |
+| 5 | P2 | 10.8 runtime | Deadline is in the local 10.8 candidate without holding the session lock. Still needs kill-STOP signed testing before closure. |
 | 11 | P3 | some runtime | remaining LIGHT single main-thread SLS calls (SearchPanel view body, IceBar getOrigin, AppState publisher). |
 | 13 | P3 | VoiceOver | a11y labels on fork-added UI. |
+| 18 | P1 | 10.8 | Safe Core release contract and promotion gate. |
+| 19–21 | roadmap | later | Codex+Claude glance, optional Fireline, then accessibility/polish. |
 
 Shipped from the board so far: #16+#15 (10.4.2), #8+#9 (10.5), #10 (appcast
 script), #6+#4+#14 (10.6), and #17's activation-safe app-menu cache plus signed
 MCP verification (#4) in 10.7.2. The #7 item-frame cache shipped in 10.7 and was
-reverted in 10.7.1. Issue #12's honest MCP mutation contract shipped in 10.7.3.
-The App-Hang franchise (FIRE-F/G/H/K/M/N/P) is field-quiet; FIRE-Q/J are false
-modal ANRs that the current filter catches only best-effort.
+reverted in 10.7.1. The App-Hang franchise (FIRE-F/G/H/K/M/N/P) is field-quiet;
+FIRE-Q/J are false modal ANRs that the current filter catches only best-effort.

@@ -42,7 +42,6 @@
 //      Bridge/.build/release/IceMCPBridge
 //
 
-import Darwin
 import Foundation
 import MCP
 import OSLog
@@ -105,48 +104,6 @@ private func parseOptionalDouble(_ value: Value?) -> Double? {
     return nil
 }
 
-private func parseItemSelector(_ value: Value?, name: String = "selector") throws -> MenuBarItemService.ItemSelector? {
-    guard let value else { return nil }
-    guard let object = value.objectValue else {
-        throw ToolError.invalidArgument("\(name) must be an object from list_items")
-    }
-    let version = parseOptionalInt(object["version"]) ?? 1
-    let namespace = try parseRequiredString(object["namespace"], name: "\(name).namespace")
-    let title = try parseRequiredString(object["title"], name: "\(name).title")
-    let bundleID = try parseRequiredString(object["source_bundle_id"], name: "\(name).source_bundle_id")
-    return MenuBarItemService.ItemSelector(
-        version: version,
-        namespace: namespace,
-        title: title,
-        sourceBundleID: bundleID
-    )
-}
-
-private func parseSelectorArray(_ value: Value?) throws -> [MenuBarItemService.ItemSelector]? {
-    guard let values = value?.arrayValue else { return nil }
-    return try values.enumerated().map { index, value in
-        guard let selector = try parseItemSelector(value, name: "selectors[\(index)]") else {
-            throw ToolError.invalidArgument("selectors[\(index)] is required")
-        }
-        return selector
-    }
-}
-
-private func parseItemReference(
-    _ arguments: [String: Value]?
-) throws -> (bundleID: String, selector: MenuBarItemService.ItemSelector?) {
-    let selector = try parseItemSelector(arguments?["selector"])
-    let explicitBundleID = arguments?["bundle_id"]?.stringValue
-    guard selector != nil || explicitBundleID != nil else {
-        throw ToolError.invalidArgument("provide selector (preferred) or bundle_id")
-    }
-    let bundleID = selector?.sourceBundleID ?? explicitBundleID!
-    if let selector, let explicitBundleID, selector.sourceBundleID != explicitBundleID {
-        throw ToolError.invalidArgument("bundle_id must match selector.source_bundle_id")
-    }
-    return (bundleID, selector)
-}
-
 /// Parses an agent-supplied `set_trigger` payload into the wire `TriggerSpec`.
 /// Shape validation (presence of `type`) happens here; semantic validation
 /// (ranges, enum values, hysteresis) is the main app's job in
@@ -183,11 +140,7 @@ private func parseTriggerSpec(_ arguments: [String: Value]?) throws -> MenuBarIt
     let action = MenuBarItemService.TriggerSpec.ActionSpec(
         type: actionType,
         bundleIDs: actionObj["bundle_ids"]?.arrayValue?.compactMap { $0.stringValue },
-        selectors: try parseSelectorArray(actionObj["selectors"]),
-        section: actionObj["section"]?.stringValue,
-        firelineType: actionObj["fireline_type"]?.stringValue,
-        firelineProvider: actionObj["fireline_provider"]?.stringValue,
-        firelineSelector: try parseItemSelector(actionObj["fireline_selector"], name: "action.fireline_selector")
+        section: actionObj["section"]?.stringValue
     )
 
     return MenuBarItemService.TriggerSpec(
@@ -218,123 +171,84 @@ private enum ToolError: Swift.Error, CustomStringConvertible {
 
 // MARK: - XPC client
 
-/// Sends requests to the running Fire app over its authenticated per-user
-/// Unix socket. Fire forwards them through the same MCPBackend XPC session as
-/// its consent relay, so reads and approved writes share one backend instance.
+/// Sends `MenuBarItemService.Request` values to the Ice XPC service.
+///
+/// Mirrors the pattern in `Ice/MenuBar/MenuBarItems/MenuBarItemServiceConnection.swift`:
+/// lazy `XPCSession` creation, peer-requirement gated on whether we
+/// actually have a Team Identifier (ad-hoc-signed builds otherwise
+/// reject themselves — upstream issues #744 / #891), one shared
+/// session re-used across requests, recreated on cancel/error.
 @available(macOS 26.0, *)
 final class XPCClient: @unchecked Sendable {
-    private enum SocketError: LocalizedError {
-        case appNotRunning
-        case authenticationFailed
-        case closed
-        case invalidReply
-        case remote(String)
-
-        var errorDescription: String? {
-            switch self {
-            case .appNotRunning:
-                "Fire is not running or its local MCP socket is unavailable."
-            case .authenticationFailed:
-                "Fire's local MCP socket failed code-signing authentication."
-            case .closed:
-                "Fire closed the local MCP connection before replying."
-            case .invalidReply:
-                "Fire returned an invalid local MCP response."
-            case .remote(let message):
-                message
-            }
-        }
+    private struct SessionHandle: @unchecked Sendable {
+        let id: UUID
+        let session: XPCSession
     }
 
-    private struct SocketReply: Codable {
-        let response: MenuBarItemService.Response?
-        let error: String?
-    }
-
-    private var socketFD: Int32 = -1
-    private var readBuffer = Data()
+    private let serviceName: String
+    private let queue: DispatchQueue
+    private let blockingQueue: DispatchQueue
+    private var session: XPCSession?
+    private var sessionID: UUID?
     private let lock = NSLock()
 
-    init(serviceName _: String) {}
-
-    deinit {
-        closeSocket()
+    init(serviceName: String) {
+        self.serviceName = serviceName
+        self.queue = DispatchQueue(
+            label: "com.jordanbaird.Ice.mcp.xpc",
+            qos: .userInitiated,
+            attributes: .concurrent
+        )
+        self.blockingQueue = DispatchQueue(
+            label: "com.jordanbaird.Ice.mcp.sendSync",
+            qos: .userInitiated,
+            attributes: .concurrent
+        )
     }
 
-    private func getOrCreateSocket() throws -> Int32 {
-        if socketFD >= 0 { return socketFD }
-
-        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { throw SocketError.appNotRunning }
-
-        var noSigPipe: Int32 = 1
-        _ = setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout.size(ofValue: noSigPipe)))
-        guard Self.connect(fd, to: MenuBarItemService.bridgeSocketPath) else {
-            close(fd)
-            throw SocketError.appNotRunning
-        }
-
-        let bridge = URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL
-        let expectedApp = bridge.deletingLastPathComponent().appendingPathComponent("Ice")
-        guard MenuBarItemService.isTrustedSocketPeer(fd, expectedExecutableURL: expectedApp) else {
-            close(fd)
-            throw SocketError.authenticationFailed
-        }
-
-        socketFD = fd
-        return fd
-    }
-
-    /// Sends a request synchronously and decodes Fire's response.
-    func send(_ request: MenuBarItemService.Request) throws -> MenuBarItemService.Response {
+    private func getOrCreateSession() throws -> SessionHandle {
         lock.lock()
         defer { lock.unlock() }
+        if let existing = session, let sessionID {
+            return SessionHandle(id: sessionID, session: existing)
+        }
+        let id = UUID()
+        let new = try XPCSession(xpcService: serviceName, options: .inactive) { [weak self] error in
+            guard let self else { return }
+            log.warning("XPC session cancelled: \(error.localizedDescription, privacy: .public)")
+            self.clearSession(id: id)
+        }
+        if MenuBarItemService.ownTeamIdentifier() != nil {
+            new.setPeerRequirement(.isFromSameTeam())
+        }
+        new.setTargetQueue(queue)
+        try new.activate()
+        session = new
+        sessionID = id
+        return SessionHandle(id: id, session: new)
+    }
 
+    /// Sends a request synchronously and decodes the reply as a
+    /// `MenuBarItemService.Response`.
+    func send(_ request: MenuBarItemService.Request) throws -> MenuBarItemService.Response {
+        let handle = try getOrCreateSession()
         do {
-            let fd = try getOrCreateSocket()
-            Self.setTimeout(Self.timeout(for: request) + 2, on: fd)
-            try Self.writeLine(JSONEncoder().encode(request), to: fd)
-            let reply = try JSONDecoder().decode(SocketReply.self, from: readLine(from: fd))
-            if let error = reply.error {
-                throw SocketError.remote(error)
+            return try XPCSyncDeadline.send(
+                request,
+                as: MenuBarItemService.Response.self,
+                through: handle.session,
+                timeout: Self.timeout(for: request),
+                queue: blockingQueue
+            ) { [weak self] in
+                self?.cancelSession(handle, reason: "MCP tool sendSync deadline exceeded")
             }
-            guard let response = reply.response else {
-                throw SocketError.invalidReply
-            }
-            return response
         } catch {
-            closeSocket()
+            // Drop the session so the next call recreates it after a
+            // wire error — matches the connection-recreation pattern
+            // in Ice/MenuBar/MenuBarItems/MenuBarItemServiceConnection.swift.
+            clearSession(id: handle.id)
             throw ToolError.xpcUnavailable(error.localizedDescription)
         }
-    }
-
-    private func readLine(from fd: Int32) throws -> Data {
-        while true {
-            if let newline = readBuffer.firstIndex(of: 0x0A) {
-                let line = Data(readBuffer[..<newline])
-                readBuffer.removeSubrange(...newline)
-                if !line.isEmpty { return line }
-            }
-
-            var chunk = [UInt8](repeating: 0, count: 16_384)
-            let count = chunk.withUnsafeMutableBytes { rawBuffer in
-                Darwin.read(fd, rawBuffer.baseAddress, rawBuffer.count)
-            }
-            if count == 0 { throw SocketError.closed }
-            if count < 0 {
-                if errno == EINTR { continue }
-                throw SocketError.closed
-            }
-            readBuffer.append(contentsOf: chunk.prefix(count))
-        }
-    }
-
-    private func closeSocket() {
-        if socketFD >= 0 {
-            close(socketFD)
-            socketFD = -1
-        }
-        readBuffer.removeAll(keepingCapacity: true)
     }
 
     private static func timeout(for request: MenuBarItemService.Request) -> TimeInterval {
@@ -344,7 +258,7 @@ final class XPCClient: @unchecked Sendable {
         case .removeTrigger:
             70
         case .moveItem, .hideItem, .showItem, .applyLayout, .saveLayout:
-            70
+            20
         case .listTriggers:
             15
         default:
@@ -352,51 +266,17 @@ final class XPCClient: @unchecked Sendable {
         }
     }
 
-    private static func setTimeout(_ seconds: TimeInterval, on fd: Int32) {
-        var timeout = timeval(tv_sec: Int(seconds), tv_usec: 0)
-        let length = socklen_t(MemoryLayout.size(ofValue: timeout))
-        _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, length)
-        _ = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, length)
+    private func clearSession(id: UUID) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard sessionID == id else { return }
+        session = nil
+        sessionID = nil
     }
 
-    private static func connect(_ fd: Int32, to path: String) -> Bool {
-        let bytes = Array(path.utf8)
-        guard bytes.count < MemoryLayout.size(ofValue: sockaddr_un().sun_path) else {
-            return false
-        }
-
-        var address = sockaddr_un()
-        address.sun_family = sa_family_t(AF_UNIX)
-        withUnsafeMutableBytes(of: &address.sun_path) { destination in
-            destination.copyBytes(from: bytes)
-            destination[bytes.count] = 0
-        }
-        let length = socklen_t(MemoryLayout<sa_family_t>.size + bytes.count + 1)
-        return withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.connect(fd, $0, length) == 0
-            }
-        }
-    }
-
-    private static func writeLine(_ data: Data, to fd: Int32) throws {
-        var framed = data
-        framed.append(0x0A)
-        let success = framed.withUnsafeBytes { rawBuffer in
-            guard var pointer = rawBuffer.baseAddress else { return false }
-            var remaining = rawBuffer.count
-            while remaining > 0 {
-                let written = Darwin.write(fd, pointer, remaining)
-                if written < 0 {
-                    if errno == EINTR { continue }
-                    return false
-                }
-                remaining -= written
-                pointer = pointer.advanced(by: written)
-            }
-            return true
-        }
-        if !success { throw SocketError.closed }
+    private func cancelSession(_ handle: SessionHandle, reason: String) {
+        clearSession(id: handle.id)
+        handle.session.cancel(reason: reason)
     }
 }
 
@@ -435,6 +315,33 @@ private struct TriggerResultPayload: Encodable {
 }
 
 // MARK: - Tool dispatch
+
+/// Mirrors the host app's coarse feature gates before creating an XPC
+/// connection. In basic mode the optional backend is intentionally absent, so
+/// relying on its listener for denial would turn a deliberate product choice
+/// into an opaque XPCRichError for the agent.
+private func bridgePolicyDenial(for toolName: String) -> String? {
+    let hostBundleID = "com.jordanbaird.Ice"
+    // When embedded in Ice.app, Bundle.main resolves to the host app even
+    // though this executable has its own code-signing identifier. Asking for
+    // the same suite then triggers Foundation's nonsensical-suite fallback;
+    // standard already points at the correct preference domain in that case.
+    let suite = Bundle.main.bundleIdentifier == hostBundleID
+        ? UserDefaults.standard
+        : UserDefaults(suiteName: hostBundleID)
+    guard suite?.bool(forKey: "ContextsAndAgentsEnabled") == true else {
+        return "Fire's Contexts & Agents are turned off. Enable them in Fire → Settings → Advanced."
+    }
+    guard suite?.bool(forKey: "MCPServerEnabled") == true else {
+        return "Fire's MCP server is turned off. Turn it on in Fire → Settings → Advanced → MCP Server."
+    }
+
+    let readOnlyTools: Set<String> = ["list_items", "list_layouts", "list_triggers"]
+    if !readOnlyTools.contains(toolName), suite?.bool(forKey: "MCPAllowWrites") != true {
+        return "Fire is not allowing write operations. Turn on \"Allow write operations\" in Fire → Settings → Advanced → MCP Server. Read-only tools like list_items still work."
+    }
+    return nil
+}
 
 /// Builds one `Tool` descriptor with sensible defaults for the
 /// annotations we know about. Older SDKs without `Tool.Annotations`
@@ -479,19 +386,6 @@ private func buildToolList() -> [Tool] {
         ),
     ])
 
-    let selectorSchema: Value = .object([
-        "type": .string("object"),
-        "description": .string("Exact versioned item selector copied from list_items. Prefer this whenever it is available."),
-        "properties": .object([
-            "version": .object(["type": .string("integer"), "enum": .array([.int(1)])]),
-            "namespace": .object(["type": .string("string")]),
-            "title": .object(["type": .string("string")]),
-            "source_bundle_id": bundleIDProp,
-        ]),
-        "required": .array([.string("version"), .string("namespace"), .string("title"), .string("source_bundle_id")]),
-        "additionalProperties": .bool(false),
-    ])
-
     let listSchema: Value = .object([
         "type": .string("object"),
         "properties": .object([
@@ -504,7 +398,6 @@ private func buildToolList() -> [Tool] {
         "type": .string("object"),
         "properties": .object([
             "bundle_id": bundleIDProp,
-            "selector": selectorSchema,
             "to_section": sectionEnum,
             "to_index": .object([
                 "type": .string("integer"),
@@ -512,11 +405,7 @@ private func buildToolList() -> [Tool] {
                 "description": .string("0-indexed position within the section (left to right). Omit to append."),
             ]),
         ]),
-        "required": .array([.string("to_section")]),
-        "anyOf": .array([
-            .object(["required": .array([.string("selector")])]),
-            .object(["required": .array([.string("bundle_id")])]),
-        ]),
+        "required": .array([.string("bundle_id"), .string("to_section")]),
         "additionalProperties": .bool(false),
     ])
 
@@ -524,12 +413,8 @@ private func buildToolList() -> [Tool] {
         "type": .string("object"),
         "properties": .object([
             "bundle_id": bundleIDProp,
-            "selector": selectorSchema,
         ]),
-        "anyOf": .array([
-            .object(["required": .array([.string("selector")])]),
-            .object(["required": .array([.string("bundle_id")])]),
-        ]),
+        "required": .array([.string("bundle_id")]),
         "additionalProperties": .bool(false),
     ])
 
@@ -539,7 +424,7 @@ private func buildToolList() -> [Tool] {
             "name": .object([
                 "type": .string("string"),
                 "minLength": .int(1),
-                "description": .string("Layout name as stored in Fire's compatible preferences."),
+                "description": .string("Layout name as stored in Ice's preferences plist."),
             ]),
         ]),
         "required": .array([.string("name")]),
@@ -598,34 +483,17 @@ private func buildToolList() -> [Tool] {
         "properties": .object([
             "type": .object([
                 "type": .string("string"),
-                "enum": .array([.string("setSection"), .string("activateContext")]),
-                "description": .string("setSection moves items. activateContext can move items and presents one sealed Fireline payload."),
+                "enum": .array([.string("setSection")]),
+                "description": .string("P1 supports setSection: move one or more items to a section."),
             ]),
             "bundle_ids": .object([
                 "type": .string("array"),
                 "items": .object(["type": .string("string")]),
                 "description": .string("Bundle ids to move. Use list_items to discover them."),
             ]),
-            "selectors": .object([
-                "type": .string("array"),
-                "items": selectorSchema,
-                "description": .string("Exact selectors from list_items. Preferred; do not also send bundle_ids."),
-            ]),
             "section": sectionEnum,
-            "fireline_type": .object([
-                "type": .string("string"),
-                "enum": .array([.string("hidden"), .string("quota"), .string("menuBarItem")]),
-                "description": .string("activateContext only: the single ambient Fireline payload."),
-            ]),
-            "fireline_provider": .object([
-                "type": .string("string"),
-                "enum": .array([.string("codex"), .string("claude"), .string("antigravity"), .string("ollama")]),
-                "description": .string("quota Fireline only."),
-            ]),
-            "fireline_selector": selectorSchema,
         ]),
-        "required": .array([.string("type")]),
-        "additionalProperties": .bool(false),
+        "required": .array([.string("type"), .string("bundle_ids"), .string("section")]),
     ])
 
     let setTriggerSchema: Value = .object([
@@ -663,14 +531,14 @@ private func buildToolList() -> [Tool] {
     return [
         makeTool(
             name: "list_items",
-            description: "List menu bar items. Optionally filter to one section. Returns a stable selector for exact writes; windowID is observational only.",
+            description: "List menu bar items. Optionally filter to one section. Returns a JSON array of {bundleID, displayName, windowID, section, position, isOnScreen}.",
             inputSchema: listSchema,
             readOnly: true,
             idempotent: true
         ),
         makeTool(
             name: "move_item",
-            description: "Move one item to a target section. Prefer the exact selector from list_items; legacy bundle_id works only when it resolves unambiguously.",
+            description: "Move an item identified by bundle_id to a target section, optionally at a specific index within that section.",
             inputSchema: moveSchema,
             destructive: true
         ),
@@ -690,13 +558,13 @@ private func buildToolList() -> [Tool] {
         ),
         makeTool(
             name: "apply_layout",
-            description: "Apply a previously-saved named layout from Fire's compatible preferences.",
+            description: "Apply a previously-saved named layout. Layouts live in Ice's preferences plist.",
             inputSchema: layoutNameSchema,
             destructive: true
         ),
         makeTool(
             name: "save_layout",
-            description: "Save the current menu bar arrangement under the given name in Fire's preferences.",
+            description: "Save the current menu bar arrangement under the given name. Writes to Ice's preferences plist.",
             inputSchema: layoutNameSchema,
             destructive: true,
             idempotent: true
@@ -718,13 +586,7 @@ private func buildToolList() -> [Tool] {
         // success means the user approved in Fire.
         makeTool(
             name: "set_trigger",
-            description: "Propose a menu-bar automation: when a condition becomes true (an app gains/loses focus, battery drops below a threshold, or a weekly time window), move exact items to a section. Fire shows the exact write set for approval. Use selectors from list_items; bundle_ids are a legacy unambiguous fallback.",
-            inputSchema: setTriggerSchema,
-            destructive: false
-        ),
-        makeTool(
-            name: "set_context",
-            description: "Install a Fire Context Scene. Use action.type=activateContext with an exact Fireline payload and optional exact menu-bar moves. Fire authors the approval text and seals the entire scene before it can run.",
+            description: "Propose a menu-bar automation: when a condition becomes true (an app gains/loses focus, battery drops below a threshold, or a weekly time window), move items to a section. Fire shows the user a consent prompt describing exactly what will happen; nothing is installed unless they approve. On success returns {success, id, enabled, message}. Use list_items first to find bundle ids.",
             inputSchema: setTriggerSchema,
             destructive: false
         ),
@@ -740,26 +602,8 @@ private func buildToolList() -> [Tool] {
             idempotent: true
         ),
         makeTool(
-            name: "list_contexts",
-            description: "List installed Fire Context Scenes and legacy automations, including Fire-authored condition/action descriptions.",
-            inputSchema: .object([
-                "type": .string("object"),
-                "properties": .object([:]),
-                "additionalProperties": .bool(false),
-            ]),
-            readOnly: true,
-            idempotent: true
-        ),
-        makeTool(
             name: "remove_trigger",
             description: "Remove an installed automation by id (from list_triggers). Fire asks the user to confirm before deleting. Returns {success, id, message}.",
-            inputSchema: removeTriggerSchema,
-            destructive: true,
-            idempotent: true
-        ),
-        makeTool(
-            name: "remove_context",
-            description: "Remove an installed Fire Context Scene by id. Fire asks the user to confirm before deleting.",
             inputSchema: removeTriggerSchema,
             destructive: true,
             idempotent: true
@@ -780,6 +624,14 @@ private func dispatch(
     let argsSummary = arguments?.keys.sorted().joined(separator: ",") ?? ""
     log.debug("tool=\(name, privacy: .public) args=[\(argsSummary, privacy: .public)]")
 
+    if let denial = bridgePolicyDenial(for: name) {
+        log.notice("tool=\(name, privacy: .public) denied=\(denial, privacy: .public)")
+        return CallTool.Result(
+            content: [.text(text: "error: \(denial)", annotations: nil, _meta: nil)],
+            isError: true
+        )
+    }
+
     do {
         let request: MenuBarItemService.Request
         switch name {
@@ -788,18 +640,18 @@ private func dispatch(
             request = .listItems(section: section)
 
         case "move_item":
-            let item = try parseItemReference(arguments)
+            let bundleID = try parseRequiredString(arguments?["bundle_id"], name: "bundle_id")
             let toSection = try parseRequiredSection(arguments?["to_section"], name: "to_section")
             let toIndex = parseOptionalInt(arguments?["to_index"])
-            request = .moveItem(bundleID: item.bundleID, selector: item.selector, toSection: toSection, toIndex: toIndex)
+            request = .moveItem(bundleID: bundleID, toSection: toSection, toIndex: toIndex)
 
         case "hide_item":
-            let item = try parseItemReference(arguments)
-            request = .hideItem(bundleID: item.bundleID, selector: item.selector)
+            let bundleID = try parseRequiredString(arguments?["bundle_id"], name: "bundle_id")
+            request = .hideItem(bundleID: bundleID)
 
         case "show_item":
-            let item = try parseItemReference(arguments)
-            request = .showItem(bundleID: item.bundleID, selector: item.selector)
+            let bundleID = try parseRequiredString(arguments?["bundle_id"], name: "bundle_id")
+            request = .showItem(bundleID: bundleID)
 
         case "apply_layout":
             let layoutName = try parseRequiredString(arguments?["name"], name: "name")
@@ -812,14 +664,14 @@ private func dispatch(
         case "list_layouts":
             request = .listLayouts
 
-        case "set_trigger", "set_context":
+        case "set_trigger":
             let spec = try parseTriggerSpec(arguments)
             request = .setTrigger(spec: spec)
 
-        case "list_triggers", "list_contexts":
+        case "list_triggers":
             request = .listTriggers
 
-        case "remove_trigger", "remove_context":
+        case "remove_trigger":
             let id = try parseRequiredString(arguments?["id"], name: "id")
             request = .removeTrigger(id: id)
 
@@ -941,10 +793,10 @@ func run() async throws {
         name: "fire-mcp",
         version: "1.0.0",
         instructions: """
-            Program the local macOS menu bar and Fireline managed by Fire.
-            Use list_items first and preserve exact selectors for move_item,
-            hide_item, show_item, and Context Scenes. Fire authors approval text,
-            seals approved changes, and exposes recovery through list_contexts.
+            Read and modify the macOS menu bar layout managed by the Ice / Fire app.
+            Use list_items first to discover bundle IDs, then move_item / hide_item /
+            show_item to rearrange them. apply_layout / save_layout work on named
+            layouts persisted in Ice's preferences plist.
             """,
         capabilities: Server.Capabilities(
             tools: Server.Capabilities.Tools(listChanged: false)

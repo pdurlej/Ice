@@ -74,7 +74,7 @@ struct SettingsView: View {
                     sidebarItem(for: identifier)
                 }
             } header: {
-                Text("Fire")
+                Text("Ice")
                     .font(.system(size: sidebarFontSize * 2.67, weight: .medium))
                     .foregroundStyle(sidebarTextStyle)
                     .padding(.leading, sidebarPadding)
@@ -129,14 +129,16 @@ struct SettingsView: View {
     @ViewBuilder
     private var settingsPane: some View {
         switch navigationState.settingsNavigationIdentifier {
-        case .home:
-            HomeSettingsPane()
-        case .surfaces:
-            SurfacesSettingsPane()
-        case .contexts:
+        case .general:
+            GeneralSettingsPane(settings: appState.settings.general)
+        case .menuBarLayout:
+            MenuBarLayoutSettingsPane(itemManager: appState.itemManager)
+        case .menuBarAppearance:
+            MenuBarAppearanceSettingsPane(appearanceManager: appState.appearanceManager)
+        case .hotkeys:
+            HotkeysSettingsPane(settings: appState.settings.hotkeys)
+        case .automations:
             AutomationsSettingsPane()
-        case .agents:
-            AgentsSettingsPane(settings: appState.settings.advanced)
         case .advanced:
             AdvancedSettingsPane(settings: appState.settings.advanced)
         case .about:

@@ -40,15 +40,22 @@ final class AutomationAuthorization {
 
         let alert = NSAlert()
         alert.alertStyle = .informational
-        alert.messageText = "Install \(TriggerNarrator.capabilityName(rule.onEnter))?"
-        alert.informativeText = TriggerNarrator.installDescription(rule)
+        alert.messageText = "Install menu-bar automation?"
+        alert.informativeText = """
+        \(rule.name)
+
+        When \(TriggerNarrator.describe(rule.condition)), Fire will \(TriggerNarrator.describe(writeSet)).
+
+        This automation can then run without asking again. Any change to its \
+        condition, items, or destination requires your approval again.
+        """
         // Deny is added first → default button (Return/Esc deny) — safe.
         alert.addButton(withTitle: "Deny")                // .alertFirstButtonReturn
         alert.addButton(withTitle: "Install Disabled")     // .alertSecondButtonReturn
         alert.addButton(withTitle: "Install and Enable")   // .alertThirdButtonReturn
 
         let enable: Bool
-        switch TimedAuthorizationAlert.run(alert, timeout: 120) {
+        switch alert.runModal() {
         case .alertSecondButtonReturn:
             enable = false
         case .alertThirdButtonReturn:
@@ -100,12 +107,18 @@ final class AutomationAuthorization {
 
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Remove \(TriggerNarrator.capabilityName(rule.onEnter))?"
-        alert.informativeText = TriggerNarrator.removalDescription(rule)
+        alert.messageText = "Remove menu-bar automation?"
+        alert.informativeText = """
+        \(rule.name)
+
+        This automation (when \(TriggerNarrator.describe(rule.condition)), \
+        \(TriggerNarrator.describe(rule.onEnter))) will be deleted. You can \
+        re-create it later, but its approval will need to be granted again.
+        """
         alert.addButton(withTitle: "Cancel")  // .alertFirstButtonReturn → default
         alert.addButton(withTitle: "Remove")   // .alertSecondButtonReturn
 
-        let approved = TimedAuthorizationAlert.run(alert, timeout: 60) == .alertSecondButtonReturn
+        let approved = alert.runModal() == .alertSecondButtonReturn
         logger.log("Automation removal \(approved ? "approved" : "cancelled") for \(rule.id, privacy: .public)")
         return approved
     }

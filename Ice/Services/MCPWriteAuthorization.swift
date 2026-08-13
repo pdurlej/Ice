@@ -71,7 +71,7 @@ final class MCPWriteAuthorization {
         alert.addButton(withTitle: "Allow Once")          // .alertSecondButtonReturn
         alert.addButton(withTitle: "Allow for 5 Minutes") // .alertThirdButtonReturn
 
-        switch TimedAuthorizationAlert.run(alert, timeout: 60) {
+        switch alert.runModal() {
         case .alertSecondButtonReturn:
             logger.log("MCP write allowed once for \(command.id, privacy: .public)")
             return true
@@ -95,11 +95,7 @@ final class MCPWriteAuthorization {
         default:              section = command.toSection
         }
         switch command.op {
-        case "move":
-            if let title = command.selector?.title {
-                return "move “\(title)” (\(command.bundleID)) to \(section)"
-            }
-            return "move “\(command.bundleID)” to \(section)"
+        case "move": return "move “\(command.bundleID)” to \(section)"
         default:     return "\(command.op) “\(command.bundleID)”"
         }
     }

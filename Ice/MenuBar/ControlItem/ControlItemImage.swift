@@ -33,10 +33,6 @@ enum ControlItemImage: Codable, Hashable {
             guard let originalImage = NSImage(named: name) else {
                 return nil
             }
-            // Every catalog-backed control icon is monochrome. Keep that
-            // contract explicit instead of relying solely on asset-catalog
-            // metadata, which macOS can lose when the image is redrawn.
-            originalImage.isTemplate = true
             let originalWidth = originalImage.size.width
             let originalHeight = originalImage.size.height
             let ratio = max(originalWidth / 25, originalHeight / 17)

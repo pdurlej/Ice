@@ -1,1 +1,0 @@
-../../../Ice/Automation/TriggerNarrator.swift

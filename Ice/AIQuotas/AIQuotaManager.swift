@@ -27,16 +27,18 @@ final class AIQuotaManager: NSObject, ObservableObject {
 
     private var refreshTask: Task<Void, Never>?
     private var isRefreshing = false
+    private var runtimeEnabled = false
     private var cancellables = Set<AnyCancellable>()
     private let logger = Logger(category: "AIQuotaManager")
 
-    func performSetup(with appState: AppState) {
+    func performSetup(with appState: AppState, runtimeEnabled: Bool) {
         self.appState = appState
+        self.runtimeEnabled = runtimeEnabled
         settings.performSetup()
         rebuildBackend()
         configureObservers()
 
-        if settings.enableAIQuotas {
+        if runtimeEnabled, settings.enableAIQuotas {
             start()
         }
     }
@@ -52,7 +54,7 @@ final class AIQuotaManager: NSObject, ObservableObject {
             .dropFirst() // initial state handled in performSetup
             .sink { [weak self] enabled in
                 guard let self else { return }
-                if enabled { start() } else { stop() }
+                if enabled, runtimeEnabled { start() } else { stop() }
             }
             .store(in: &c)
 
@@ -61,7 +63,7 @@ final class AIQuotaManager: NSObject, ObservableObject {
             .removeDuplicates()
             .dropFirst()
             .sink { [weak self] _ in
-                guard let self, settings.enableAIQuotas else { return }
+                guard let self, runtimeEnabled, settings.enableAIQuotas else { return }
                 restartLoop()
             }
             .store(in: &c)
@@ -80,7 +82,7 @@ final class AIQuotaManager: NSObject, ObservableObject {
             .removeDuplicates()
             .dropFirst()
             .sink { [weak self] _ in
-                guard let self, settings.enableAIQuotas else { return }
+                guard let self, runtimeEnabled, settings.enableAIQuotas else { return }
                 render()
             }
             .store(in: &c)
@@ -88,7 +90,7 @@ final class AIQuotaManager: NSObject, ObservableObject {
             .removeDuplicates()
             .dropFirst()
             .sink { [weak self] _ in
-                guard let self, settings.enableAIQuotas else { return }
+                guard let self, runtimeEnabled, settings.enableAIQuotas else { return }
                 render()
             }
             .store(in: &c)
@@ -102,6 +104,16 @@ final class AIQuotaManager: NSObject, ObservableObject {
     }
 
     // MARK: Lifecycle
+
+    func setRuntimeEnabled(_ enabled: Bool) {
+        guard runtimeEnabled != enabled else { return }
+        runtimeEnabled = enabled
+        if enabled, settings.enableAIQuotas {
+            start()
+        } else {
+            stop()
+        }
+    }
 
     private func start() {
         logger.debug("AI Quotas enabled")
@@ -145,21 +157,11 @@ final class AIQuotaManager: NSObject, ObservableObject {
         let providers = orderedEnabledProviders()
         for provider in providers {
             let snapshot = await backend.fetch(provider: provider)
+            guard !Task.isCancelled else { return }
             snapshots[provider] = snapshot
             render() // progressive update as each provider returns
         }
         render()
-    }
-
-    /// Refreshes one provider for Fireline even when the optional always-on
-    /// AI Quotas status item is disabled. This remains local-only and does not
-    /// start the periodic loop or create another menu bar item.
-    func refresh(provider: AIQuotaProvider) async {
-        let snapshot = await backend.fetch(provider: provider)
-        snapshots[provider] = snapshot
-        if settings.enableAIQuotas {
-            render()
-        }
     }
 
     /// The enabled providers in canonical (allCases) order.

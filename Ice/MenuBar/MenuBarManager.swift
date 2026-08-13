@@ -31,17 +31,6 @@ final class MenuBarManager: ObservableObject {
     /// Logger for the menu bar manager.
     private let logger = Logger(category: "MenuBarManager")
 
-    /// Serializes menu-bar image capture and pixel averaging away from the
-    /// main thread. SkyLight can block while materializing a captured image.
-    private let averageColorCaptureQueue = DispatchQueue(
-        label: "com.jordanbaird.Ice.MenuBarManager.averageColorCapture",
-        qos: .userInitiated
-    )
-
-    /// Prevents the visibility publisher and timer from queuing overlapping
-    /// window-server captures while an earlier request is still running.
-    private var isUpdatingAverageColorInfo = false
-
     /// The shared app state.
     private weak var appState: AppState?
 
@@ -305,14 +294,12 @@ final class MenuBarManager: ObservableObject {
     /// of the menu bar.
     func updateAverageColorInfo() async {
         guard
-            !isUpdatingAverageColorInfo,
             let settingsWindow,
             settingsWindow.isVisible,
             let screen = settingsWindow.screen
         else {
             return
         }
-        isUpdatingAverageColorInfo = true
 
         // createWindows enumerates the window server synchronously; fetch
         // off-main so it can't freeze the main thread (fire.10.4.1).
@@ -323,33 +310,24 @@ final class MenuBarManager: ObservableObject {
             let menuBarWindow = WindowInfo.menuBarWindow(from: windows, for: displayID),
             let wallpaperWindow = WindowInfo.wallpaperWindow(from: windows, for: displayID)
         else {
-            isUpdatingAverageColorInfo = false
             return
         }
 
-        let windowIDs = [menuBarWindow.windowID, wallpaperWindow.windowID]
-        let captureBounds = withMutableCopy(of: wallpaperWindow.bounds) { $0.size.height = 1 }
-
-        // FIRE-W: both captureWindows and averageColor can wait on SkyLight
-        // while the captured image is materialized. Do all image work on the
-        // serial capture queue and return only the finished color to main.
-        averageColorCaptureQueue.async { [weak self] in
-            let color = ScreenCapture.captureWindows(
-                with: windowIDs,
-                screenBounds: captureBounds,
+        guard
+            let image = ScreenCapture.captureWindows(
+                with: [menuBarWindow.windowID, wallpaperWindow.windowID],
+                screenBounds: withMutableCopy(of: wallpaperWindow.bounds) { $0.size.height = 1 },
                 option: .nominalResolution
-            )?.averageColor(option: .ignoreAlpha)
+            ),
+            let color = image.averageColor(option: .ignoreAlpha)
+        else {
+            return
+        }
 
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.isUpdatingAverageColorInfo = false
-                guard let color else { return }
+        let info = MenuBarAverageColorInfo(color: color, source: .menuBarWindow)
 
-                let info = MenuBarAverageColorInfo(color: color, source: .menuBarWindow)
-                if self.averageColorInfo != info {
-                    self.averageColorInfo = info
-                }
-            }
+        if averageColorInfo != info {
+            averageColorInfo = info
         }
     }
 
@@ -367,7 +345,7 @@ final class MenuBarManager: ObservableObject {
 
     /// Shows the secondary context menu.
     func showSecondaryContextMenu(at point: CGPoint) {
-        let menu = NSMenu(title: "Fire")
+        let menu = NSMenu(title: "Ice")
 
         let editAppearanceItem = NSMenuItem(
             title: "Edit Menu Bar Appearance…",
@@ -380,7 +358,7 @@ final class MenuBarManager: ObservableObject {
         menu.addItem(.separator())
 
         let settingsItem = NSMenuItem(
-            title: "Fire Settings…",
+            title: "Ice Settings…",
             action: #selector(AppDelegate.openSettingsWindow),
             keyEquivalent: ","
         )
