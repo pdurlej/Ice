@@ -17,17 +17,15 @@ shipped-history and deep context** — read its top CURRENT STATE first. The dat
 
 ## ✅ LIVE NOW / NEXT
 
-**`v0.11.13-fire.10.7.2` (build 1157, release commit `5334644`) is the live,
-notarized build and has been on the Sparkle appcast since 2026-07-12.** The owner
-field-verified the hover/click guards, the signed MCP `list_items` smoke passed,
-and GitHub issues #4 and #17 are closed. Leave #7 open: the menu-bar *item*
-query deliberately remains live (see gotcha #2).
+**`v0.11.13-fire.10.7.3` (build 1158, release commit `3865907`) is the live,
+notarized build and the newest item on the Sparkle appcast.** It is the release
+spine for 10.8. The Ignition tags and `fire/main` history are reference material,
+not a base to fix forward.
 
-`fire/main` may be ahead of that live tag with unshipped contract/documentation
-cleanup. In particular, main no longer exposes the always-nil `undoToken` to MCP
-clients while retaining its compatibility-only wire slot. Do not describe such
-main-only work as shipped, and do not publish or install anything from this note
-alone; use the full ship flow and its required runtime evidence.
+**10.8 Safe Core is an unshipped candidate on `codex/fire-10.8`.** Its public
+contract is issue #18; issues #19–#21 define 10.9–10.11. It must remain a
+prerelease until signed desktop E2E. Do not describe local checks as shipped,
+and do not promote Latest or update the appcast from this note alone.
 
 Sentry showed no 10.7.2 error events at the 2026-07-13 03:09 CEST checkpoint.
 FIRE-Q and FIRE-J are benign modal-menu/dialog App Hangs, but the client-side
@@ -47,17 +45,18 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift build --package-path Bridge
 
 # Tests (needs the Xcode toolchain — plain `swift test` lacks XCTest)
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift test --package-path FireLogic  # 29 tests
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift test --package-path FireLogic
 ```
 
 **Ship flow** (per release): bump BOTH `MARKETING_VERSION` (`0.11.13-fire.X`) +
 `CURRENT_PROJECT_VERSION` in `Ice.xcodeproj/project.pbxproj` (2 occurrences each)
 → commit → `git tag -a v0.11.13-fire.X` → `git push origin fire/main` + push tag
 → CI (`gh run list -R pdurlej/fire-from-ice`) builds/signs/notarizes/uploads-dSYMs
-and publishes the GitHub release → download DMG, `ditto` it over `/Applications/Ice.app`
-(quit Ice first), smoke it → **`scripts/publish-appcast.sh v0.11.13-fire.X`** for
-the Sparkle appcast (one Keychain "Allow" for signing; idempotent; `--dry-run`
-and `--notes-file` supported).
+and creates or updates a **prerelease** → download DMG, `ditto` it over
+`/Applications/Ice.app` (quit Ice first), run signed smoke, inspect Sentry →
+explicitly promote GitHub Latest → **`scripts/publish-appcast.sh
+v0.11.13-fire.X`** for Sparkle (one Keychain "Allow"; an existing entry is
+accepted only when build, URL, length, and signature match).
 
 ## Hard rules
 
@@ -108,10 +107,11 @@ and `--notes-file` supported).
 | # | P | needs | note |
 |---|---|---|---|
 | 7 | P2 | design | `isMouseInsideMenuBarItem` live SLS. Do NOT cache (see gotcha #2). If it ever hangs, make the QUERY cheaper. Never fired an App-Hang. |
-| 5 | P2 | careful pass | sendSync watchdog. **Deadlock trap** (documented in the issue): `send()` holds an `OSAllocatedUnfairLock`; no native timeout on macOS 26. Needs kill-STOP testing. |
+| 5 | P2 | 10.8 runtime | Deadline is in the local 10.8 candidate without holding the session lock. Still needs kill-STOP signed testing before closure. |
 | 11 | P3 | some runtime | remaining LIGHT single main-thread SLS calls (SearchPanel view body, IceBar getOrigin, AppState publisher). |
-| 12 | P3 | next release | main strips the user-visible always-nil `undoToken`; the wire slot remains for compatibility. This is not in live 10.7.2. |
 | 13 | P3 | VoiceOver | a11y labels on fork-added UI. |
+| 18 | P1 | 10.8 | Safe Core release contract and promotion gate. |
+| 19–21 | roadmap | later | Codex+Claude glance, optional Fireline, then accessibility/polish. |
 
 Shipped from the board so far: #16+#15 (10.4.2), #8+#9 (10.5), #10 (appcast
 script), #6+#4+#14 (10.6), and #17's activation-safe app-menu cache plus signed

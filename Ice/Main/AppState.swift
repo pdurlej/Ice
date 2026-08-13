@@ -74,6 +74,10 @@ final class AppState: ObservableObject {
     /// Storage for internal observers.
     private var cancellables = Set<AnyCancellable>()
 
+    /// The MCP/trigger handlers are configured once, then their pollers and
+    /// evaluators may be started and stopped by the top-level feature gate.
+    private var optionalRuntimeInitialized = false
+
     /// Logger for the app state.
     private let logger = Logger(category: "AppState")
 
@@ -83,12 +87,6 @@ final class AppState: ObservableObject {
 
         settings.performSetup(with: self)
         menuBarManager.performSetup(with: self)
-
-        // Set up early — before any of the `await` calls below — because
-        // it only needs `appState` and starts an independent poll timer.
-        // (It was previously buried after itemManager.performSetup, which
-        // on some builds delayed/blocked reaching it.)
-        mcpWriteCommandHandler.performSetup(with: self)
 
         if #available(macOS 26.0, *) {
             await MenuBarItemService.Connection.shared.start()
@@ -102,16 +100,7 @@ final class AppState: ObservableObject {
         updatesManager.performSetup(with: self)
         userNotificationManager.performSetup(with: self)
         competingManagerMonitor.performSetup(with: self)
-        aiQuotaManager.performSetup(with: self)
-        triggerEngine.performSetup()
-        mcpTriggerCommandHandler.performSetup(with: self)
-
-        // fire.10.2: the authenticated XPC relay that feeds both MCP
-        // fulfillers above. macOS 26-only, like the rest of the MCP surface
-        // (XPCSession). Must start after the fulfillers it dispatches to.
-        if #available(macOS 26.0, *) {
-            MCPRelayPump.shared.performSetup(with: self)
-        }
+        aiQuotaManager.performSetup(with: self, runtimeEnabled: false)
 
         configureCancellables()
     }
@@ -212,6 +201,13 @@ final class AppState: ObservableObject {
         }
         .store(in: &c)
 
+        settings.advanced.$contextsAndAgentsEnabled
+            .removeDuplicates()
+            .sink { [weak self] enabled in
+                self?.setOptionalRuntimeEnabled(enabled)
+            }
+            .store(in: &c)
+
         menuBarManager.objectWillChange
             .sink { [weak self] in
                 self?.objectWillChange.send()
@@ -234,6 +230,31 @@ final class AppState: ObservableObject {
             .store(in: &c)
 
         cancellables = c
+    }
+
+    /// Starts or stops every optional runtime behind one user-visible switch.
+    /// Persisted settings and sealed grants are deliberately left untouched.
+    private func setOptionalRuntimeEnabled(_ enabled: Bool) {
+        let runtimeState = enabled ? "starting" : "stopping"
+        logger.notice("Optional Contexts & Agents runtime \(runtimeState, privacy: .public)")
+        aiQuotaManager.setRuntimeEnabled(enabled)
+
+        if enabled {
+            if !optionalRuntimeInitialized {
+                mcpWriteCommandHandler.performSetup(with: self)
+                mcpTriggerCommandHandler.performSetup(with: self)
+                optionalRuntimeInitialized = true
+            }
+            triggerEngine.performSetup()
+            if #available(macOS 26.0, *) {
+                MCPRelayPump.shared.performSetup(with: self)
+            }
+        } else {
+            triggerEngine.stop()
+            if #available(macOS 26.0, *) {
+                MCPRelayPump.shared.stop()
+            }
+        }
     }
 
     /// Returns a Boolean value indicating whether the app has been

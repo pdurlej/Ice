@@ -1,5 +1,10 @@
 # Ice → Fire Rebrand: Technical Plan
 
+> **Archived proposal — do not execute.** Fire intentionally keeps
+> `com.jordanbaird.Ice` and `Ice.app` to preserve TCC permissions, Sparkle
+> continuity, Sentry releases, and signed XPC identity. Any future bundle-ID
+> migration requires a new product decision and release plan.
+
 App: `com.jordanbaird.Ice` → `me.durlej.Fire`. macOS 14+, Xcode project (no SwiftPM manifest), Sparkle + LaunchAtLogin + AXSwift dependencies, XPC service for menu-bar-item rendering on macOS 26.
 
 ---

@@ -1,0 +1,51 @@
+name: Verify macOS
+
+on:
+  push:
+    branches: ["fire/main"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Set up Xcode 26
+        run: |
+          XCODE_PATH=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE_PATH" ]; then
+            echo "ERROR: no Xcode 26.x installed on runner" >&2
+            ls -d /Applications/Xcode*.app >&2 2>&1
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE_PATH"
+          xcodebuild -version
+
+      - name: Test FireLogic
+        run: xcrun swift test --package-path FireLogic
+
+      - name: Test release scripts
+        run: python3 -m unittest discover -s scripts/tests
+
+      - name: Build MCP bridge
+        run: swift build --package-path Bridge
+
+      - name: Build all app targets
+        run: |
+          xcodebuild \
+            -project Ice.xcodeproj \
+            -scheme Ice \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build

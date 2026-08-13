@@ -61,8 +61,10 @@ enum AIQuotaMenuBuilder {
                 attachment.image = icon
                 // Nudge down so the icon centers on the text baseline.
                 attachment.bounds = CGRect(
-                    x: 0, y: (font.capHeight - icon.size.height) / 2,
-                    width: icon.size.width, height: icon.size.height
+                    x: 0,
+                    y: (font.capHeight - icon.size.height) / 2,
+                    width: icon.size.width,
+                    height: icon.size.height
                 )
                 result.append(NSAttributedString(attachment: attachment))
             } else {

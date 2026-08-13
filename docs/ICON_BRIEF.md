@@ -1,5 +1,9 @@
 # Fire — macOS App Icon Design Brief
 
+> **Archived visual exploration.** Its `me.durlej.Fire` bundle-ID assumption is
+> not current architecture; Fire intentionally ships as `com.jordanbaird.Ice`
+> / `Ice.app` until a separately approved migration exists.
+
 App: **Fire** (a maintained fork of Ice)
 Platform: macOS 14+ (Sonoma, Sequoia, Tahoe)
 Bundle ID: `me.durlej.Fire`

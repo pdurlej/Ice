@@ -180,9 +180,16 @@ private enum ToolError: Swift.Error, CustomStringConvertible {
 /// session re-used across requests, recreated on cancel/error.
 @available(macOS 26.0, *)
 final class XPCClient: @unchecked Sendable {
+    private struct SessionHandle: @unchecked Sendable {
+        let id: UUID
+        let session: XPCSession
+    }
+
     private let serviceName: String
     private let queue: DispatchQueue
+    private let blockingQueue: DispatchQueue
     private var session: XPCSession?
+    private var sessionID: UUID?
     private let lock = NSLock()
 
     init(serviceName: String) {
@@ -192,18 +199,24 @@ final class XPCClient: @unchecked Sendable {
             qos: .userInitiated,
             attributes: .concurrent
         )
+        self.blockingQueue = DispatchQueue(
+            label: "com.jordanbaird.Ice.mcp.sendSync",
+            qos: .userInitiated,
+            attributes: .concurrent
+        )
     }
 
-    private func getOrCreateSession() throws -> XPCSession {
+    private func getOrCreateSession() throws -> SessionHandle {
         lock.lock()
         defer { lock.unlock() }
-        if let existing = session { return existing }
+        if let existing = session, let sessionID {
+            return SessionHandle(id: sessionID, session: existing)
+        }
+        let id = UUID()
         let new = try XPCSession(xpcService: serviceName, options: .inactive) { [weak self] error in
             guard let self else { return }
             log.warning("XPC session cancelled: \(error.localizedDescription, privacy: .public)")
-            self.lock.lock()
-            self.session = nil
-            self.lock.unlock()
+            self.clearSession(id: id)
         }
         if MenuBarItemService.ownTeamIdentifier() != nil {
             new.setPeerRequirement(.isFromSameTeam())
@@ -211,25 +224,59 @@ final class XPCClient: @unchecked Sendable {
         new.setTargetQueue(queue)
         try new.activate()
         session = new
-        return new
+        sessionID = id
+        return SessionHandle(id: id, session: new)
     }
 
     /// Sends a request synchronously and decodes the reply as a
     /// `MenuBarItemService.Response`.
     func send(_ request: MenuBarItemService.Request) throws -> MenuBarItemService.Response {
-        let session = try getOrCreateSession()
+        let handle = try getOrCreateSession()
         do {
-            let reply = try session.sendSync(request)
-            return try reply.decode(as: MenuBarItemService.Response.self)
+            return try XPCSyncDeadline.send(
+                request,
+                as: MenuBarItemService.Response.self,
+                through: handle.session,
+                timeout: Self.timeout(for: request),
+                queue: blockingQueue
+            ) { [weak self] in
+                self?.cancelSession(handle, reason: "MCP tool sendSync deadline exceeded")
+            }
         } catch {
             // Drop the session so the next call recreates it after a
             // wire error — matches the connection-recreation pattern
             // in Ice/MenuBar/MenuBarItems/MenuBarItemServiceConnection.swift.
-            lock.lock()
-            self.session = nil
-            lock.unlock()
+            clearSession(id: handle.id)
             throw ToolError.xpcUnavailable(error.localizedDescription)
         }
+    }
+
+    private static func timeout(for request: MenuBarItemService.Request) -> TimeInterval {
+        switch request {
+        case .setTrigger:
+            130
+        case .removeTrigger:
+            70
+        case .moveItem, .hideItem, .showItem, .applyLayout, .saveLayout:
+            20
+        case .listTriggers:
+            15
+        default:
+            10
+        }
+    }
+
+    private func clearSession(id: UUID) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard sessionID == id else { return }
+        session = nil
+        sessionID = nil
+    }
+
+    private func cancelSession(_ handle: SessionHandle, reason: String) {
+        clearSession(id: handle.id)
+        handle.session.cancel(reason: reason)
     }
 }
 
@@ -268,6 +315,33 @@ private struct TriggerResultPayload: Encodable {
 }
 
 // MARK: - Tool dispatch
+
+/// Mirrors the host app's coarse feature gates before creating an XPC
+/// connection. In basic mode the optional backend is intentionally absent, so
+/// relying on its listener for denial would turn a deliberate product choice
+/// into an opaque XPCRichError for the agent.
+private func bridgePolicyDenial(for toolName: String) -> String? {
+    let hostBundleID = "com.jordanbaird.Ice"
+    // When embedded in Ice.app, Bundle.main resolves to the host app even
+    // though this executable has its own code-signing identifier. Asking for
+    // the same suite then triggers Foundation's nonsensical-suite fallback;
+    // standard already points at the correct preference domain in that case.
+    let suite = Bundle.main.bundleIdentifier == hostBundleID
+        ? UserDefaults.standard
+        : UserDefaults(suiteName: hostBundleID)
+    guard suite?.bool(forKey: "ContextsAndAgentsEnabled") == true else {
+        return "Fire's Contexts & Agents are turned off. Enable them in Fire → Settings → Advanced."
+    }
+    guard suite?.bool(forKey: "MCPServerEnabled") == true else {
+        return "Fire's MCP server is turned off. Turn it on in Fire → Settings → Advanced → MCP Server."
+    }
+
+    let readOnlyTools: Set<String> = ["list_items", "list_layouts", "list_triggers"]
+    if !readOnlyTools.contains(toolName), suite?.bool(forKey: "MCPAllowWrites") != true {
+        return "Fire is not allowing write operations. Turn on \"Allow write operations\" in Fire → Settings → Advanced → MCP Server. Read-only tools like list_items still work."
+    }
+    return nil
+}
 
 /// Builds one `Tool` descriptor with sensible defaults for the
 /// annotations we know about. Older SDKs without `Tool.Annotations`
@@ -549,6 +623,14 @@ private func dispatch(
     // contain user-supplied layout names.
     let argsSummary = arguments?.keys.sorted().joined(separator: ",") ?? ""
     log.debug("tool=\(name, privacy: .public) args=[\(argsSummary, privacy: .public)]")
+
+    if let denial = bridgePolicyDenial(for: name) {
+        log.notice("tool=\(name, privacy: .public) denied=\(denial, privacy: .public)")
+        return CallTool.Result(
+            content: [.text(text: "error: \(denial)", annotations: nil, _meta: nil)],
+            isError: true
+        )
+    }
 
     do {
         let request: MenuBarItemService.Request

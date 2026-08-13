@@ -15,6 +15,7 @@ concurrency:
 jobs:
   build:
     runs-on: macos-latest
+    timeout-minutes: 60
     permissions:
       contents: write  # the release is published via the `gh` CLI on tag push
     env:
@@ -262,12 +263,24 @@ jobs:
           # instead of softprops/action-gh-release. Same end result but
           # resilient to codeload.github.com being degraded - we hit that
           # during fire.7.1 ship when GitHub had a partial outage and
-          # action downloads kept failing.
-          gh release create "${{ steps.version.outputs.VERSION }}" \
-            --repo "${{ github.repository }}" \
-            --title "Ice ${{ steps.version.outputs.VERSION }}" \
-            --generate-notes \
-            build/*.dmg
+          # action downloads kept failing. Every tagged build remains a
+          # prerelease until its signed install passes desktop E2E; Latest and
+          # the Sparkle appcast are promoted separately.
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          if gh release view "$VERSION" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$VERSION" --repo "${{ github.repository }}" --clobber build/*.dmg
+            gh release edit "$VERSION" \
+              --repo "${{ github.repository }}" \
+              --title "Ice $VERSION" \
+              --prerelease
+          else
+            gh release create "$VERSION" \
+              --repo "${{ github.repository }}" \
+              --title "Ice $VERSION" \
+              --generate-notes \
+              --prerelease \
+              build/*.dmg
+          fi
 
       - name: Tear down the ephemeral keychain
         if: always()

@@ -5,19 +5,19 @@ Owner (pdurlej) will tell me to read this in a fresh session. **Codex / other
 agents: start with `AGENTS.md` at the repo root** — it has the current live/main
 state and the gotchas; this file is the deep history.
 
-## ✅ CURRENT STATE (2026-07-13) — fire.10.7.2 live; main contract cleanup unshipped
+## ✅ CURRENT STATE (2026-08-14) — fire.10.7.3 live; 10.8 Safe Core local
 
-`v0.11.13-fire.10.7.2` (build 1157, release commit `5334644`) is notarized,
-installed on the owner's machine, and live on the Sparkle appcast since
-2026-07-12. The owner field-verified hover/click after app switches, the final
-signed MCP `list_items` smoke passed without XPC rejections, and GitHub issues
-#4 and #17 are closed. Issue #7 stays open and its item-frame query stays live.
+`v0.11.13-fire.10.7.3` (build 1158, release commit `3865907`) is the newest
+signed version on the Sparkle appcast and the only release base for 10.8. The
+Ignition line remains preserved for reference but is not fixed forward.
 
-`fire/main` is one unshipped contract/documentation cleanup ahead of the live
-tag: MCP mutation results omit the always-nil `undoToken`, while the associated
-wire value remains in `MenuBarItemService.Response` solely for older-peer
-compatibility. Do not call that cleanup shipped until a later normal release.
-The public issues still open are #5, #7, #11, #12, and #13.
+`codex/fire-10.8` is an unshipped Safe Core candidate based directly on
+`3865907`. Public issue #18 is its release contract; #19–#21 define the next
+three releases. The candidate keeps the core menu bar runtime independent from
+one top-level Contexts & Agents opt-in, ports bounded XPC deadlines, and hardens
+CI/release/appcast gates. Fireline is deliberately absent. No push, tag,
+prerelease, install, Latest promotion, or appcast update is implied by this
+handoff.
 
 Sentry checkpoint (2026-07-13 03:09 CEST): 10.7.2 has zero error events;
 FIRE-P/N remain quiet. FIRE-Q (open `NSMenu`) and archived FIRE-J (modal dialog)
@@ -74,7 +74,7 @@ symbolication.
   in `runModal`/`SPUStandardUserDriver`/`NSAlert` (crashes never dropped). So our
   consent prompts + Sparkle modals no longer generate ANR noise.
 - **Tests:** `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun
-  swift test --package-path FireLogic` (29 tests; needs the Xcode toolchain —
+  swift test --package-path FireLogic` (use the runner's reported count; needs the Xcode toolchain —
   plain `swift test` lacks XCTest). Compile-gate the app:
   `DEVELOPER_DIR=…/Xcode xcodebuild -project Ice.xcodeproj -scheme Ice
   -configuration Debug -destination 'platform=macOS' CODE_SIGN_IDENTITY=""

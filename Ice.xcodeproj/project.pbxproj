@@ -344,7 +344,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\n\n# Builds IceMCPBridge as a SwiftPM executable (vanilla swift build —\n# Xcode 26's SwiftPM bridge cannot resolve swift-nio transitive deps\n# for tool targets, see Bridge/Package.swift header) and embeds the\n# binary into Ice.app/Contents/MacOS/IceMCPBridge.\n#\n# CI's codesign --deep pass will re-sign with Developer ID; the\n# ad-hoc sign here is for local Debug runs.\n\nBRIDGE_PKG_DIR=\"$SRCROOT/Bridge\"\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n    SWIFT_BUILD_CONFIG=\"release\"\nelse\n    SWIFT_BUILD_CONFIG=\"debug\"\nfi\n\ncd \"$BRIDGE_PKG_DIR\"\nswift build -c \"$SWIFT_BUILD_CONFIG\"\n\nSRC_BIN=\"$BRIDGE_PKG_DIR/.build/$SWIFT_BUILD_CONFIG/IceMCPBridge\"\nDEST=\"$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/IceMCPBridge\"\n\nif [ ! -f \"$SRC_BIN\" ]; then\n    echo \"error: IceMCPBridge binary not found at $SRC_BIN\" >&2\n    exit 1\nfi\n\nmkdir -p \"$(dirname \"$DEST\")\"\ncp \"$SRC_BIN\" \"$DEST\"\ncodesign --force --sign - \"$DEST\" 2>/dev/null || true\necho \"Embedded IceMCPBridge → $DEST\"\n";
+			shellScript = "set -e\n\n# Builds IceMCPBridge as a SwiftPM executable (vanilla swift build —\n# Xcode 26's SwiftPM bridge cannot resolve swift-nio transitive deps\n# for tool targets, see Bridge/Package.swift header) and embeds the\n# binary into Ice.app/Contents/MacOS/IceMCPBridge.\n#\n# Signed local builds must give the bridge the same Team ID as Ice so the\n# XPC listener accepts it. Unsigned builds stay ad-hoc; CI's later\n# codesign --deep pass re-signs the complete Release archive.\n\nBRIDGE_PKG_DIR=\"$SRCROOT/Bridge\"\nif [ \"$CONFIGURATION\" = \"Release\" ]; then\n    SWIFT_BUILD_CONFIG=\"release\"\nelse\n    SWIFT_BUILD_CONFIG=\"debug\"\nfi\n\ncd \"$BRIDGE_PKG_DIR\"\nswift build -c \"$SWIFT_BUILD_CONFIG\"\n\nSRC_BIN=\"$BRIDGE_PKG_DIR/.build/$SWIFT_BUILD_CONFIG/IceMCPBridge\"\nDEST=\"$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/IceMCPBridge\"\n\nif [ ! -f \"$SRC_BIN\" ]; then\n    echo \"error: IceMCPBridge binary not found at $SRC_BIN\" >&2\n    exit 1\nfi\n\nmkdir -p \"$(dirname \"$DEST\")\"\ncp \"$SRC_BIN\" \"$DEST\"\nif [ \"${CODE_SIGNING_ALLOWED:-NO}\" = \"YES\" ] && [ -n \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]; then\n    codesign --force --options runtime --timestamp=none \\\n        --sign \"$EXPANDED_CODE_SIGN_IDENTITY\" \"$DEST\"\nelse\n    codesign --force --sign - \"$DEST\" 2>/dev/null || true\nfi\necho \"Embedded IceMCPBridge → $DEST\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -520,7 +520,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1158;
+				CURRENT_PROJECT_VERSION = 1181;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_APP_SANDBOX = NO;
@@ -536,7 +536,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "0.11.13-fire.10.7.3";
+				MARKETING_VERSION = "0.11.13-fire.10.8";
 				PRODUCT_BUNDLE_IDENTIFIER = com.jordanbaird.Ice;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -553,7 +553,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1158;
+				CURRENT_PROJECT_VERSION = 1181;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_APP_SANDBOX = NO;
@@ -569,7 +569,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = "0.11.13-fire.10.7.3";
+				MARKETING_VERSION = "0.11.13-fire.10.8";
 				PRODUCT_BUNDLE_IDENTIFIER = com.jordanbaird.Ice;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

@@ -197,13 +197,16 @@ final class Listener {
     /// (`com.jordanbaird.Ice`) explicitly — the same store the Advanced
     /// settings write to.
     ///
-    /// Defaults are deliberately `false` (absent key ⇒ refused): a fresh
-    /// install ships with MCP off (privacy-first opt-in, matching the docs),
-    /// while existing installs are migrated to ON by the main app at first
-    /// 10.4 launch, so no working integration breaks. Only requests that
-    /// passed `isAgentFacing` reach here.
+    /// Defaults are deliberately `false` (absent key ⇒ refused). A fresh
+    /// install ships with MCP off, and the rebuild's first-run migration also
+    /// resets the fire.10.4 blanket-seeded MCP flags because they cannot prove
+    /// user intent. Only requests that passed `isAgentFacing` reach here.
     private static func policyDenial(for request: MenuBarItemService.Request) -> String? {
         let suite = UserDefaults(suiteName: "com.jordanbaird.Ice")
+        let contextsAndAgentsEnabled = suite?.bool(forKey: "ContextsAndAgentsEnabled") ?? false
+        guard contextsAndAgentsEnabled else {
+            return "Fire's Contexts & Agents are turned off. Enable them in Fire → Settings → Advanced."
+        }
         let serverEnabled = suite?.bool(forKey: "MCPServerEnabled") ?? false
         guard serverEnabled else {
             return "Fire's MCP server is turned off. Turn it on in Fire → Settings → Advanced → MCP Server."

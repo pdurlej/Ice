@@ -30,7 +30,10 @@ enum TriggerNarrator {
                 .map(Self.short).joined(separator: ", ")
             return String(
                 format: "the time is %02d:%02d–%02d:%02d on %@",
-                start.hour, start.minute, end.hour, end.minute,
+                start.hour,
+                start.minute,
+                end.hour,
+                end.minute,
                 dayList.isEmpty ? "any day" : dayList
             )
         }

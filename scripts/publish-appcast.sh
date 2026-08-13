@@ -13,8 +13,9 @@
 # Usage:
 #   scripts/publish-appcast.sh v0.11.13-fire.10.6 [--notes-file notes.html] [--dry-run]
 #
-# The tag must be v<shortVersion> (e.g. v0.11.13-fire.10.6). Idempotent: a
-# no-op if that version is already in the appcast.
+# The tag must be v<shortVersion> (e.g. v0.11.13-fire.10.6). Idempotent: an
+# existing version is accepted only after its build, URL, length, and EdDSA
+# signature are verified against the published DMG.
 
 set -euo pipefail
 
@@ -59,9 +60,9 @@ info "Cloning $RELEASES_REPO"
 git clone -q "https://github.com/$RELEASES_REPO.git" "$WORK/releases"
 APPCAST="$WORK/releases/appcast.xml"
 [ -f "$APPCAST" ] || die "appcast.xml not found in $RELEASES_REPO"
+ALREADY_PRESENT=0
 if grep -q "<sparkle:shortVersionString>$SHORT_VERSION</sparkle:shortVersionString>" "$APPCAST"; then
-  info "appcast already has $SHORT_VERSION — nothing to do (idempotent no-op)."
-  exit 0
+  ALREADY_PRESENT=1
 fi
 
 # --- 2. Download the release DMG ---------------------------------------------
@@ -72,6 +73,7 @@ DMG="$(ls "$WORK"/*.dmg 2>/dev/null | head -1)"
 [ -n "$DMG" ] || die "no .dmg in the downloaded release"
 LENGTH="$(stat -f '%z' "$DMG")"
 DMG_NAME="$(basename "$DMG")"
+ENCLOSURE_URL="https://github.com/$REPO/releases/download/$TAG/$DMG_NAME"
 
 # --- 3. Read + sanity-check the version from the DMG's Info.plist -------------
 # `-plist` + plistlib, NOT text parsing: with `-quiet` hdiutil prints nothing,
@@ -103,6 +105,14 @@ SIGN_OUT="$("$SIGN" "$DMG")"   # sparkle:edSignature="..." length="..."
 ED_SIGNATURE="$(echo "$SIGN_OUT" | sed -n 's/.*edSignature="\([^"]*\)".*/\1/p')"
 [ -n "$ED_SIGNATURE" ] || die "sign_update produced no signature (output: $SIGN_OUT)"
 
+if [ "$ALREADY_PRESENT" = "1" ]; then
+  python3 "$ROOT/scripts/verify_appcast_entry.py" \
+    "$APPCAST" "$SHORT_VERSION" "$BUILD_VERSION" "$ED_SIGNATURE" \
+    "$LENGTH" "$ENCLOSURE_URL"
+  info "appcast already has $SHORT_VERSION and exactly matches the published DMG."
+  exit 0
+fi
+
 # --- 5. Build + insert the <item>, validate well-formedness ------------------
 PUBDATE="$(date -u '+%a, %d %b %Y %H:%M:%S +0000')"
 if [ -n "$NOTES_FILE" ]; then
@@ -110,8 +120,6 @@ if [ -n "$NOTES_FILE" ]; then
 else
   DESCRIPTION_HTML="<p>See the <a href=\"https://github.com/$REPO/releases/tag/$TAG\">full release notes on GitHub</a>.</p>"
 fi
-ENCLOSURE_URL="https://github.com/$REPO/releases/download/$TAG/$DMG_NAME"
-
 python3 - "$APPCAST" "$SHORT_VERSION" "$BUILD_VERSION" "$PUBDATE" "$ED_SIGNATURE" \
          "$LENGTH" "$ENCLOSURE_URL" "$MIN_SYSTEM_VERSION" "$DESCRIPTION_HTML" <<'PY'
 import sys, xml.dom.minidom as minidom

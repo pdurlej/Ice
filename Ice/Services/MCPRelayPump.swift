@@ -40,6 +40,8 @@ final class MCPRelayPump {
 
     /// True from fetch through complete — one work item at a time.
     private var busy = false
+    private var relayTask: Task<Void, Never>?
+    private var relayGeneration: UInt64 = 0
 
     private let logger = Logger(category: "MCPRelayPump")
     private let client = RelayXPCClient(serviceName: "com.jordanbaird.Ice.MCPBackend")
@@ -53,6 +55,7 @@ final class MCPRelayPump {
     private init() {}
 
     func performSetup(with appState: AppState) {
+        guard cancellable == nil else { return }
         self.appState = appState
 
         // The pre-10.2 file channels are gone; clear any leftover files so a
@@ -67,21 +70,46 @@ final class MCPRelayPump {
         logger.debug("MCP relay pump active")
     }
 
+    func stop() {
+        cancellable?.cancel()
+        cancellable = nil
+        relayGeneration &+= 1
+        relayTask?.cancel()
+        relayTask = nil
+        busy = false
+        client.invalidate(reason: "MCP relay pump stopped")
+        appState = nil
+        logger.debug("MCP relay pump stopped")
+    }
+
     private func tick() {
         guard !busy else { return }
         busy = true
+        let generation = relayGeneration
         // One Task for the whole fetch→fulfill→complete cycle, with `busy`
         // reset in a `defer` so it ALWAYS clears — even if a hop is dropped or
         // a fulfiller path returns early. The previous nested-async structure
         // could leave `busy == true` forever (a permanently wedged relay) if
         // any inner closure didn't run. The blocking XPC calls still happen off
         // the main thread via the awaited helpers below.
-        Task { @MainActor in
-            defer { busy = false }
+        relayTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                if relayGeneration == generation {
+                    busy = false
+                    relayTask = nil
+                }
+            }
             guard let work = await fetchWorkOffMain() else { return }
+            guard isRelayActive(generation: generation) else { return }
             let result = await fulfill(work)
+            guard isRelayActive(generation: generation) else { return }
             await postResultOffMain(result)
         }
+    }
+
+    private func isRelayActive(generation: UInt64) -> Bool {
+        !Task.isCancelled && relayGeneration == generation && cancellable != nil
     }
 
     /// Runs the blocking `relayFetch` XPC round trip off the main thread.
@@ -144,6 +172,9 @@ final class MCPRelayPump {
     /// two never disagree. A write needs both the server enabled AND writes
     /// allowed; returns a user-facing refusal reason, or `nil` to proceed.
     private static func writeDenialReason() -> String? {
+        guard Defaults.bool(forKey: .contextsAndAgentsEnabled) else {
+            return "Fire's Contexts & Agents are turned off."
+        }
         guard Defaults.bool(forKey: .mcpServerEnabled) else {
             return "Fire's MCP server is turned off."
         }
@@ -161,13 +192,19 @@ final class MCPRelayPump {
         switch work {
         case .move(let command):
             return .move(MCPWriteChannel.Result(
-                id: command.id, success: false, message: reason,
+                id: command.id,
+                success: false,
+                message: reason,
                 completedAt: Date().timeIntervalSince1970
             ))
         case .trigger(let proposal):
             return .trigger(MCPTriggerChannel.Result(
-                id: proposal.id, success: false, triggerID: nil, enabled: false,
-                triggers: nil, message: reason,
+                id: proposal.id,
+                success: false,
+                triggerID: nil,
+                enabled: false,
+                triggers: nil,
+                message: reason,
                 completedAt: Date().timeIntervalSince1970
             ))
         }
@@ -224,9 +261,20 @@ final class MCPRelayPump {
 /// serial queue, so the failure-state flags need no locking of their own.
 @available(macOS 26.0, *)
 private final class RelayXPCClient: @unchecked Sendable {
+    private struct SessionHandle: @unchecked Sendable {
+        let generation: UInt64
+        let session: XPCSession
+    }
+
     private let serviceName: String
     private var session: XPCSession?
+    private var sessionGeneration: UInt64 = 0
     private let lock = NSLock()
+    private let blockingQueue = DispatchQueue(
+        label: "com.jordanbaird.Ice.MCPRelayPump.sendSync",
+        qos: .utility,
+        attributes: .concurrent
+    )
 
     /// Connection-state flag so a dead service logs once, not at 5 Hz.
     private var lastFetchFailed = false
@@ -235,15 +283,16 @@ private final class RelayXPCClient: @unchecked Sendable {
         self.serviceName = serviceName
     }
 
-    private func getOrCreateSession() throws -> XPCSession {
+    private func getOrCreateSession() throws -> SessionHandle {
         lock.lock()
         defer { lock.unlock() }
-        if let existing = session { return existing }
+        if let existing = session {
+            return SessionHandle(generation: sessionGeneration, session: existing)
+        }
+        sessionGeneration &+= 1
+        let generation = sessionGeneration
         let new = try XPCSession(xpcService: serviceName, options: .inactive) { [weak self] _ in
-            guard let self else { return }
-            self.lock.lock()
-            self.session = nil
-            self.lock.unlock()
+            self?.clearSession(generation: generation)
         }
         if MenuBarItemService.ownTeamIdentifier() != nil {
             new.setPeerRequirement(.isFromSameTeam())
@@ -258,20 +307,47 @@ private final class RelayXPCClient: @unchecked Sendable {
         }
         try new.activate()
         session = new
-        return new
+        return SessionHandle(generation: generation, session: new)
+    }
+
+    private func clearSession(generation: UInt64) {
+        lock.lock()
+        if sessionGeneration == generation {
+            session = nil
+        }
+        lock.unlock()
     }
 
     private func send(_ request: MenuBarItemService.Request) throws -> MenuBarItemService.Response {
-        let session = try getOrCreateSession()
+        let handle = try getOrCreateSession()
         do {
-            let reply = try session.sendSync(request)
-            return try reply.decode(as: MenuBarItemService.Response.self)
+            return try XPCSyncDeadline.send(
+                request,
+                as: MenuBarItemService.Response.self,
+                through: handle.session,
+                timeout: 5,
+                queue: blockingQueue
+            ) { [weak self] in
+                self?.cancelSession(handle, reason: "Relay sendSync deadline exceeded")
+            }
         } catch {
-            lock.lock()
-            self.session = nil
-            lock.unlock()
+            clearSession(generation: handle.generation)
             throw error
         }
+    }
+
+    private func cancelSession(_ handle: SessionHandle, reason: String) {
+        clearSession(generation: handle.generation)
+        handle.session.cancel(reason: reason)
+    }
+
+    func invalidate(reason: String) {
+        lock.lock()
+        let existing = session
+        sessionGeneration &+= 1
+        session = nil
+        lock.unlock()
+        existing?.cancel(reason: reason)
     }
 
     func fetchWork(logger: Logger) -> MenuBarItemService.RelayWork? {

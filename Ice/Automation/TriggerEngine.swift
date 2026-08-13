@@ -25,10 +25,13 @@ final class TriggerEngine {
     /// In-memory edge state (per-tick level), not persisted on every poll.
     private var levelState: [UUID: Bool] = [:]
     private var lastFired: [UUID: Date] = [:]
+    private var isRunning = false
 
     private let logger = Logger(category: "TriggerEngine")
 
     func performSetup() {
+        guard !isRunning else { return }
+        isRunning = true
         TriggerStore.shared.load()
 
         // Seed edge + cooldown state from persistence WITHOUT firing — BEFORE
@@ -52,6 +55,15 @@ final class TriggerEngine {
         logger.debug("Trigger engine active (\(TriggerStore.shared.rules.count) rule(s))")
     }
 
+    func stop() {
+        guard isRunning else { return }
+        isRunning = false
+        cancellables.removeAll()
+        levelState.removeAll()
+        lastFired.removeAll()
+        logger.debug("Trigger engine stopped")
+    }
+
     /// Seeds in-memory edge state (`levelState`) and cross-launch cooldown
     /// (`lastFired`) from persistence WITHOUT firing. Two fixes in one:
     /// - No re-fire on launch: an automation whose condition is already true at
@@ -73,12 +85,17 @@ final class TriggerEngine {
     /// Re-reads rules after an install / remove / enable change.
     func reload() {
         TriggerStore.shared.load()
+        guard TriggerRuntimePolicy.shouldEvaluate(isRunning: isRunning) else {
+            logger.debug("Trigger rules reloaded while runtime is paused")
+            return
+        }
         evaluateAll(reason: "reload")
     }
 
     // MARK: Evaluation
 
     private func evaluateAll(reason: String) {
+        guard TriggerRuntimePolicy.shouldEvaluate(isRunning: isRunning) else { return }
         for rule in TriggerStore.shared.rules where rule.enabled {
             let now = currentLevel(rule)
             let previous = levelState[rule.id] ?? false

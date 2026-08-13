@@ -44,7 +44,7 @@ enum AgentInput {
     private static func isSafeDisplayScalar(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.properties.generalCategory {
         case .control, .format, .lineSeparator, .paragraphSeparator,
-             .surrogate, .privateUse, .unassigned:
+            .surrogate, .privateUse, .unassigned:
             return false
         default:
             return true

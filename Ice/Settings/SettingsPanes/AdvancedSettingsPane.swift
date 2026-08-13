@@ -42,15 +42,34 @@ struct AdvancedSettingsPane: View {
             IceSection("Privacy & Diagnostics") {
                 shareDiagnostics
             }
-            IceSection("MCP Server (experimental)") {
-                mcpServerDescription
-                mcpServerEnabled
-                mcpAllowWrites
-                mcpNotifyOnWrite
+            IceSection("Contexts & Agents") {
+                contextsAndAgentsEnabled
             }
-            IceSection("AI Quotas (experimental)") {
-                AIQuotaSettingsContent(settings: appState.aiQuotaManager.settings)
+            if settings.contextsAndAgentsEnabled {
+                IceSection("MCP Server (experimental)") {
+                    mcpServerDescription
+                    mcpServerEnabled
+                    mcpAllowWrites
+                    mcpNotifyOnWrite
+                }
+                IceSection("AI Quotas (experimental)") {
+                    AIQuotaSettingsContent(settings: appState.aiQuotaManager.settings)
+                }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var contextsAndAgentsEnabled: some View {
+        Toggle(
+            "Enable Contexts & Agents",
+            isOn: $settings.contextsAndAgentsEnabled
+        )
+        .annotation {
+            Text(
+                "Optional local AI features. When off, Fire runs only its menu bar manager and does not start MCP, triggers, or quota polling."
+            )
+            .padding(.trailing, 75)
         }
     }
 
