@@ -496,4 +496,3 @@ final class MCPBackendStateManager {
         return result
     }
 }
-
