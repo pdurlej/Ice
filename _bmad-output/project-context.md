@@ -41,6 +41,9 @@ Fresh local candidate evidence (2026-08-14):
   MenuBarItemService.xpc, and the embedded IceMCPBridge.
 - SwiftLint strict: 0 violations across 129 Swift files.
 - Workflow YAML and appcast shell syntax parsed successfully.
+- Re-running a tag workflow may replace an existing prerelease candidate, but
+  fails closed once that release has been promoted; it cannot demote Latest or
+  overwrite the DMG referenced by a live appcast.
 
 This is repository and unsigned-build proof only. It is not signed desktop E2E,
 not a GitHub prerelease, and not appcast promotion evidence.
