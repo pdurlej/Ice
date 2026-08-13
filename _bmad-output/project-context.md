@@ -29,7 +29,8 @@ removed. Roadmap contracts are public issues #18 (10.8), #19 (10.9), #20
 Accepted into 10.8: the top-level optional-runtime gate, cancellation of quota,
 trigger, and relay work when disabled, bounded XPC deadlines, the XPC-process AX
 timeout, a full pull-request verification workflow, prerelease-only tag builds,
-and strict appcast idempotency. Fireline remains physically absent.
+strict appcast idempotency, synchronized fallback item identities, and off-main
+window enumeration in `temporarilyShow`. Fireline remains physically absent.
 
 Fresh local candidate evidence (2026-08-14):
 

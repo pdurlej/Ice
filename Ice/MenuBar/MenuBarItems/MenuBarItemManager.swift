@@ -1491,7 +1491,9 @@ extension MenuBarItemManager {
         }
 
         await eventSleep(for: .milliseconds(100))
-        let idsBeforeClick = Set(Bridging.getWindowList(option: .onScreen))
+        let idsBeforeClick = await Task.detached(priority: .userInitiated) {
+            Set(Bridging.getWindowList(option: .onScreen))
+        }.value
 
         do {
             try await click(item: item, with: mouseButton)
@@ -1501,7 +1503,9 @@ extension MenuBarItemManager {
         }
 
         await eventSleep(for: .milliseconds(250))
-        let windowsAfterClick = WindowInfo.createWindows(option: .onScreen)
+        let windowsAfterClick = await Task.detached(priority: .userInitiated) {
+            WindowInfo.createWindows(option: .onScreen)
+        }.value
 
         context.shownInterfaceWindow = windowsAfterClick.first { window in
             window.ownerPID == item.sourcePID && !idsBeforeClick.contains(window.windowID)
