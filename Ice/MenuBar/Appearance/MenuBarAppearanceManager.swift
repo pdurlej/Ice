@@ -63,12 +63,14 @@ final class MenuBarAppearanceManager: ObservableObject {
                 guard let self else {
                     return
                 }
+                // `popFirst()` empties the set, so the screen comparison that used to
+                // guard the call below compared an already-empty set against the current
+                // screens and was therefore always true. Reconfigure unconditionally,
+                // which is what effectively happened all along.
                 while let panel = overlayPanels.popFirst() {
                     panel.orderOut(self)
                 }
-                if Set(overlayPanels.map { $0.owningScreen }) != Set(NSScreen.screens) {
-                    configureOverlayPanels(with: configuration)
-                }
+                configureOverlayPanels(with: configuration)
             }
             .store(in: &c)
 
