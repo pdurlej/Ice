@@ -331,6 +331,18 @@ final class MenuBarOverlayPanel: NSPanel {
         // enumeration; fetch off-main so a busy window server can't freeze the
         // panel show (fire.10.4.1).
         let windows = await Task.detached { WindowInfo.createWindows(option: .onScreen) }.value
+
+        // The await above suspends this task. If the display configuration changes
+        // while it is suspended, the appearance manager drops every panel from its
+        // set and orders it out, so the retention check performed before the await
+        // is stale by the time we get here. Without re-checking, we order a panel
+        // that nobody owns any more back in, positioned from the frame its screen
+        // had before the change, and no one is left to ever order it out again.
+        guard appState.appearanceManager.overlayPanels.contains(self) else {
+            MenuBarOverlayPanel.logger.warning("Overlay panel \(self) was discarded while showing")
+            return
+        }
+
         guard validate(for: .showing, with: windows) else {
             return
         }
